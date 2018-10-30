@@ -57,9 +57,9 @@ compile ::
   -> GHC.ModSummary
   -> m [Binding]
 compile shouldFlag modSummary = do
-  df <- GHC.getSessionDynFlags
   parsedModule <- GHC.parseModule modSummary
   typecheckedModule <- GHC.typecheckModule parsedModule
+  desugared <- GHC.desugarModule typecheckedModule
   pure []
 
 --------------------------------------------------------------------------------

@@ -29,7 +29,7 @@ module InteractiveUI (
 
 -- Intero
 import Prana.Compat
-import Prana.FrontendPlugin (dumpBindings)
+import Prana.FrontendPlugin ()
 import Prana.Types
 import qualified Data.ByteString.Char8 as S8
 #if __GLASGOW_HASKELL__ >= 800
@@ -1735,7 +1735,8 @@ doLoad retain_context howmuch = do
       return ok
   case wasok of
     Succeeded -> do pkg <- liftIO (getEnv "PRANA_PACKAGE")
-                    dumpBindings (\b -> b {bindingId= (bindingId b) {bindingIdPackage = S8.pack pkg}})
+                    pure ()
+                    {-dumpBindings (\b -> b {bindingId= (bindingId b) {bindingIdPackage = S8.pack pkg}})-}
     _ -> return ()
   return wasok
 
