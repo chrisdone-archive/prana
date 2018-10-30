@@ -27,5 +27,6 @@ library
       ghc,
       syb,
       containers,
-      bytestring
+      bytestring,
+      hindent, binary
   default-language: Haskell2010
