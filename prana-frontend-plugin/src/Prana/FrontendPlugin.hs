@@ -86,6 +86,12 @@ compile shouldFlag modSummary = do
   pure []
 
 --------------------------------------------------------------------------------
+-- Evaluation
+
+eval :: CoreSyn.Expr GHC.Var -> IO ()
+eval = undefined
+
+--------------------------------------------------------------------------------
 -- Printing
 
 showBind :: Bool -> CoreSyn.Bind GHC.Var -> String
@@ -115,7 +121,7 @@ showExpr :: Bool -> CoreSyn.Expr GHC.Var -> String
 showExpr ps =
   \case
     CoreSyn.Var vid -> parens ps ("Var " ++ showId ps vid)
-    CoreSyn.Lit literal -> parens ps ("Lit "++showLiteral True literal)
+    CoreSyn.Lit literal -> parens ps ("Lit " ++ showLiteral True literal)
     CoreSyn.App f x ->
       parens ps ("App " ++ showExpr True f ++ " " ++ showExpr True x)
     CoreSyn.Lam var body -> "Lam"
@@ -129,17 +135,20 @@ showExpr ps =
 showLiteral :: Bool -> GHC.Literal -> String
 showLiteral ps =
   \case
-    GHC.MachChar ch -> "MachChar"
-    GHC.MachStr str -> "MachStr"
+    GHC.MachChar ch -> parens ps ("MachChar " ++ show ch)
+    GHC.MachStr str -> parens ps ("MachStr " ++ show str)
     GHC.MachNullAddr -> "MachNullAddr"
-    GHC.MachInt i -> "MachInt"
-    GHC.MachInt64 i -> "MachInt64"
-    GHC.MachWord i -> "MachWord"
-    GHC.MachWord64 i -> "MachWord64"
-    GHC.MachFloat r -> "MachFloat"
-    GHC.MachDouble r -> "MachDouble"
-    GHC.MachLabel fastString mint functionOrData -> "MachLabel"
-    GHC.LitInteger i typ -> "LitInteger"
+    GHC.MachInt i -> parens ps ("MachInt " ++ show i)
+    GHC.MachInt64 i -> parens ps ("MachInt64 " ++ show i)
+    GHC.MachWord i -> parens ps ("MachWord " ++ show i)
+    GHC.MachWord64 i -> parens ps ("MachWord64 " ++ show i)
+    GHC.MachFloat i -> parens ps ("MachFloat " ++ show i)
+    GHC.MachDouble i -> parens ps ("MachDouble " ++ show i)
+    GHC.MachLabel fastString mint functionOrData -> parens ps ("MachLabel ")
+    GHC.LitInteger i typ -> parens ps ("LitInteger " ++ show i ++ " " ++ showType typ)
+
+showType :: GHC.Type -> String
+showType _ = "Type"
 
 parens True x = "(" ++ x ++ ")"
 parens _    x = x
