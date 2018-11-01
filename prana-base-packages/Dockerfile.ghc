@@ -1,6 +1,9 @@
 FROM debian:stretch-slim
 MAINTAINER Chris Done
 
+################################################################################
+# OS deps
+
 RUN apt-get update && apt-get install -y \
        gnupg \
        gpgv && \
@@ -22,6 +25,7 @@ ENV LANG     C.UTF-8
 ENV LC_ALL   C.UTF-8
 ENV LANGUAGE C.UTF-8
 
+################################################################################
 # Getting the GHC sources
 # -----------------------
 #   [2]: https://ghc.haskell.org/trac/ghc/wiki/Building/GettingTheSources
@@ -36,6 +40,7 @@ RUN cd; \
 
 RUN apt-get install ghc -y
 
+################################################################################
 # Building
 # --------
 #   [3]: https://ghc.haskell.org/trac/ghc/wiki/Building/QuickStart
@@ -52,10 +57,31 @@ RUN cd; cd ghc_build/ghc-8.0 &&  ./configure
 
 RUN cd; cd ghc_build/ghc-8.0 && make -j5
 
-RUN cd; cd ghc_build/ghc-8.0 && pwd
+# Install our GHC frontend
+
+ADD http://hackage.haskell.org/package/syb-0.7/syb-0.7.tar.gz /root/syb.tar.gz
+RUN cd; cd ghc_build/ghc-8.0/ && \
+    tar xf /root/syb.tar.gz && \
+    cd syb-0.7/ && \
+    ../inplace/bin/ghc-stage2 Setup.lhs -o setup && \
+    ./setup configure --with-ghc /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 && \
+    ./setup build && \
+    ./setup install
+
+COPY prana-ghc-api /root/ghc_build/ghc-8.0/prana-ghc-api
+RUN cd; cd ghc_build/ghc-8.0/prana-ghc-api && \
+    ../inplace/bin/ghc-stage2 Setup.hs -o setup && \
+    ./setup configure --with-ghc /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 && \
+    ./setup build && \
+    ./setup install
+
+################################################################################
+# Build our wrapper around ghc-stage1
 
 COPY prana-base-packages/ghc-stage1.hs /ghc-stage1.hs
-
 RUN cd; cd ghc_build/ghc-8.0 && inplace/bin/ghc-stage2 /ghc-stage1.hs -o inplace/bin/ghc-stage1-ours
 
-RUN cd; cd ghc_build/ghc-8.0 && make GHC_STAGE1=inplace/bin/ghc-stage1-ours libraries/base EXTRA_HC_OPTS="--frontend Wibble"
+################################################################################
+# Rebuild libraries with our frontend
+
+RUN cd; cd ghc_build/ghc-8.0 && make GHC_STAGE1=inplace/bin/ghc-stage1-ours libraries/ EXTRA_HC_OPTS="-package prana-ghc-api --frontend Prana.FrontendPlugin"

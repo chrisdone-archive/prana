@@ -9,10 +9,12 @@ main = do
   if any (== "--frontend") args
     then do
       (result, out, err) <-
-        readProcessWithExitCode
-          "/root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2"
-          (filter (\c -> notElem c ["-c", "-M"]) args)
-          ""
+        if any (\c -> any (isPrefixOf c) ["-iiserv","-ighc"]) args
+           then pure (ExitSuccess,"","")
+           else readProcessWithExitCode
+                  "/root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2"
+                  (filter (\c -> notElem c ["-hide-all-packages", "-c", "-M"]) args)
+                  ""
       case result of
         ExitSuccess {} ->
           rawSystem
