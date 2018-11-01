@@ -1,5 +1,5 @@
 name:
-  prana-compiler
+  prana-ghci
 version:
   0.0.0
 synopsis:
@@ -57,7 +57,7 @@ executable prana-compiler
     Prana.Compat
     Paths_prana_compiler
   build-depends:
-    prana-frontend-plugin,
+    prana-ghc-api,
     base < 5,
     array,
     bytestring,

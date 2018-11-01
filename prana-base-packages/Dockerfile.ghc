@@ -1,0 +1,61 @@
+FROM debian:stretch-slim
+MAINTAINER Chris Done
+
+RUN apt-get update && apt-get install -y \
+       gnupg \
+       gpgv && \
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80  --recv-keys BA3CBA3FFE22B574 \
+      && echo 'deb     http://downloads.haskell.org/debian stretch main' >> /etc/apt/sources.list.d/haskell.list && \
+   apt-get update && apt-get install -y \
+    libtinfo5 \
+    autoconf automake libtool make libgmp-dev ncurses-dev g++ python bzip2 ca-certificates \
+    xz-utils \
+    ghc-8.2.2 \
+    alex \
+    cabal-install-2.2 \
+    happy \
+    sudo xutils-dev \
+    && apt-get install git -y \
+    && apt-get clean
+
+ENV LANG     C.UTF-8
+ENV LC_ALL   C.UTF-8
+ENV LANGUAGE C.UTF-8
+
+# Getting the GHC sources
+# -----------------------
+#   [2]: https://ghc.haskell.org/trac/ghc/wiki/Building/GettingTheSources
+#
+RUN cd; \
+    mkdir ghc_build; \
+    cd ghc_build; \
+    git clone -b ghc-8.0 --recursive git://git.haskell.org/ghc.git ghc-8.0; \
+    cd ghc-8.0; \
+    git checkout ghc-8.0; \
+    git submodule update --init
+
+RUN apt-get install ghc -y
+
+# Building
+# --------
+#   [3]: https://ghc.haskell.org/trac/ghc/wiki/Building/QuickStart
+#
+RUN cd; \
+    cd ghc_build/ghc-8.0; \
+    cd mk; \
+    sed -e 's/^#BuildFlavour = quickest$/BuildFlavour = quickest/' \
+        build.mk.sample > build.mk; \
+    cd ..; \
+    ./boot
+
+RUN cd; cd ghc_build/ghc-8.0 &&  ./configure
+
+RUN cd; cd ghc_build/ghc-8.0 && make -j5
+
+RUN cd; cd ghc_build/ghc-8.0 && pwd
+
+COPY prana-base-packages/ghc-stage1.hs /ghc-stage1.hs
+
+RUN cd; cd ghc_build/ghc-8.0 && inplace/bin/ghc-stage2 /ghc-stage1.hs -o inplace/bin/ghc-stage1-ours
+
+RUN cd; cd ghc_build/ghc-8.0 && make GHC_STAGE1=inplace/bin/ghc-stage1-ours libraries/base EXTRA_HC_OPTS="--frontend Wibble"

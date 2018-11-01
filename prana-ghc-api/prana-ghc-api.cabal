@@ -1,4 +1,4 @@
-name:           prana-frontend-plugin
+name:           prana-ghc-api
 version:        0.0.0
 description:    Please see the README on GitHub at <https://github.com/chrisdone/prana#readme>
 homepage:       https://github.com/chrisdone/prana#readme
@@ -11,6 +11,11 @@ license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
 
+flag debug
+  description: enable debug support
+  default:     False
+  manual:      True
+
 source-repository head
   type: git
   location: https://github.com/chrisdone/prana
@@ -20,6 +25,7 @@ library
   exposed-modules:
       Prana.FrontendPlugin
       Prana.Types
+      Prana.Print
   hs-source-dirs:
       src
   build-depends:
@@ -27,6 +33,11 @@ library
       ghc,
       syb,
       containers,
-      bytestring,
+      bytestring
+  if flag(debug)
+    build-depends:
       hindent, binary
+    hs-source-dirs: debug
+    other-modules:
+      Prana.Debug
   default-language: Haskell2010

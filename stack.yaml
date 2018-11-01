@@ -1,5 +1,6 @@
 resolver: lts-8.13
 packages:
-- prana-frontend-plugin
-- prana-compiler
+- prana-ghc-api
+- prana-ghci
 - prana-interpreter
+- prana-types
