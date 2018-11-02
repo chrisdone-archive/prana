@@ -37,6 +37,7 @@ import qualified Module as GHC
 import qualified Name as GHC
 import qualified Outputable as GHC
 import           Prana.Types
+import           System.IO
 import           TcRnTypes
 
 --------------------------------------------------------------------------------
@@ -87,6 +88,7 @@ dumpCode f = do
   mgraph <- GHC.getModuleGraph
   mapM_
     (\modSummary -> do
+       liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
        bs <- compile (const (const mempty)) modSummary
        liftIO
          (L.writeFile

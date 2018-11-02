@@ -9,12 +9,23 @@ main = do
   if any (== "--frontend") args
     then do
       (result, out, err) <-
-        if any (\c -> any (isPrefixOf c) ["-iiserv","-ighc"]) args
-           then pure (ExitSuccess,"","")
-           else readProcessWithExitCode
-                  "/root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2"
-                  (filter (\c -> notElem c ["-hide-all-packages", "-c", "-M"]) args)
-                  ""
+        if not (any
+                  (\c ->
+                     any
+                       (`isPrefixOf` c)
+                       [ "-ilibraries/base"
+                       , "-ilibraries/ghc-prim"
+                       , "-ilibraries/integer-simple"
+                       , "-ilibraries/integer-gmp"
+                       ])
+                  args)
+          then pure (ExitSuccess, "", "")
+          else readProcessWithExitCode
+                 "/root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2"
+                 (filter
+                    (\c -> notElem c ["-c", "-M"])
+                    args)
+                 ""
       case result of
         ExitSuccess {} ->
           rawSystem
