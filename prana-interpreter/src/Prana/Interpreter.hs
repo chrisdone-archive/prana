@@ -1,3 +1,0 @@
--- |
-
-module Prana.Interpreter where

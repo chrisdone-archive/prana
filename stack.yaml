@@ -1,6 +1,2 @@
 resolver: lts-8.13
 packages:
-- prana-ghc-api
-- prana-ghci
-- prana-interpreter
-- prana-types
