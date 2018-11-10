@@ -100,3 +100,13 @@ RUN ./Setup configure -finteger-gmp --package-db $PREFIX/package.conf.d --prefix
     ./Setup install
 
 RUN ghc-pkg --package-db $PREFIX/package.conf.d list
+
+# Next: abandon the frontend idea! It won't work.
+#
+# Instead, we need a custom compiler. So we need a program that starts
+# up the GHC API; we can probably copy this from GHC the way that
+# Intero copies from GHCi. Or maybe we can start Intero without
+# interactive mode?
+#
+# In any case, this lets us put whatever dependencies we want into the
+# compiler. Yay!
