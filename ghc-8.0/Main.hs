@@ -1,3 +1,7 @@
+-- <prana>
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+-- </prana>
 {-# LANGUAGE CPP, NondecreasingIndentation, TupleSections #-}
 {-# OPTIONS -fno-warn-incomplete-patterns -optc-DNON_POSIX_SOURCE #-}
 
@@ -10,6 +14,24 @@
 -----------------------------------------------------------------------------
 
 module Main (main) where
+
+-- <prana>
+import qualified Data.ByteString as S
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Builder as L
+import qualified Data.Semigroup as L
+import qualified GHC
+import qualified HscTypes as GHC
+import qualified Id as GHC
+import qualified Module as GHC
+import           CoreSyn
+import           Data.List (intersperse)
+import Data.String (fromString)
+import qualified GHC
+import qualified Id as GHC
+import qualified Literal as GHC
+import qualified Name as GHC
+-- </prana>
 
 -- The official GHC API
 import qualified GHC
@@ -720,8 +742,43 @@ doMake srcs  = do
     ok_flag <- GHC.load LoadAllTargets
 
     when (failed ok_flag) (liftIO $ exitWith (ExitFailure 1))
+
     return ()
 
+-- <prana>
+    mgraph <- GHC.getModuleGraph
+    mapM_
+      (\modSummary -> do
+         liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
+         bs <- compile modSummary
+         liftIO
+           (L.writeFile
+                (moduleToFilePath (GHC.ms_mod modSummary))
+                (L.toLazyByteString (L.mconcat (intersperse "\n\n" (map (showBind False) bs))))))
+      mgraph
+-- </prana>
+
+-- <prana>
+compile ::
+     GHC.GhcMonad m
+  => GHC.ModSummary
+  -> m [CoreSyn.Bind GHC.Var]
+compile modSummary = do
+  parsedModule <- GHC.parseModule modSummary
+  typecheckedModule <- GHC.typecheckModule parsedModule
+  desugared <- GHC.desugarModule typecheckedModule
+  df <- GHC.getSessionDynFlags
+  let binds = GHC.mg_binds (GHC.dm_core_module desugared)
+  pure binds
+
+moduleToFilePath :: GHC.Module -> FilePath
+moduleToFilePath module' = packageNameVersion ++ "_" ++ moduleNameString ++ ".prana"
+  where
+    unitId = GHC.moduleUnitId module'
+    moduleName = GHC.moduleName module'
+    packageNameVersion = GHC.unitIdString unitId
+    moduleNameString = GHC.moduleNameString moduleName
+-- </prana>
 
 -- ---------------------------------------------------------------------------
 -- --show-iface mode
@@ -936,3 +993,69 @@ link statically.
 
 foreign import ccall safe "initGCStatistics"
   initGCStatistics :: IO ()
+
+-- <prana>
+showBind :: Bool -> CoreSyn.Bind GHC.Var -> L.Builder
+showBind ps =
+  \case
+    CoreSyn.NonRec var expr ->
+      par ps ("NonRec " L.<> showVar True var L.<> " " L.<> showExpr True expr)
+    CoreSyn.Rec exprs ->
+      par
+        ps
+        ("Rec [" L.<>
+         L.mconcat (intersperse
+                      ","
+                      (map
+                         (\(x, y) ->
+                            "(" L.<> showVar False x L.<> ", " L.<> showExpr False y L.<>
+                            ")")
+                         exprs)) L.<>
+         "]")
+
+showVar :: Bool -> GHC.Var -> L.Builder
+showVar ps v = par ps ("Var " L.<> showL (GHC.nameStableString (GHC.getName v)))
+
+showId :: Bool -> GHC.Id -> L.Builder
+showId ps v = par ps ("Id " L.<> showL (GHC.nameStableString (GHC.getName v)))
+
+showExpr :: Bool -> CoreSyn.Expr GHC.Var -> L.Builder
+showExpr ps =
+  \case
+    CoreSyn.Var vid -> par ps ("Var " L.<> showId ps vid)
+    CoreSyn.Lit literal -> par ps ("Lit " L.<> showLiteral True literal)
+    CoreSyn.App f x ->
+      par ps ("App " L.<> showExpr True f L.<> " " L.<> showExpr True x)
+    CoreSyn.Lam var body -> par ps ("Lam " L.<> showVar True var L.<> " " L.<> showExpr True body)
+    CoreSyn.Let bind expr -> "Let"
+    CoreSyn.Case expr var typ alts -> "Case"
+    CoreSyn.Cast expr coercion -> "Cast"
+    CoreSyn.Tick tickishVar expr -> "Tick"
+    CoreSyn.Type typ -> "Type"
+    CoreSyn.Coercion coercion -> "Coercion"
+
+showLiteral :: Bool -> GHC.Literal -> L.Builder
+showLiteral ps =
+  \case
+    GHC.MachChar ch -> par ps ("MachChar " L.<> showL ch)
+    GHC.MachStr str -> par ps ("MachStr " L.<> showL str)
+    GHC.MachNullAddr -> "MachNullAddr"
+    GHC.MachInt i -> par ps ("MachInt " L.<> showL i)
+    GHC.MachInt64 i -> par ps ("MachInt64 " L.<> showL i)
+    GHC.MachWord i -> par ps ("MachWord " L.<> showL i)
+    GHC.MachWord64 i -> par ps ("MachWord64 " L.<> showL i)
+    GHC.MachFloat i -> par ps ("MachFloat " L.<> showL i)
+    GHC.MachDouble i -> par ps ("MachDouble " L.<> showL i)
+    GHC.MachLabel fastString mint functionOrData -> par ps ("MachLabel ")
+    GHC.LitInteger i typ -> par ps ("LitInteger " L.<> showL i L.<> " " L.<> showType typ)
+
+showL :: Show i => i -> L.Builder
+showL i = fromString (show i)
+
+showType :: GHC.Type -> L.Builder
+showType _ = "Type"
+
+par :: Bool -> L.Builder -> L.Builder
+par True x = "(" L.<> x L.<> ")"
+par _    x = x
+-- </prana>
