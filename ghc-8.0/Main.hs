@@ -17,6 +17,7 @@ module Main (main) where
 
 -- <prana>
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Builder as L
 import qualified Data.Semigroup as L
@@ -754,7 +755,7 @@ doMake srcs  = do
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (L.mconcat (intersperse "\n\n" (map (showBind False) bs))))))
+                (L.toLazyByteString (encodeArray (map encodeBind bs)))))
       mgraph
 -- </prana>
 
@@ -995,38 +996,54 @@ foreign import ccall safe "initGCStatistics"
   initGCStatistics :: IO ()
 
 -- <prana>
-showBind :: Bool -> CoreSyn.Bind GHC.Var -> L.Builder
-showBind ps =
+encodeArray :: [L.Builder] -> L.Builder
+encodeArray xs = "[" L.<> mconcat (intersperse "," xs) L.<> "]"
+
+encodeObject :: [(String, L.Builder)] -> L.Builder
+encodeObject keys =
+  "{" L.<>
+  mconcat
+    (intersperse
+       ","
+       (map (\(k, v) -> encodeString k L.<> ": " L.<> v) keys)) L.<>
+  "}"
+
+encodeInt :: Int -> L.Builder
+encodeInt s = L.byteString (S8.pack (show s))
+
+encodeString :: String -> L.Builder
+encodeString s = L.byteString (S8.pack (show s))
+
+encodeBind :: CoreSyn.Bind GHC.Var -> L.Builder
+encodeBind =
   \case
     CoreSyn.NonRec var expr ->
-      par ps ("NonRec " L.<> showVar True var L.<> " " L.<> showExpr True expr)
-    CoreSyn.Rec exprs ->
-      par
-        ps
-        ("Rec [" L.<>
-         L.mconcat (intersperse
-                      ","
-                      (map
-                         (\(x, y) ->
-                            "(" L.<> showVar False x L.<> ", " L.<> showExpr False y L.<>
-                            ")")
-                         exprs)) L.<>
-         "]")
+      encodeObject [("tag", encodeString "NonRec"), ("expr", encodeExpr expr)]
+    CoreSyn.Rec exprs -> encodeObject []
+      {-("Rec [" L.<>
+       L.mconcat
+         (intersperse
+            ","
+            (map
+               (\(x, y) ->
+                  "(" L.<> encodeVar x L.<> ", " L.<> encodeExpr y L.<> ")")
+               exprs)) L.<>
+       "]")-}
 
-showVar :: Bool -> GHC.Var -> L.Builder
-showVar ps v = par ps ("Var " L.<> showL (GHC.nameStableString (GHC.getName v)))
+encodeVar :: GHC.Var -> L.Builder
+encodeVar v = undefined -- ("Var " L.<> encodeL (GHC.nameStableString (GHC.getName v)))
 
-showId :: Bool -> GHC.Id -> L.Builder
-showId ps v = par ps ("Id " L.<> showL (GHC.nameStableString (GHC.getName v)))
+encodeId :: GHC.Id -> L.Builder
+encodeId v =  undefined -- ("Id " L.<> encodeL (GHC.nameStableString (GHC.getName v)))
 
-showExpr :: Bool -> CoreSyn.Expr GHC.Var -> L.Builder
-showExpr ps =
+encodeExpr :: CoreSyn.Expr GHC.Var -> L.Builder
+encodeExpr =
   \case
-    CoreSyn.Var vid -> par ps ("Var " L.<> showId ps vid)
-    CoreSyn.Lit literal -> par ps ("Lit " L.<> showLiteral True literal)
+    CoreSyn.Var vid ->  ("Var " L.<> encodeId vid)
+    CoreSyn.Lit literal ->  ("Lit " L.<> encodeLiteral literal)
     CoreSyn.App f x ->
-      par ps ("App " L.<> showExpr True f L.<> " " L.<> showExpr True x)
-    CoreSyn.Lam var body -> par ps ("Lam " L.<> showVar True var L.<> " " L.<> showExpr True body)
+       ("App " L.<> encodeExpr f L.<> " " L.<> encodeExpr x)
+    CoreSyn.Lam var body ->  ("Lam " L.<> encodeVar var L.<> " " L.<> encodeExpr body)
     CoreSyn.Let bind expr -> "Let"
     CoreSyn.Case expr var typ alts -> "Case"
     CoreSyn.Cast expr coercion -> "Cast"
@@ -1034,28 +1051,24 @@ showExpr ps =
     CoreSyn.Type typ -> "Type"
     CoreSyn.Coercion coercion -> "Coercion"
 
-showLiteral :: Bool -> GHC.Literal -> L.Builder
-showLiteral ps =
+encodeLiteral :: GHC.Literal -> L.Builder
+encodeLiteral =
   \case
-    GHC.MachChar ch -> par ps ("MachChar " L.<> showL ch)
-    GHC.MachStr str -> par ps ("MachStr " L.<> showL str)
+    GHC.MachChar ch ->  ("MachChar " L.<> showL ch)
+    GHC.MachStr str ->  ("MachStr " L.<> showL str)
     GHC.MachNullAddr -> "MachNullAddr"
-    GHC.MachInt i -> par ps ("MachInt " L.<> showL i)
-    GHC.MachInt64 i -> par ps ("MachInt64 " L.<> showL i)
-    GHC.MachWord i -> par ps ("MachWord " L.<> showL i)
-    GHC.MachWord64 i -> par ps ("MachWord64 " L.<> showL i)
-    GHC.MachFloat i -> par ps ("MachFloat " L.<> showL i)
-    GHC.MachDouble i -> par ps ("MachDouble " L.<> showL i)
-    GHC.MachLabel fastString mint functionOrData -> par ps ("MachLabel ")
-    GHC.LitInteger i typ -> par ps ("LitInteger " L.<> showL i L.<> " " L.<> showType typ)
+    GHC.MachInt i ->  ("MachInt " L.<> showL i)
+    GHC.MachInt64 i ->  ("MachInt64 " L.<> showL i)
+    GHC.MachWord i ->  ("MachWord " L.<> showL i)
+    GHC.MachWord64 i ->  ("MachWord64 " L.<> showL i)
+    GHC.MachFloat i ->  ("MachFloat " L.<> showL i)
+    GHC.MachDouble i ->  ("MachDouble " L.<> showL i)
+    GHC.MachLabel fastString mint functionOrData ->  ("MachLabel ")
+    GHC.LitInteger i typ ->  ("LitInteger " L.<> showL i L.<> " " L.<> encodeType typ)
 
 showL :: Show i => i -> L.Builder
 showL i = fromString (show i)
 
-showType :: GHC.Type -> L.Builder
-showType _ = "Type"
-
-par :: Bool -> L.Builder -> L.Builder
-par True x = "(" L.<> x L.<> ")"
-par _    x = x
+encodeType :: GHC.Type -> L.Builder
+encodeType _ = "Type"
 -- </prana>
