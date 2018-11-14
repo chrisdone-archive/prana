@@ -1067,7 +1067,7 @@ encodeId :: GHC.Id -> L.Builder
 encodeId v =  encodeName (GHC.getName v)
 
 encodeType :: GHC.Type -> L.Builder
-encodeType x = cons "Type" [encodeString (GHC.showSDocUnsafe (GHC.ppr x))]
+encodeType x = encodeString (GHC.showSDocUnsafe (GHC.ppr x))
 
 --------------------------------------------------------------------------------
 -- Generic encoders

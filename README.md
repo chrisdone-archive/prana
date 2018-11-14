@@ -11,3 +11,7 @@ Generate ghc-prim, integer-simple and base:
     tar xf ../libraries.tar.gz
     cd ..
     rm libraries.tar.gz
+
+Run GHC compiler example:
+
+    docker run -v`pwd`:`pwd` -w`pwd` --rm ghc-compile ghc Demo.hs && sudo chown chris:chris main_Demo.prana
