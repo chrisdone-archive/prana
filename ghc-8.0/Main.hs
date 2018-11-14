@@ -1,4 +1,5 @@
 -- <prana>
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 -- </prana>
@@ -21,15 +22,14 @@ import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Builder as L
 import qualified Data.Semigroup as L
-import qualified GHC
 import qualified HscTypes as GHC
+import qualified DataCon as GHC
+import qualified Outputable as GHC
 import qualified Id as GHC
 import qualified Module as GHC
 import           CoreSyn
 import           Data.List (intersperse)
 import Data.String (fromString)
-import qualified GHC
-import qualified Id as GHC
 import qualified Literal as GHC
 import qualified Name as GHC
 -- </prana>
@@ -768,7 +768,6 @@ compile modSummary = do
   parsedModule <- GHC.parseModule modSummary
   typecheckedModule <- GHC.typecheckModule parsedModule
   desugared <- GHC.desugarModule typecheckedModule
-  df <- GHC.getSessionDynFlags
   let binds = GHC.mg_binds (GHC.dm_core_module desugared)
   pure binds
 
@@ -996,79 +995,95 @@ foreign import ccall safe "initGCStatistics"
   initGCStatistics :: IO ()
 
 -- <prana>
-encodeArray :: [L.Builder] -> L.Builder
-encodeArray xs = "[" L.<> mconcat (intersperse "," xs) L.<> "]"
-
-encodeObject :: [(String, L.Builder)] -> L.Builder
-encodeObject keys =
-  "{" L.<>
-  mconcat
-    (intersperse
-       ","
-       (map (\(k, v) -> encodeString k L.<> ": " L.<> v) keys)) L.<>
-  "}"
-
-encodeInt :: Int -> L.Builder
-encodeInt s = L.byteString (S8.pack (show s))
-
-encodeString :: String -> L.Builder
-encodeString s = L.byteString (S8.pack (show s))
-
 encodeBind :: CoreSyn.Bind GHC.Var -> L.Builder
 encodeBind =
   \case
-    CoreSyn.NonRec var expr ->
-      encodeObject [("tag", encodeString "NonRec"), ("expr", encodeExpr expr)]
-    CoreSyn.Rec exprs -> encodeObject []
-      {-("Rec [" L.<>
-       L.mconcat
-         (intersperse
-            ","
-            (map
-               (\(x, y) ->
-                  "(" L.<> encodeVar x L.<> ", " L.<> encodeExpr y L.<> ")")
-               exprs)) L.<>
-       "]")-}
-
-encodeVar :: GHC.Var -> L.Builder
-encodeVar v = undefined -- ("Var " L.<> encodeL (GHC.nameStableString (GHC.getName v)))
-
-encodeId :: GHC.Id -> L.Builder
-encodeId v =  undefined -- ("Id " L.<> encodeL (GHC.nameStableString (GHC.getName v)))
+    CoreSyn.NonRec var expr -> cons "NonRec" [encodeVar var, encodeExpr expr]
+    CoreSyn.Rec exprs ->
+      cons
+        "Rec"
+        [ encodeArray
+            (map (\(v, e) -> encodeArray [encodeVar v, encodeExpr e]) exprs)
+        ]
 
 encodeExpr :: CoreSyn.Expr GHC.Var -> L.Builder
 encodeExpr =
   \case
-    CoreSyn.Var vid ->  ("Var " L.<> encodeId vid)
-    CoreSyn.Lit literal ->  ("Lit " L.<> encodeLiteral literal)
-    CoreSyn.App f x ->
-       ("App " L.<> encodeExpr f L.<> " " L.<> encodeExpr x)
-    CoreSyn.Lam var body ->  ("Lam " L.<> encodeVar var L.<> " " L.<> encodeExpr body)
-    CoreSyn.Let bind expr -> "Let"
-    CoreSyn.Case expr var typ alts -> "Case"
-    CoreSyn.Cast expr coercion -> "Cast"
-    CoreSyn.Tick tickishVar expr -> "Tick"
-    CoreSyn.Type typ -> "Type"
-    CoreSyn.Coercion coercion -> "Coercion"
+    CoreSyn.Var vid -> cons "Var" [encodeId vid]
+    CoreSyn.Lit literal -> cons "Lit" [encodeLiteral literal]
+    CoreSyn.App f x -> cons "App" [encodeExpr f, encodeExpr x]
+    CoreSyn.Lam var body -> cons "Lam" [encodeVar var, encodeExpr body]
+    CoreSyn.Let bind expr -> cons "Let" [encodeBind bind, encodeExpr expr]
+    CoreSyn.Case expr var typ alts ->
+      cons
+        "Case"
+        [ encodeExpr expr
+        , encodeVar var
+        , encodeType typ
+        , encodeArray (map encodeAlt alts)
+        ]
+    CoreSyn.Cast expr _coercion -> cons "Cast" [encodeExpr expr, "null"]
+    CoreSyn.Tick _tickishVar expr -> cons "Tick" ["null", encodeExpr expr]
+    CoreSyn.Type typ -> cons "Type" [encodeType typ]
+    CoreSyn.Coercion _coercion -> cons "Coercion" ["null"]
+
+encodeAlt :: (AltCon, [GHC.Var], Expr GHC.Var) -> L.Builder
+encodeAlt (altCon, vars, expr) =
+  encodeArray
+    [encodeAltCon altCon, encodeArray (map encodeVar vars), encodeExpr expr]
+
+encodeAltCon :: AltCon -> L.Builder
+encodeAltCon =
+  \case
+    DataAlt dataCon -> cons "DataAlt" [encodeDataCon dataCon]
+    LitAlt literal -> cons "LitAlt" [encodeLiteral literal]
+    DEFAULT -> cons "DEFAULT" []
+
+encodeDataCon :: GHC.DataCon -> L.Builder
+encodeDataCon = encodeByteString . S.pack . GHC.dataConIdentity
 
 encodeLiteral :: GHC.Literal -> L.Builder
 encodeLiteral =
   \case
-    GHC.MachChar ch ->  ("MachChar " L.<> showL ch)
-    GHC.MachStr str ->  ("MachStr " L.<> showL str)
-    GHC.MachNullAddr -> "MachNullAddr"
-    GHC.MachInt i ->  ("MachInt " L.<> showL i)
-    GHC.MachInt64 i ->  ("MachInt64 " L.<> showL i)
-    GHC.MachWord i ->  ("MachWord " L.<> showL i)
-    GHC.MachWord64 i ->  ("MachWord64 " L.<> showL i)
-    GHC.MachFloat i ->  ("MachFloat " L.<> showL i)
-    GHC.MachDouble i ->  ("MachDouble " L.<> showL i)
-    GHC.MachLabel fastString mint functionOrData ->  ("MachLabel ")
-    GHC.LitInteger i typ ->  ("LitInteger " L.<> showL i L.<> " " L.<> encodeType typ)
+    GHC.MachChar ch -> cons "MachChar" [encodeShow ch]
+    GHC.MachStr str -> cons "MachStr" [encodeByteString str]
+    GHC.MachNullAddr -> cons "MachNullAddr" []
+    GHC.MachInt i -> cons "MachInt" [encodeShow i]
+    GHC.MachInt64 i -> cons "MachInt64" [encodeShow i]
+    GHC.MachWord i -> cons "MachWord" [encodeShow i]
+    GHC.MachWord64 i -> cons "MachWord64" [encodeShow i]
+    GHC.MachFloat i -> cons "MachFloat" [encodeShow i]
+    GHC.MachDouble i -> cons "MachDouble" [encodeShow i]
+    GHC.MachLabel _fastString _mint _functionOrData -> cons "MachLabel" []
+    GHC.LitInteger i typ -> cons "LitInteger" [encodeShow i, encodeType typ]
 
-showL :: Show i => i -> L.Builder
-showL i = fromString (show i)
+encodeName :: GHC.Name -> L.Builder
+encodeName x = encodeString (GHC.nameStableString x)
+
+encodeVar :: GHC.Var -> L.Builder
+encodeVar v = encodeName (GHC.getName v)
+
+encodeId :: GHC.Id -> L.Builder
+encodeId v =  encodeName (GHC.getName v)
 
 encodeType :: GHC.Type -> L.Builder
-encodeType _ = "Type"
+encodeType x = cons "Type" [encodeString (GHC.showSDocUnsafe (GHC.ppr x))]
+
+--------------------------------------------------------------------------------
+-- Generic encoders
+
+encodeShow :: Show i => i -> L.Builder
+encodeShow i = fromString (show i)
+
+encodeArray :: [L.Builder] -> L.Builder
+encodeArray xs = "[" L.<> mconcat (intersperse "," xs) L.<> "]"
+
+encodeString :: String -> L.Builder
+encodeString s = L.byteString (S8.pack (show s))
+
+encodeByteString :: S.ByteString -> L.Builder
+encodeByteString s = L.byteString (S8.pack (show s))
+
+cons :: String -> [L.Builder] -> L.Builder
+cons tag props = encodeArray (encodeString tag: props)
 -- </prana>
