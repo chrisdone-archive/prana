@@ -23,6 +23,7 @@ data Exp
   | CoercionE
   | LetE Bind Exp
   | CastE Exp
+  | TickE Exp
   deriving (Generic, Eq, Show, Ord)
 
 data Var = Var ByteString

@@ -38,10 +38,13 @@ module Main  where
 
 -- <prana>
 import GHC.Generics
+import Data.Word
+import Data.Semigroup
 import qualified DataCon as GHC
+import GHC.Real
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
-import qualified Data.ByteString as L
+import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Builder as L
 import           Data.ByteString (ByteString)
 import qualified Outputable as GHC
@@ -773,9 +776,9 @@ doMake srcs  = do
          liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
          bs <- compile modSummary
          liftIO
-           (S.writeFile
+           (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                mempty))
+                (L.toLazyByteString (mconcat (map (encodeBind . toBind) bs)))))
       mgraph
 
 toBind :: CoreSyn.Bind GHC.Var -> Main.Bind
@@ -792,7 +795,7 @@ toExp = \case
  CoreSyn.Let bind expr          -> Main.LetE (toBind bind) (toExp expr)
  CoreSyn.Case expr var typ alts -> Main.CaseE (toExp expr) (toVar var) (toTyp typ) (map toAlt alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp expr)
- CoreSyn.Tick _tickishVar expr  -> toExp expr
+ CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp expr)
  CoreSyn.Type typ               -> Main.TypE (toTyp typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
@@ -832,9 +835,6 @@ toId v = Main.Id (S8.pack (GHC.nameStableString (GHC.getName v)))
 
 toVar :: GHC.Var -> Main.Var
 toVar v = Main.Var (S8.pack (GHC.nameStableString (GHC.getName v)))
--- </prana>
-
--- <prana>
 compile ::
      GHC.GhcMonad m
   => GHC.ModSummary
@@ -1068,3 +1068,86 @@ link statically.
 
 foreign import ccall safe "initGCStatistics"
   initGCStatistics :: IO ()
+
+--------------------------------------------------------------------------------
+-- Binary writing
+
+encodeBind :: Main.Bind -> L.Builder
+encodeBind =
+  \case
+    Main.NonRec var expr -> tag 0 <> encodeVar var <> encodeExpr expr
+    Main.Rec pairs       -> tag 1 <> encodeArray (map (\(v, e) -> encodeVar v <> encodeExpr e) pairs)
+
+encodeExpr :: Main.Exp -> L.Builder
+encodeExpr =
+  \case
+    Main.VarE i                  -> tag 0 <> encodeId i
+    Main.LitE i                  -> tag 1 <> encodeLit i
+    Main.AppE f x                -> tag 2 <> encodeExpr f <> encodeExpr x
+    Main.LamE var body           -> tag 3 <> encodeVar var <> encodeExpr body
+    Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
+    Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeVar var <> encodeType typ <> encodeArray (map encodeAlt alts)
+    Main.CastE expr              -> tag 6 <> encodeExpr expr
+    Main.TickE expr              -> tag 7 <> encodeExpr expr
+    Main.TypE typ                -> tag 8 <> encodeType typ
+    Main.CoercionE               -> tag 9
+
+encodeLit :: Main.Lit -> L.Builder
+encodeLit =
+  \case
+    Char i          -> tag 0 <> encodeChar i
+    Str i           -> tag 1 <> encodeByteString i
+    NullAddr        -> tag 2
+    Int i           -> tag 3 <> encodeInteger i
+    Int64 i         -> tag 4 <> encodeInteger i
+    Word i          -> tag 5 <> encodeInteger i
+    Word64 i        -> tag 6 <> encodeInteger i
+    Float (i :% j)  -> tag 7 <> encodeInteger i <> encodeInteger j
+    Double (i :% j) -> tag 8 <> encodeInteger i <> encodeInteger j
+    Label           -> tag 9
+    Integer i       -> tag 10 <> encodeInteger i
+
+encodeInteger :: Integer -> L.Builder
+encodeInteger = encodeLazyByteString . L.toLazyByteString . L.integerDec
+
+encodeAltCon :: AltCon -> L.Builder
+encodeAltCon =
+  \case
+    DataAlt dataCon -> tag 0 <> encodeDataCon dataCon
+    LitAlt literal  -> tag 1 <> encodeLit literal
+    DEFAULT         -> tag 2
+
+encodeAlt :: Alt -> L.Builder
+encodeAlt (Alt altCon' vars expr) =
+  encodeAltCon altCon' <> encodeArray (map encodeVar vars) <> encodeExpr expr
+
+tag :: Word8 -> L.Builder
+tag = L.word8
+
+encodeType :: Typ -> L.Builder
+encodeType (Typ e) = encodeByteString e
+
+encodeVar :: Var -> L.Builder
+encodeVar (Var e) = encodeByteString e
+
+encodeId :: Id -> L.Builder
+encodeId (Id e) = encodeByteString e
+
+encodeDataCon :: DataCon -> L.Builder
+encodeDataCon (DataCon e) = encodeByteString e
+
+encodeByteString :: ByteString -> L.Builder
+encodeByteString x =
+  L.int64LE (fromIntegral (S.length x)) <>
+  L.byteString x
+
+encodeLazyByteString :: L.ByteString -> L.Builder
+encodeLazyByteString x =
+  L.int64LE (fromIntegral (L.length x)) <>
+  L.lazyByteString x
+
+encodeChar :: Char -> L.Builder
+encodeChar = L.int64LE . fromIntegral . fromEnum
+
+encodeArray :: [L.Builder] -> L.Builder
+encodeArray v = L.int64LE (fromIntegral (length v)) <> mconcat v
