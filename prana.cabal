@@ -9,17 +9,17 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   ghc-options:         -Wall
-  exposed-modules:     Prana, Persist, Prana.Types
+  exposed-modules:     Prana, Persist, Prana.Types, Prana.Decode
   build-depends:       base >= 4.7 && < 5,
-   bytestring, mtl, unordered-containers
+   bytestring, mtl, unordered-containers, binary
   default-language:    Haskell2010
 
-executable prana-exe
+executable prana
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
-                     , prana, bytestring
+                     , prana, bytestring, binary
   default-language:    Haskell2010
 
 test-suite prana-test

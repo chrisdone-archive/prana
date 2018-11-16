@@ -778,7 +778,7 @@ doMake srcs  = do
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (mconcat (map (encodeBind . toBind) bs)))))
+                (L.toLazyByteString (encodeArray (map (encodeBind . toBind) bs)))))
       mgraph
 
 toBind :: CoreSyn.Bind GHC.Var -> Main.Bind
