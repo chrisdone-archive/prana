@@ -78,13 +78,16 @@ decodeType :: Get Typ
 decodeType = label "decodeType" $ Typ <$> decodeByteString
 
 decodeVar :: Get Var
-decodeVar = label "decodeVar" $ Var <$> decodeByteString
+decodeVar = label "decodeVar" $ Var <$> decodeUnique
 
 decodeId :: Get Id
-decodeId = label "decodeId" $ Id <$> decodeByteString
+decodeId = label "decodeId" $ Id <$> decodeUnique
+
+decodeUnique :: Get Unique
+decodeUnique = fmap (Unique . fromIntegral) getInt64le
 
 decodeDataCon :: Get DataCon
-decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeByteString
+decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeUnique
 
 decodeByteString :: Get ByteString
 decodeByteString =

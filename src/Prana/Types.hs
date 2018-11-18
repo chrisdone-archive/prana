@@ -26,10 +26,10 @@ data Exp
   | TickE Exp
   deriving (Generic, Eq, Show, Ord)
 
-data Var = Var ByteString
+data Var = Var Unique
   deriving (Generic, Eq, Show, Ord)
 
-data Id = Id ByteString
+data Id = Id Unique
   deriving (Generic, Eq, Show, Ord)
 
 data Typ = Typ ByteString
@@ -47,8 +47,11 @@ data AltCon
   | DEFAULT
   deriving (Generic, Eq, Show, Ord)
 
-newtype DataCon = DataCon ByteString
+newtype Unique = Unique Int
  deriving (Generic, Eq, Show, Ord)
+
+newtype DataCon = DataCon Unique
+  deriving (Generic, Eq, Show, Ord)
 
 data Lit
   = Char Char

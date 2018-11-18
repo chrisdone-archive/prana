@@ -41,6 +41,7 @@ import GHC.Generics
 import Data.Word
 import Data.Semigroup
 import qualified DataCon as GHC
+import qualified Unique as GHC
 import GHC.Real
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
@@ -828,13 +829,14 @@ toTyp :: GHC.Type -> Main.Typ
 toTyp v = Main.Typ (S8.pack (GHC.showSDocUnsafe (GHC.ppr v)))
 
 toDataCon :: GHC.DataCon -> Main.DataCon
-toDataCon = Main.DataCon . S.pack . GHC.dataConIdentity
+toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataConName
 
 toId :: GHC.Id -> Main.Id
-toId v = Main.Id (S8.pack (GHC.nameStableString (GHC.getName v)))
+toId = Main.Id . Main.Unique . GHC.getKey . GHC.getUnique . GHC.getName
 
 toVar :: GHC.Var -> Main.Var
-toVar v = Main.Var (S8.pack (GHC.nameStableString (GHC.getName v)))
+toVar = Main.Var . Main.Unique . GHC.getKey . GHC.getUnique . GHC.getName
+
 compile ::
      GHC.GhcMonad m
   => GHC.ModSummary
@@ -1128,13 +1130,16 @@ encodeType :: Typ -> L.Builder
 encodeType (Typ e) = encodeByteString e
 
 encodeVar :: Var -> L.Builder
-encodeVar (Var e) = encodeByteString e
+encodeVar (Var e) = encodeUnique e
 
 encodeId :: Id -> L.Builder
-encodeId (Id e) = encodeByteString e
+encodeId (Id e) = encodeUnique e
 
 encodeDataCon :: DataCon -> L.Builder
-encodeDataCon (DataCon e) = encodeByteString e
+encodeDataCon (DataCon e) = encodeUnique e
+
+encodeUnique :: Unique -> L.Builder
+encodeUnique (Unique x) = L.int64LE (fromIntegral x)
 
 encodeByteString :: ByteString -> L.Builder
 encodeByteString x =
