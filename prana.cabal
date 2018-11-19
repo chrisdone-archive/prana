@@ -11,7 +11,7 @@ library
   ghc-options:         -Wall
   exposed-modules:     Prana, Persist, Prana.Types, Prana.Decode
   build-depends:       base >= 4.7 && < 5,
-   bytestring, mtl, unordered-containers, binary
+   bytestring, mtl, unordered-containers, binary, ghc-prim
   default-language:    Haskell2010
 
 executable prana
