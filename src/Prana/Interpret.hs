@@ -68,16 +68,20 @@ instance Show Addr where
 whnf :: Exp -> Eval WHNF
 whnf =
   \case
-    LitE l -> pure undefined
-    VarE l -> pure undefined
+    LitE l -> pure undefined -- TODO: produce a primitive value!
+    VarE l -> pure undefined -- TODO: lookup globals and primitives!
     AppE f arg -> do
       result <- whnf f
       case result of
         LamWHNF v body -> undefined -- TODO: beta-substitute!
-        OpWHNF id -> undefined -- TODO: run the primop!
+        OpWHNF id -> undefined -- TODO: force the args, run the primop!
         _ -> throw (TypeError (NotAFunction result))
+    -- No-op, lambdas are self-evaluating:
     LamE i e -> pure (LamWHNF i e)
-    CaseE {} -> undefined
+    -- Case analysis.
+    CaseE e v ty alts ->
+      do result <- whnf e
+         undefined -- TODO: perform pattern match.
 
 resolveGlobal :: Id -> Eval Exp
 resolveGlobal = undefined
