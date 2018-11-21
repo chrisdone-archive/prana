@@ -76,6 +76,12 @@ data Addr = Addr !Addr#
 instance Show Addr where
   show (Addr a) = show (I# (addr2Int# a))
 
+-- | Run the interpreter on the given expression.
+runInterpreter :: Map Id Exp -> Exp -> IO WHNF
+runInterpreter globals e = do
+  ref <- newIORef globals
+  runReaderT (runEval (whnfExp e)) (Env ref mempty)
+
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
 whnfExp =
