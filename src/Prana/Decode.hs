@@ -4,11 +4,19 @@
 
 module Prana.Decode where
 
-import Data.Binary.Get
-import Data.ByteString (ByteString)
+import           Data.Binary.Get
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
-import GHC.Real
-import Prana.Types
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import           GHC.Real
+import           Prana.Types
+
+decodeNameMap :: Get (Map Unique ByteString)
+decodeNameMap =
+  label
+    "decodeNameMap"
+    (M.fromList <$> decodeArray ((,) <$> decodeUnique <*> decodeByteString))
 
 decodeBind :: Get Bind
 decodeBind =

@@ -1,5 +1,7 @@
 -- <prana>
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DefaultSignatures #-}
@@ -41,6 +43,7 @@ import GHC.Generics
 import Data.Word
 import Data.Semigroup
 import qualified DataCon as GHC
+import Data.Data
 import qualified Unique as GHC
 import GHC.Real
 import qualified Data.ByteString as S
@@ -779,7 +782,8 @@ doMake srcs  = do
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (encodeArray (map (encodeBind . toBind) bs)))))
+                (L.toLazyByteString (encodeNamesMap bs <>
+                                     encodeArray (map (encodeBind . toBind) bs)))))
       mgraph
 
 toBind :: CoreSyn.Bind GHC.Var -> Main.Bind
@@ -1072,7 +1076,37 @@ foreign import ccall safe "initGCStatistics"
   initGCStatistics :: IO ()
 
 --------------------------------------------------------------------------------
+-- SYB
+
+type GenericQ r = forall a. Data a => a -> r
+everything :: (r -> r -> r) -> GenericQ r -> GenericQ r
+everything k f x = foldl k (f x) (gmapQ (everything k f) x)
+listify :: Typeable r => (r -> Bool) -> GenericQ [r]
+listify p = everything (++) ([] `mkQ` (\x -> if p x then [x] else []))
+mkQ :: ( Typeable a , Typeable b) => r -> (b -> r) -> a -> r
+(r `mkQ` br) a = case cast a of
+                        Just b  -> br b
+                        Nothing -> r
+
+--------------------------------------------------------------------------------
 -- Binary writing
+
+encodeNamesMap :: [CoreSyn.Bind GHC.Var] -> L.Builder
+encodeNamesMap bs =
+  encodeArray $
+  map encodePair $
+  nub
+    (concat
+       [ map (GHC.getName :: GHC.Var -> GHC.Name) (listify (const True) bs)
+       , map (GHC.getName :: GHC.DataCon -> GHC.Name) (listify (const True) bs)
+       ])
+  where
+    encodePair v = encodeUnique (getUnique v) <> encodeByteString (getBS v)
+      where
+        getUnique :: GHC.Name -> Main.Unique
+        getUnique = Main.Unique . GHC.getKey . GHC.getUnique
+        getBS :: GHC.Name -> ByteString
+        getBS = S8.pack . GHC.nameStableString
 
 encodeBind :: Main.Bind -> L.Builder
 encodeBind =
