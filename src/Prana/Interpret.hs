@@ -15,6 +15,7 @@ import qualified Data.ByteString as S
 import qualified Data.ByteString.Internal as S
 import           Data.Generics
 import           Data.IORef
+import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Foreign.Marshal
@@ -37,6 +38,7 @@ newtype Eval a = Eval
 data InterpreterError
   = TypeError TypeError
   | NotInScope Id
+  | FailedPatternMatch WHNF [Alt]
   deriving (Show, Typeable)
 instance Exception InterpreterError
 
@@ -103,8 +105,9 @@ whnfExp =
         _ -> throw (TypeError (NotAFunction result))
     -- Case analysis.
     CaseE e v ty alts ->
-      do result <- whnfExp e
-         undefined -- TODO: perform pattern match.
+      do whnf <- whnfExp e
+         e <- patternMatch whnf alts
+         whnfExp e
 
 -- | Evaluate a let expression to WHNF.  Simply evaluate the body,
 -- with the let bindings in scope.  This is non-strict, but not
@@ -170,3 +173,25 @@ resolveVar (Id u) = do
       case M.lookup (Id u) globals of
         Just e -> pure e
         Nothing -> throw (NotInScope (Id u))
+
+-- | See whether an alt matches against a WHNF.
+patternMatch :: WHNF -> [Alt] -> Eval Exp
+patternMatch whnf alts =
+  case whnf of
+    ConWHNF (Id i) args ->
+      case find
+             ((\case
+                 DataAlt (DataCon j) -> i == j
+                 _ -> False) .
+              altCon)
+             alts of
+        Just alt -> pure undefined
+        Nothing ->
+          case alts of
+            alt@(Alt {altCon = DEFAULT}):_ -> pure (altExp alt)
+            _ -> failed
+    PrimWHNF prim -> undefined
+    IntegerWHNF i -> undefined
+    _ -> failed
+  where
+    failed = throw (FailedPatternMatch whnf alts)
