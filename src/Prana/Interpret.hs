@@ -76,7 +76,7 @@ data Addr = Addr !Addr#
 instance Show Addr where
   show (Addr a) = show (I# (addr2Int# a))
 
--- | Interpret the expression.
+-- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
 whnfExp =
   \case
@@ -96,18 +96,30 @@ whnfExp =
     LetE bind e -> whnfLet bind e
     -- Produce a primitive/runtime value from the literal:
     LitE l -> litWHNF l
-    AppE f arg -> do
-      result <- whnfExp f
-      case result of
-        LamWHNF v body -> whnfExp (betaSubstitute v arg body)
-        OpWHNF i -> error "TODO: force the args, run the primop!"
-        ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
-        _ -> throw (TypeError (NotAFunction result))
+    AppE f arg -> whnfApp f arg
     -- Case analysis.
-    CaseE e v ty alts ->
-      do whnf <- whnfExp e
-         e <- patternMatch whnf alts
-         whnfExp e
+    CaseE e v ty alts -> whnfCase e v ty alts
+
+-- | Evaluate an application to WHNF.
+--
+-- * If @f@ is a lambda, we beta substitute the argument and evaluate the body.
+-- * If @f@ is a data constructor, just return it with the new argument in the arg list.
+-- * If @f@ is an operator, I'm not sure how to handle this.
+whnfApp :: Exp -> Exp -> Eval WHNF
+whnfApp f arg = do
+  result <- whnfExp f
+  case result of
+    LamWHNF v body -> whnfExp (betaSubstitute v arg body)
+    OpWHNF i -> error "TODO: force the args, run the primop!"
+    ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
+    _ -> throw (TypeError (NotAFunction result))
+
+-- | Evaluate a case to WHNF.
+whnfCase :: Exp -> Var -> Typ -> [Alt] -> Eval WHNF
+whnfCase e v _ty alts = do
+  whnf <- whnfExp e
+  choice <- patternMatch whnf alts
+  whnfExp (betaSubstitute v e choice)
 
 -- | Evaluate a let expression to WHNF.  Simply evaluate the body,
 -- with the let bindings in scope.  This is non-strict, but not
@@ -185,13 +197,48 @@ patternMatch whnf alts =
                  _ -> False) .
               altCon)
              alts of
-        Just alt -> pure undefined
-        Nothing ->
-          case alts of
-            alt@(Alt {altCon = DEFAULT}):_ -> pure (altExp alt)
-            _ -> failed
-    PrimWHNF prim -> undefined
-    IntegerWHNF i -> undefined
+        Just alt ->
+          pure
+            (foldl'
+               (\e (v, arg) -> betaSubstitute v arg e)
+               (altExp alt)
+               (zip (altVars alt) args))
+        Nothing -> defaulting
+    PrimWHNF prim ->
+      case find
+             ((\case
+                 LitAlt lit -> litMatch lit prim
+                 _ -> False) .
+              altCon)
+             alts of
+        Just alt -> pure (altExp alt)
+        Nothing -> defaulting
+    IntegerWHNF i ->
+      case find
+             ((\case
+                 LitAlt (Integer j) -> i == j
+                 _ -> False) .
+              altCon)
+             alts of
+        Nothing -> defaulting
+        Just alt -> pure (altExp alt)
     _ -> failed
   where
+    defaulting =
+      case alts of
+        alt@(Alt {altCon = DEFAULT}):_ -> pure (altExp alt)
+        _ -> failed
     failed = throw (FailedPatternMatch whnf alts)
+
+-- | Match a literal against a primitive value. Only numbers and char
+-- are supported. Floating point comparison is not allowed here,
+-- according to GHC.
+litMatch :: Lit -> Prim -> Bool
+litMatch l p =
+  case (l, p) of
+    (Char x, CharPrim y) -> x == y
+    (Int x, IntPrim y) -> fromIntegral x == y
+    (Int64 x, IntPrim y) -> fromIntegral x == y
+    (Word x, WordPrim y) -> fromIntegral x == y
+    (Word64 x, WordPrim y) -> fromIntegral x == y
+    _ -> False
