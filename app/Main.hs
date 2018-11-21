@@ -15,6 +15,6 @@ main = do
          bytes <- L.readFile fp
          case runGetOrFail (decodeArray decodeBind) bytes of
            Left e -> error ("failed to decode " ++ fp ++ ": " ++ show e ++ ", file contains: "++ take 10 (show bytes))
-           Right (_,_,m) -> pure (m :: [Bind]))
+           Right (_,_,m) -> print (m :: [Bind]))
       args
   pure ()
