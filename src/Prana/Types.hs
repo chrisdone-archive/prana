@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 -- |
@@ -5,13 +6,14 @@
 module Prana.Types where
 
 import Data.ByteString (ByteString)
+import Data.Data
 import GHC.Generics
 
 data Bind
   = NonRec Var
            Exp
   | Rec [(Var, Exp)]
-  deriving (Generic, Show, Ord, Eq)
+  deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
 data Exp
   = VarE Id
@@ -24,34 +26,34 @@ data Exp
   | LetE Bind Exp
   | CastE Exp
   | TickE Exp
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Var = Var Unique
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Id = Id Unique
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Typ = Typ ByteString
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Alt = Alt
   { altCon :: AltCon
   , altVars :: [Var]
   , altExp :: Exp
-  } deriving (Generic, Eq, Show, Ord)
+  } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data AltCon
   = DataAlt DataCon
   | LitAlt Lit
   | DEFAULT
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 newtype Unique = Unique Int
- deriving (Generic, Eq, Show, Ord)
+ deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 newtype DataCon = DataCon Unique
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Lit
   = Char Char
@@ -65,4 +67,4 @@ data Lit
   | Double Rational
   | Label
   | Integer Integer
-  deriving (Generic, Eq, Show, Ord)
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)

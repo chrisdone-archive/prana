@@ -13,10 +13,10 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Internal as S
+import           Data.Generics
 import           Data.IORef
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import           Data.Typeable
 import           Foreign.Marshal
 import           GHC.Base
 import           GHC.Exts
@@ -97,7 +97,7 @@ whnfExp =
     AppE f arg -> do
       result <- whnfExp f
       case result of
-        LamWHNF v body -> error "TODO: beta-substitute!"
+        LamWHNF v body -> whnfExp (betaSubstitute v arg body)
         OpWHNF i -> error "TODO: force the args, run the primop!"
         ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
         _ -> throw (TypeError (NotAFunction result))
@@ -141,6 +141,17 @@ litWHNF =
     Double i -> pure (PrimWHNF (DoublePrim (fromRational i)))
     Label -> pure LabelWHNF
     Integer i -> pure (IntegerWHNF i)
+
+-- | Replace all instances of @x@ with @replacement@. Variables are
+-- all globally unique, so we don't have to worry about name capture.
+betaSubstitute :: Var -> Exp -> Exp -> Exp
+betaSubstitute (Var x) replacement =
+  everywhere
+    (mkT
+       (\case
+          VarE (Id y)
+            | x == y -> replacement
+          e -> e))
 
 -- | Insert a binding into the let-local scope.
 insertBind :: Bind -> Map Var Exp -> Map Var Exp
