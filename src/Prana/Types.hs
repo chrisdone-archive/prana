@@ -28,6 +28,20 @@ data Exp
   | TickE Exp
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
+-- An easy way to uniquify everything. Use parts:
+--
+-- 1. Package + module + ident.
+-- 2. Unique from GHC run.
+--
+-- So:
+--
+-- * When we do a GLOBAL lookup, we just lookup by package + module +
+-- ident.
+--
+-- * When we do a LOCAL lookup, we use the complete composed
+-- package+module+ident+unique.
+--
+
 data Var = Var Unique
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
