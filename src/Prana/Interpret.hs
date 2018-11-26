@@ -8,6 +8,7 @@
 
 module Prana.Interpret where
 
+import           Control.Arrow
 import           Control.Concurrent
 import           Control.Exception (Exception, throw)
 import           Control.Monad.IO.Class
@@ -52,7 +53,7 @@ data TypeError =
 
 -- | An expression evaluated to weak head normal form.
 data WHNF
-  = OpWHNF !ByteString
+  = OpWHNF Op [WHNF]
   | PrimWHNF !Prim
   | IntegerWHNF !Integer
   | ConWHNF !Id ![Exp]
@@ -78,6 +79,11 @@ data Prim
 data Addr = Addr !Addr#
 instance Show Addr where
   show (Addr a) = show (I# (addr2Int# a))
+
+data Op = Op
+  { opArity :: !Int
+  , opName :: !ByteString
+  } deriving (Show)
 
 -- | Run the interpreter on the given expression.
 runInterpreter :: Map Id Exp -> Map Unique ByteString -> Exp -> IO WHNF
@@ -113,15 +119,27 @@ whnfExp =
 --
 -- * If @f@ is a lambda, we beta substitute the argument and evaluate the body.
 -- * If @f@ is a data constructor, just return it with the new argument in the arg list.
--- * If @f@ is an operator, I'm not sure how to handle this.
+-- * If @f@ is an operator, reduce the arguments until saturated, then run it.
 whnfApp :: Exp -> Exp -> Eval WHNF
 whnfApp f arg = do
   result <- whnfExp f
   case result of
     LamWHNF v body -> whnfExp (betaSubstitute v arg body)
-    OpWHNF i -> error "TODO: force the args, run the primop!"
+    OpWHNF op args -> whnfOp op args arg
     ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
     _ -> throw (TypeError (NotAFunction result))
+
+-- | Force the arguments to WHNF until fully saturated (has all args),
+-- then run it.
+whnfOp :: Op -> [WHNF] -> Exp -> Eval WHNF
+whnfOp op args0 arg = do
+  whnf <- whnfExp arg
+  let args = args0 ++ [whnf]
+   in if length args == opArity op
+        then error
+               ("Primop is saturated, apply: " ++
+                show op ++ " with args: " ++ show args)
+        else pure (OpWHNF op args)
 
 -- | Evaluate a case to WHNF.
 whnfCase :: Exp -> Var -> Typ -> [Alt] -> Eval WHNF
@@ -195,9 +213,9 @@ whnfVar (Id u) = do
         Just e -> whnfExp e
         Nothing -> do
           mapping <- asks envPrimOps
-          case M.lookup u mapping of
-            Just bsname | isPrimOp bsname -> pure (OpWHNF bsname)
-            _ -> throw (NotInScope (Id u))
+          case M.lookup u mapping >>= flip M.lookup primops of
+            Just op -> pure (OpWHNF op [])
+            Nothing -> throw (NotInScope (Id u))
 
 -- | Does the name refer to a primop?
 isPrimOp :: ByteString -> Bool
@@ -259,3 +277,11 @@ litMatch l p =
     (Word x, WordPrim y) -> fromIntegral x == y
     (Word64 x, WordPrim y) -> fromIntegral x == y
     _ -> False
+
+-- | Primitive operators.
+primops :: Map ByteString Op
+primops =
+  M.fromList
+    (map
+       (opName &&& id)
+       [Op {opArity = 1, opName = "$ghc-prim$GHC.Prim$tagToEnum#"}])
