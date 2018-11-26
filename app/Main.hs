@@ -48,10 +48,12 @@ main = do
         Nothing -> error "Couldn't lookup main from bindings."
         Just e ->
           catch
-            (runInterpreter binds e >>= print)
+            (runInterpreter binds nameMap e >>= print)
             (\case
                NotInScope (Id id') ->
                  error
-                   ("Not in scope: " ++ fromMaybe (show id') (fmap show (M.lookup id' nameMap)))
+                   ("Not in scope: " ++
+                    fromMaybe (show id') (fmap show (M.lookup id' nameMap)) ++
+                    " (" ++ show id' ++ ")")
                err -> error (show err))
   pure ()

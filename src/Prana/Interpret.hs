@@ -1,4 +1,5 @@
 {-# LANGUAGE MagicHash #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -11,6 +12,7 @@ import           Control.Concurrent
 import           Control.Exception (Exception, throw)
 import           Control.Monad.IO.Class
 import           Control.Monad.Reader
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Internal as S
 import           Data.Generics
@@ -27,6 +29,7 @@ import           Prana.Types
 data Env = Env
   { envGlobals :: !(IORef (Map Id Exp))
   , envLets :: !(Map Var Exp)
+  , envPrimOps :: !(Map Unique ByteString)
   }
 
 -- | Evaluation computation.
@@ -49,7 +52,7 @@ data TypeError =
 
 -- | An expression evaluated to weak head normal form.
 data WHNF
-  = OpWHNF !Id
+  = OpWHNF !ByteString
   | PrimWHNF !Prim
   | IntegerWHNF !Integer
   | ConWHNF !Id ![Exp]
@@ -77,10 +80,10 @@ instance Show Addr where
   show (Addr a) = show (I# (addr2Int# a))
 
 -- | Run the interpreter on the given expression.
-runInterpreter :: Map Id Exp -> Exp -> IO WHNF
-runInterpreter globals e = do
+runInterpreter :: Map Id Exp -> Map Unique ByteString -> Exp -> IO WHNF
+runInterpreter globals nameMap e = do
   ref <- newIORef globals
-  runReaderT (runEval (whnfExp e)) (Env ref mempty)
+  runReaderT (runEval (whnfExp e)) (Env ref mempty nameMap)
 
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
@@ -97,7 +100,7 @@ whnfExp =
     -- Skip over casts:
     CastE e -> whnfExp e
     -- Lookup globals, primitives and lets:
-    VarE l -> resolveVar l >>= whnfExp
+    VarE l -> whnfVar l
     -- Evaluate the body of a let, put the binding in scope:
     LetE bind e -> whnfLet bind e
     -- Produce a primitive/runtime value from the literal:
@@ -180,17 +183,25 @@ insertBind (NonRec k v) = M.insert k v
 insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
 
 -- | Resolve a locally let identifier, a global identifier, to its expression.
-resolveVar :: Id -> Eval Exp
-resolveVar (Id u) = do
+whnfVar :: Id -> Eval WHNF
+whnfVar (Id u) = do
   lets <- asks envLets
   case M.lookup (Var u) lets of
-    Just e -> pure e
+    Just e -> whnfExp e
     Nothing -> do
       globalRef <- asks envGlobals
       globals <- liftIO (readIORef globalRef)
       case M.lookup (Id u) globals of
-        Just e -> pure e
-        Nothing -> throw (NotInScope (Id u))
+        Just e -> whnfExp e
+        Nothing -> do
+          mapping <- asks envPrimOps
+          case M.lookup u mapping of
+            Just bsname | isPrimOp bsname -> pure (OpWHNF bsname)
+            _ -> throw (NotInScope (Id u))
+
+-- | Does the name refer to a primop?
+isPrimOp :: ByteString -> Bool
+isPrimOp s = S.isPrefixOf "$ghc-prim$GHC.Prim$" s && S.isSuffixOf "#" s
 
 -- | See whether an alt matches against a WHNF.
 patternMatch :: WHNF -> [Alt] -> Eval Exp
