@@ -28,20 +28,16 @@ data Exp
   | TickE Exp
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
--- An easy way to uniquify everything. Use parts:
+-- Use this encoding:
 --
--- 1. Package + module + ident.
--- 2. Unique from GHC run.
+-- <stable-name> <unique>
 --
--- So:
+-- where
 --
--- * When we do a GLOBAL lookup, we just lookup by package + module +
--- ident.
+-- stable-name = <package> <module> <ident>
 --
--- * When we do a LOCAL lookup, we use the complete composed
--- package+module+ident+unique.
---
-
+-- and unique is a per-GHC-run unique number, which for our purposes
+-- means "a package-level unique number".
 data Id = Id
   { idStableName :: {-# UNPACK #-}!ByteString
   , idUnique :: {-# UNPACK #-}!Unique
