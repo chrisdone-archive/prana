@@ -4,13 +4,9 @@
 module Main where
 
 import           Control.Exception
-import           Data.Bifunctor
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
-import           Data.List
 import qualified Data.Map.Strict as M
-import           Data.Maybe
-import           Data.Tuple
 import           Prana.Decode
 import           Prana.Interpret
 import           Prana.Types
@@ -34,17 +30,20 @@ main = do
               Right (_, _, binds) -> do
                 pure binds)
          args)
-  print binds
-  {-case find ((== "$main$Main$main") . idStableName . bindI) binds of
-    Nothing -> error "No name found for main."
-    Just main_uniq ->
-      case M.lookup (Id main_uniq) binds of
-        Nothing -> error "Couldn't lookup main from bindings."
-        Just e ->
-          catch
-            (runInterpreter binds nameMap e >>= print)
-            (\case
-               NotInScope (Id id' _) ->
-                 error ("Not in scope: " ++ show id' ++ " (" ++ show id' ++ ")")
-               err -> error (show err))-}
-  pure ()
+  let globals =
+        M.fromList
+          (concatMap
+             (\case
+                NonRec v e -> [(v, e)]
+                Rec bs -> bs)
+             binds)
+  case M.lookup "$main$Main$main" (M.mapKeys idStableName globals) of
+    Nothing -> error "Couldn't find main function."
+    Just e ->
+      catch
+        (runInterpreter globals e >>= print)
+        (\case
+           NotInScope (Id id' _) ->
+             error ("Not in scope: " ++ show id' ++ " (" ++ show id' ++ ")\n" ++
+                unlines (map (show . idStableName) (M.keys globals)))
+           err -> error (show err))

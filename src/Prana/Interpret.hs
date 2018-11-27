@@ -30,7 +30,6 @@ import           Prana.Types
 data Env = Env
   { envGlobals :: !(IORef (Map Id Exp))
   , envLets :: !(Map Id Exp)
-  , envPrimOps :: !(Map Unique ByteString)
   }
 
 -- | Evaluation computation.
@@ -86,10 +85,10 @@ data Op = Op
   } deriving (Show)
 
 -- | Run the interpreter on the given expression.
-runInterpreter :: Map Id Exp -> Map Unique ByteString -> Exp -> IO WHNF
-runInterpreter globals nameMap e = do
+runInterpreter :: Map Id Exp -> Exp -> IO WHNF
+runInterpreter globals e = do
   ref <- newIORef globals
-  runReaderT (runEval (whnfExp e)) (Env ref mempty nameMap)
+  runReaderT (runEval (whnfExp e)) (Env ref mempty)
 
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
@@ -232,20 +231,22 @@ insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
 
 -- | Resolve a locally let identifier, a global identifier, to its expression.
 whnfId :: Id -> Eval WHNF
-whnfId (Id bs u) = do
+whnfId i@(Id bs _) = do
   lets <- asks envLets
-  case M.lookup (Id undefined u) lets of
+  case M.lookup i lets of
     Just e -> whnfExp e
     Nothing -> do
       globalRef <- asks envGlobals
       globals <- liftIO (readIORef globalRef)
-      case M.lookup (Id undefined u) globals of
+      case M.lookup i (globals) of
         Just e -> whnfExp e
-        Nothing -> do
-          mapping <- asks envPrimOps
-          case M.lookup u mapping >>= flip M.lookup primops of
-            Just op -> pure (OpWHNF op [])
-            Nothing -> throw (NotInScope (Id bs u))
+        Nothing ->
+          case M.lookup bs (M.mapKeys idStableName globals) of
+            Just e -> whnfExp e
+            Nothing ->
+              case M.lookup bs primops of
+                Just op -> pure (OpWHNF op [])
+                Nothing -> throw (NotInScope i)
 
 -- | Does the name refer to a primop?
 isPrimOp :: ByteString -> Bool
