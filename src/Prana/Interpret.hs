@@ -29,7 +29,7 @@ import           Prana.Types
 -- | An environment to evaluate expressions in.
 data Env = Env
   { envGlobals :: !(IORef (Map Id Exp))
-  , envLets :: !(Map Var Exp)
+  , envLets :: !(Map Id Exp)
   , envPrimOps :: !(Map Unique ByteString)
   }
 
@@ -57,7 +57,7 @@ data WHNF
   | PrimWHNF !Prim
   | IntegerWHNF !Integer
   | ConWHNF !Id ![Exp]
-  | LamWHNF !Var !Exp
+  | LamWHNF !Id !Exp
   | LabelWHNF
   | CoercionWHNF
   | TypWHNF !Typ
@@ -106,7 +106,7 @@ whnfExp =
     -- Skip over casts:
     CastE e -> whnfExp e
     -- Lookup globals, primitives and lets:
-    VarE l -> whnfVar l
+    VarE l -> whnfId l
     -- Evaluate the body of a let, put the binding in scope:
     LetE bind e -> whnfLet bind e
     -- Produce a primitive/runtime value from the literal:
@@ -142,7 +142,7 @@ whnfOp op args0 arg = do
         else pure (OpWHNF op args)
 
 -- | Evaluate a case to WHNF.
-whnfCase :: Exp -> Var -> Typ -> [Alt] -> Eval WHNF
+whnfCase :: Exp -> Id -> Typ -> [Alt] -> Eval WHNF
 whnfCase e v _ty alts = do
   whnf <- whnfExp e
   choice <- patternMatch whnf alts
@@ -184,38 +184,68 @@ litWHNF =
     Label -> pure LabelWHNF
     Integer i -> pure (IntegerWHNF i)
 
--- | Replace all instances of @x@ with @replacement@. Variables are
--- all globally unique, so we don't have to worry about name capture.
-betaSubstitute :: Var -> Exp -> Exp -> Exp
-betaSubstitute (Var x) replacement =
-  everywhere
-    (mkT
-       (\case
-          VarE (Id y)
-            | x == y -> replacement
-          e -> e))
+-- | Replace all instances of @x@ with @replacement@, avoiding name capture.
+betaSubstitute :: Id -> Exp -> Exp -> Exp
+betaSubstitute x replacement = go
+  where
+    go =
+      \case
+        VarE y ->
+          if x == y
+            then replacement
+            else VarE y
+        e@LitE {} -> e
+        AppE f a -> AppE (go f) (go a)
+        LamE y e ->
+          if y == x
+            then LamE y e
+            else LamE y (go e)
+        CaseE e y ty alts ->
+          CaseE
+            (go e)
+            y
+            ty
+            (if y == x
+               then alts
+               else map (\(Alt con vars alt_e) -> Alt con vars (go alt_e)) alts)
+        e@TypE {} -> e
+        CoercionE -> CoercionE
+        orig@(LetE bind let_e) ->
+          case bind of
+            NonRec y nonrec_e ->
+              if y == x
+                then LetE (NonRec y (go nonrec_e)) let_e
+                else LetE (NonRec y (go nonrec_e)) (go let_e)
+            Rec binds ->
+              if any (\(y, _) -> y == x) binds
+                then orig
+                else LetE
+                       (Rec (map (\(v, bind_e) -> (v, go bind_e)) binds))
+                       (go let_e)
+        CastE e -> CastE (go e)
+        TickE e -> TickE (go e)
 
 -- | Insert a binding into the let-local scope.
-insertBind :: Bind -> Map Var Exp -> Map Var Exp
+insertBind :: Bind -> Map Id Exp -> Map Id Exp
 insertBind (NonRec k v) = M.insert k v
 insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
 
 -- | Resolve a locally let identifier, a global identifier, to its expression.
-whnfVar :: Id -> Eval WHNF
-whnfVar (Id u) = do
+whnfId :: Id -> Eval WHNF
+whnfId (Id bs u) = do
   lets <- asks envLets
-  case M.lookup (Var u) lets of
+  case M.lookup (Id undefined u) lets of
     Just e -> whnfExp e
     Nothing -> do
       globalRef <- asks envGlobals
       globals <- liftIO (readIORef globalRef)
-      case M.lookup (Id u) globals of
+      case M.lookup (Id undefined u) globals of
         Just e -> whnfExp e
         Nothing -> do
           mapping <- asks envPrimOps
           case M.lookup u mapping >>= flip M.lookup primops of
             Just op -> pure (OpWHNF op [])
-            Nothing -> throw (NotInScope (Id u))
+            Nothing -> throw (NotInScope (Id bs u))
 
 -- | Does the name refer to a primop?
 isPrimOp :: ByteString -> Bool
@@ -225,7 +255,7 @@ isPrimOp s = S.isPrefixOf "$ghc-prim$GHC.Prim$" s && S.isSuffixOf "#" s
 patternMatch :: WHNF -> [Alt] -> Eval Exp
 patternMatch whnf alts =
   case whnf of
-    ConWHNF (Id i) args ->
+    ConWHNF (Id _ i) args ->
       case find
              ((\case
                  DataAlt (DataCon j) -> i == j
