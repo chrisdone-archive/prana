@@ -10,17 +10,17 @@ import Data.Data
 import GHC.Generics
 
 data Bind
-  = NonRec Var
+  = NonRec Id
            Exp
-  | Rec [(Var, Exp)]
+  | Rec [(Id, Exp)]
   deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
 data Exp
   = VarE Id
   | LitE Lit
   | AppE Exp Exp
-  | LamE Var Exp
-  | CaseE Exp Var Typ [Alt]
+  | LamE Id Exp
+  | CaseE Exp Id Typ [Alt]
   | TypE Typ
   | CoercionE
   | LetE Bind Exp
@@ -42,18 +42,17 @@ data Exp
 -- package+module+ident+unique.
 --
 
-data Var = Var Unique
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
-data Id = Id Unique
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+data Id = Id
+  { idStableName :: {-# UNPACK #-}!ByteString
+  , idUnique :: {-# UNPACK #-}!Unique
+  } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Typ = Typ ByteString
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Alt = Alt
   { altCon :: AltCon
-  , altVars :: [Var]
+  , altVars :: [Id]
   , altExp :: Exp
   } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 

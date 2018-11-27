@@ -12,19 +12,13 @@ import qualified Data.Map.Strict as M
 import           GHC.Real
 import           Prana.Types
 
-decodeNameMap :: Get (Map Unique ByteString)
-decodeNameMap =
-  label
-    "decodeNameMap"
-    (M.fromList <$> decodeArray ((,) <$> decodeUnique <*> decodeByteString))
-
 decodeBind :: Get Bind
 decodeBind =
   label "decodeBind" $ do
     tag <- getWord8
     case tag of
-      0 -> NonRec <$> decodeVar <*> decodeExpr
-      1 -> Rec <$> decodeArray ((,) <$> decodeVar <*> decodeExpr)
+      0 -> NonRec <$> decodeId <*> decodeExpr
+      1 -> Rec <$> decodeArray ((,) <$> decodeId <*> decodeExpr)
       _ -> fail ("decodeBind: unknown tag " ++ show tag)
 
 decodeExpr :: Get Exp
@@ -35,10 +29,10 @@ decodeExpr =
       0 -> VarE <$> decodeId
       1 -> LitE <$> decodeLit
       2 -> AppE <$> decodeExpr <*> decodeExpr
-      3 -> LamE <$> decodeVar <*> decodeExpr
+      3 -> LamE <$> decodeId <*> decodeExpr
       4 -> LetE <$> decodeBind <*> decodeExpr
       5 ->
-        CaseE <$> decodeExpr <*> decodeVar <*> decodeType <*>
+        CaseE <$> decodeExpr <*> decodeId <*> decodeType <*>
         decodeArray decodeAlt
       6 -> CastE <$> decodeExpr
       7 -> TickE <$> decodeExpr
@@ -80,19 +74,16 @@ decodeInteger = label "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
 decodeAlt :: Get Alt
 decodeAlt =
   label "decodeAlt" $
-  Alt <$> decodeAltCon <*> decodeArray decodeVar <*> decodeExpr
+  Alt <$> decodeAltCon <*> decodeArray decodeId <*> decodeExpr
 
 decodeType :: Get Typ
 decodeType = label "decodeType" $ Typ <$> decodeByteString
 
-decodeVar :: Get Var
-decodeVar = label "decodeVar" $ Var <$> decodeUnique
-
 decodeId :: Get Id
-decodeId = label "decodeId" $ Id <$> decodeUnique
+decodeId = label "decodeId" $ Id <$> decodeByteString <*> decodeUnique
 
 decodeUnique :: Get Unique
-decodeUnique = fmap (Unique . fromIntegral) getInt64le
+decodeUnique = label "decodeUnique" $ fmap (Unique . fromIntegral) getInt64le
 
 decodeDataCon :: Get DataCon
 decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeUnique

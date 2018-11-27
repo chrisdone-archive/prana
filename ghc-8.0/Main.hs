@@ -782,30 +782,29 @@ doMake srcs  = do
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (encodeNamesMap bs <>
-                                     encodeArray (map (encodeBind . toBind) bs)))))
+                (L.toLazyByteString (encodeArray (map (encodeBind . toBind) bs)))))
       mgraph
 
 toBind :: CoreSyn.Bind GHC.Var -> Main.Bind
 toBind = \case
-  CoreSyn.NonRec v e -> Main.NonRec (toVar v) (toExp e)
-  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toVar v,toExp e)) bs)
+  CoreSyn.NonRec v e -> Main.NonRec (toId v) (toExp e)
+  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toId v,toExp e)) bs)
 
 toExp :: CoreSyn.Expr GHC.Var -> Main.Exp
 toExp = \case
  CoreSyn.Var i -> Main.VarE (toId i)
  CoreSyn.Lit i                  -> Main.LitE (toLit i)
  CoreSyn.App f x                -> Main.AppE (toExp f) (toExp x)
- CoreSyn.Lam var body           -> Main.LamE (toVar var) (toExp body)
+ CoreSyn.Lam var body           -> Main.LamE (toId var) (toExp body)
  CoreSyn.Let bind expr          -> Main.LetE (toBind bind) (toExp expr)
- CoreSyn.Case expr var typ alts -> Main.CaseE (toExp expr) (toVar var) (toTyp typ) (map toAlt alts)
+ CoreSyn.Case expr var typ alts -> Main.CaseE (toExp expr) (toId var) (toTyp typ) (map toAlt alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp expr)
  CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp expr)
  CoreSyn.Type typ               -> Main.TypE (toTyp typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
 toAlt :: (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
-toAlt (con,vars,e) = Alt (toAltCon con) (map toVar vars) (toExp e)
+toAlt (con,vars,e) = Alt (toAltCon con) (map toId vars) (toExp e)
 
 toAltCon :: CoreSyn.AltCon -> Main.AltCon
 toAltCon =
@@ -836,10 +835,11 @@ toDataCon :: GHC.DataCon -> Main.DataCon
 toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataConName
 
 toId :: GHC.Id -> Main.Id
-toId = Main.Id . Main.Unique . GHC.getKey . GHC.getUnique . GHC.getName
-
-toVar :: GHC.Var -> Main.Var
-toVar = Main.Var . Main.Unique . GHC.getKey . GHC.getUnique . GHC.getName
+toId thing = Main.Id bs unique
+  where
+    bs = S8.pack (GHC.nameStableString name)
+    unique = Main.Unique (GHC.getKey (GHC.getUnique name))
+    name = GHC.getName thing
 
 compile ::
      GHC.GhcMonad m
@@ -1091,28 +1091,11 @@ mkQ :: ( Typeable a , Typeable b) => r -> (b -> r) -> a -> r
 --------------------------------------------------------------------------------
 -- Binary writing
 
-encodeNamesMap :: [CoreSyn.Bind GHC.Var] -> L.Builder
-encodeNamesMap bs =
-  encodeArray $
-  map encodePair $
-  nub
-    (concat
-       [ map (GHC.getName :: GHC.Var -> GHC.Name) (listify (const True) bs)
-       , map (GHC.getName :: GHC.DataCon -> GHC.Name) (listify (const True) bs)
-       ])
-  where
-    encodePair v = encodeUnique (getUnique v) <> encodeByteString (getBS v)
-      where
-        getUnique :: GHC.Name -> Main.Unique
-        getUnique = Main.Unique . GHC.getKey . GHC.getUnique
-        getBS :: GHC.Name -> ByteString
-        getBS = S8.pack . GHC.nameStableString
-
 encodeBind :: Main.Bind -> L.Builder
 encodeBind =
   \case
-    Main.NonRec var expr -> tag 0 <> encodeVar var <> encodeExpr expr
-    Main.Rec pairs       -> tag 1 <> encodeArray (map (\(v, e) -> encodeVar v <> encodeExpr e) pairs)
+    Main.NonRec var expr -> tag 0 <> encodeId var <> encodeExpr expr
+    Main.Rec pairs       -> tag 1 <> encodeArray (map (\(v, e) -> encodeId v <> encodeExpr e) pairs)
 
 encodeExpr :: Main.Exp -> L.Builder
 encodeExpr =
@@ -1120,9 +1103,9 @@ encodeExpr =
     Main.VarE i                  -> tag 0 <> encodeId i
     Main.LitE i                  -> tag 1 <> encodeLit i
     Main.AppE f x                -> tag 2 <> encodeExpr f <> encodeExpr x
-    Main.LamE var body           -> tag 3 <> encodeVar var <> encodeExpr body
+    Main.LamE var body           -> tag 3 <> encodeId var <> encodeExpr body
     Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
-    Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeVar var <> encodeType typ <> encodeArray (map encodeAlt alts)
+    Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <> encodeArray (map encodeAlt alts)
     Main.CastE expr              -> tag 6 <> encodeExpr expr
     Main.TickE expr              -> tag 7 <> encodeExpr expr
     Main.TypE typ                -> tag 8 <> encodeType typ
@@ -1155,7 +1138,7 @@ encodeAltCon =
 
 encodeAlt :: Alt -> L.Builder
 encodeAlt (Alt altCon' vars expr) =
-  encodeAltCon altCon' <> encodeArray (map encodeVar vars) <> encodeExpr expr
+  encodeAltCon altCon' <> encodeArray (map encodeId vars) <> encodeExpr expr
 
 tag :: Word8 -> L.Builder
 tag = L.word8
@@ -1163,11 +1146,8 @@ tag = L.word8
 encodeType :: Typ -> L.Builder
 encodeType (Typ e) = encodeByteString e
 
-encodeVar :: Var -> L.Builder
-encodeVar (Var e) = encodeUnique e
-
 encodeId :: Id -> L.Builder
-encodeId (Id e) = encodeUnique e
+encodeId (Id bs u) = encodeByteString bs <> encodeUnique u
 
 encodeDataCon :: DataCon -> L.Builder
 encodeDataCon (DataCon e) = encodeUnique e
