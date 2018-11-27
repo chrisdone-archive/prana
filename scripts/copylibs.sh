@@ -1,0 +1,1 @@
+echo -n "Copying libraries... "; rm -rf libraries; docker run -v`pwd`:`pwd` -w`pwd` --rm ghc-compile cp /root/ghc_build/ghc-8.0/libraries/libraries.tar.gz . && mkdir -p libraries && cd libraries && tar xf ../libraries.tar.gz; cd ..; echo done.
