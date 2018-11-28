@@ -784,7 +784,8 @@ doMake srcs  = do
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
                 (L.toLazyByteString
-                   (encodeArray
+                   (encodeArray (encodeClass )
+                    encodeArray
                       (map (encodeBind . toBind (GHC.ms_mod modSummary))
                            bs)))))
       mgraph
@@ -841,7 +842,7 @@ toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataCo
 toId :: GHC.Module -> GHC.Id -> Main.Id
 toId m thing = Main.Id bs unique
   where
-    bs =
+    bss =
       qualifiedNameByteString
         (if GHC.isInternalName name
            then qualify m name
@@ -867,7 +868,7 @@ qualifiedNameByteString n =
                 else if GHC.isSystemName n
                        then "system"
                        else "unknown"
-    Just mo -> package <> ":" <> module' <> ":" <> ident
+    Just mo -> package <> ":" <> module' <> "." <> ident
       where package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId mo))
             module' = GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName mo))
   where

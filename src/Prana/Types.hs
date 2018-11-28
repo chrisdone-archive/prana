@@ -9,6 +9,8 @@ import Data.ByteString (ByteString)
 import Data.Data
 import GHC.Generics
 
+
+
 data Bind
   = NonRec Id
            Exp

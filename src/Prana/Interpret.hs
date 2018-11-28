@@ -30,6 +30,7 @@ import           Prana.Types
 data Env = Env
   { envGlobals :: !(IORef (Map Id Exp))
   , envLets :: !(Map Id Exp)
+  , envMethods :: !(IORef (Map Id Int))
   }
 
 -- | Evaluation computation.
@@ -46,8 +47,10 @@ data InterpreterError
 instance Exception InterpreterError
 
 -- | A type error in the interpreter.
-data TypeError =
-  NotAFunction WHNF
+data TypeError
+  = NotAFunction WHNF
+  | NotAnInstanceDictionary Id WHNF
+  | MissingDictionaryMethod Id Int WHNF
   deriving (Show, Typeable)
 
 -- | An expression evaluated to weak head normal form.
@@ -61,6 +64,7 @@ data WHNF
   | CoercionWHNF
   | TypWHNF !Typ
   | LetWHNF !Bind !WHNF
+  | MethodWHNF !Id !Int
   deriving (Show)
 
 -- | A primitive value.
@@ -85,10 +89,11 @@ data Op = Op
   } deriving (Show)
 
 -- | Run the interpreter on the given expression.
-runInterpreter :: Map Id Exp -> Exp -> IO WHNF
-runInterpreter globals e = do
+runInterpreter :: Map Id Exp -> Map Id Int -> Exp -> IO WHNF
+runInterpreter globals methodIndices e = do
   ref <- newIORef globals
-  runReaderT (runEval (whnfExp e)) (Env ref mempty)
+  ref2 <- newIORef methodIndices
+  runReaderT (runEval (whnfExp e)) (Env ref mempty ref2)
 
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
@@ -126,7 +131,21 @@ whnfApp f arg = do
     LamWHNF v body -> whnfExp (betaSubstitute v arg body)
     OpWHNF op args -> whnfOp op args arg
     ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
+    MethodWHNF i index -> whnfMethod i index arg
     _ -> throw (TypeError (NotAFunction result))
+
+-- | Given an index, force the (what should be) dictionary data
+-- constructor's Nth argument, yielding the instance method's code.
+whnfMethod :: Id -> Int -> Exp -> Eval WHNF
+whnfMethod methodid index dict = do
+  result <- whnfExp dict
+  case result of
+    ConWHNF _id args ->
+      case lookup index (zip [0 ..] args) of
+        Just whnf -> whnfExp whnf
+        Nothing ->
+          throw (TypeError (MissingDictionaryMethod methodid index result))
+    _ -> throw (TypeError (NotAnInstanceDictionary methodid result))
 
 -- | Force the arguments to WHNF until fully saturated (has all args),
 -- then run it.
@@ -186,18 +205,24 @@ whnfLit =
 -- | Resolve a locally let identifier, a global identifier, to its expression.
 whnfId :: Id -> Eval WHNF
 whnfId i@(Id bs _) = do
-  lets <- asks envLets
-  case M.lookup i lets of
-    Just e -> whnfExp e
+  methodRef <- asks envMethods
+  methods <- liftIO (readIORef methodRef)
+  case M.lookup i methods of
+    Just index -> pure (MethodWHNF i index)
     Nothing -> do
-      globalRef <- asks envGlobals
-      globals <- liftIO (readIORef globalRef)
-      case M.lookup i (globals) of
+      lets <- asks envLets
+      case M.lookup i lets of
         Just e -> whnfExp e
-        Nothing ->
-          case M.lookup bs primops of
-            Just op -> pure (OpWHNF op [])
-            Nothing -> throw (NotInScope i)
+        Nothing -> do
+          globalRef <- asks envGlobals
+          globals <- liftIO (readIORef globalRef)
+          case M.lookup i (globals) of
+            Just e -> whnfExp e
+            Nothing ->
+              case M.lookup bs primops of
+                Just op -> pure (OpWHNF op [])
+                Nothing -> throw (NotInScope i)
+
 
 -- | Replace all instances of @x@ with @replacement@, avoiding name capture.
 betaSubstitute :: Id -> Exp -> Exp -> Exp
