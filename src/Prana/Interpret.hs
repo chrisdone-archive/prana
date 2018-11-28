@@ -109,7 +109,7 @@ whnfExp =
     -- Evaluate the body of a let, put the binding in scope:
     LetE bind e -> whnfLet bind e
     -- Produce a primitive/runtime value from the literal:
-    LitE l -> litWHNF l
+    LitE l -> whnfLit l
     AppE f arg -> whnfApp f arg
     -- Case analysis.
     CaseE e v ty alts -> whnfCase e v ty alts
@@ -159,8 +159,8 @@ whnfLet bind e =
         pure (LetWHNF bind whnf))
 
 -- | Create a WHNF value from a literal.
-litWHNF :: Lit -> Eval WHNF
-litWHNF =
+whnfLit :: Lit -> Eval WHNF
+whnfLit =
   \case
     Char ch -> pure (PrimWHNF (CharPrim ch))
     Str bs ->
@@ -182,6 +182,22 @@ litWHNF =
     Double i -> pure (PrimWHNF (DoublePrim (fromRational i)))
     Label -> pure LabelWHNF
     Integer i -> pure (IntegerWHNF i)
+
+-- | Resolve a locally let identifier, a global identifier, to its expression.
+whnfId :: Id -> Eval WHNF
+whnfId i@(Id bs _) = do
+  lets <- asks envLets
+  case M.lookup i lets of
+    Just e -> whnfExp e
+    Nothing -> do
+      globalRef <- asks envGlobals
+      globals <- liftIO (readIORef globalRef)
+      case M.lookup i (globals) of
+        Just e -> whnfExp e
+        Nothing ->
+          case M.lookup bs primops of
+            Just op -> pure (OpWHNF op [])
+            Nothing -> throw (NotInScope i)
 
 -- | Replace all instances of @x@ with @replacement@, avoiding name capture.
 betaSubstitute :: Id -> Exp -> Exp -> Exp
@@ -228,22 +244,6 @@ betaSubstitute x replacement = go
 insertBind :: Bind -> Map Id Exp -> Map Id Exp
 insertBind (NonRec k v) = M.insert k v
 insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
-
--- | Resolve a locally let identifier, a global identifier, to its expression.
-whnfId :: Id -> Eval WHNF
-whnfId i@(Id bs _) = do
-  lets <- asks envLets
-  case M.lookup i lets of
-    Just e -> whnfExp e
-    Nothing -> do
-      globalRef <- asks envGlobals
-      globals <- liftIO (readIORef globalRef)
-      case M.lookup i (globals) of
-        Just e -> whnfExp e
-        Nothing ->
-          case M.lookup bs primops of
-            Just op -> pure (OpWHNF op [])
-            Nothing -> throw (NotInScope i)
 
 -- | See whether an alt matches against a WHNF.
 patternMatch :: WHNF -> [Alt] -> Eval Exp
