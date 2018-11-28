@@ -784,8 +784,7 @@ doMake srcs  = do
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
                 (L.toLazyByteString
-                   (encodeArray (encodeClass )
-                    encodeArray
+                   (encodeArray
                       (map (encodeBind . toBind (GHC.ms_mod modSummary))
                            bs)))))
       mgraph
