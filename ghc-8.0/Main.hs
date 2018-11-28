@@ -784,6 +784,17 @@ doMake srcs  = do
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
                 (L.toLazyByteString
+                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/Class.html#t:ClassOpItem
+                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/src/Class.html#ClassOpItem
+                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/Class.html#v:classMethods
+                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/InstEnv.html#t:ClsInst
+                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/HscTypes.html#v:mg_insts
+                --
+                -- From here, upwards, we can get a list of methods or
+                -- "class op"s or "selectors" (not sure which is
+                -- right), and then spit out an array of the method
+                -- name and its unique, along with its index in the
+                -- class. Hopefully that's enough.
                    (encodeArray
                       (map (encodeBind . toBind (GHC.ms_mod modSummary))
                            bs)))))
