@@ -241,16 +241,9 @@ whnfId i@(Id bs _) = do
       case M.lookup i (globals) of
         Just e -> whnfExp e
         Nothing ->
-          case M.lookup i globals of
-            Just e -> whnfExp e
-            Nothing ->
-              case M.lookup bs primops of
-                Just op -> pure (OpWHNF op [])
-                Nothing -> throw (NotInScope i)
-
--- | Does the name refer to a primop?
-isPrimOp :: ByteString -> Bool
-isPrimOp s = S.isPrefixOf "$ghc-prim$GHC.Prim$" s && S.isSuffixOf "#" s
+          case M.lookup bs primops of
+            Just op -> pure (OpWHNF op [])
+            Nothing -> throw (NotInScope i)
 
 -- | See whether an alt matches against a WHNF.
 patternMatch :: WHNF -> [Alt] -> Eval Exp
