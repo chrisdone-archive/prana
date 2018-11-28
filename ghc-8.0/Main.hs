@@ -43,6 +43,7 @@ import GHC.Generics
 import Data.Word
 import Data.Semigroup
 import qualified DataCon as GHC
+import qualified FastString as GHC
 import Data.Data
 import qualified Unique as GHC
 import GHC.Real
@@ -782,29 +783,32 @@ doMake srcs  = do
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (encodeArray (map (encodeBind . toBind) bs)))))
+                (L.toLazyByteString
+                   (encodeArray
+                      (map (encodeBind . toBind (GHC.ms_mod modSummary))
+                           bs)))))
       mgraph
 
-toBind :: CoreSyn.Bind GHC.Var -> Main.Bind
-toBind = \case
-  CoreSyn.NonRec v e -> Main.NonRec (toId v) (toExp e)
-  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toId v,toExp e)) bs)
+toBind :: GHC.Module -> CoreSyn.Bind GHC.Var -> Main.Bind
+toBind m = \case
+  CoreSyn.NonRec v e -> Main.NonRec (toId m v) (toExp m e)
+  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toId m v,toExp m e)) bs)
 
-toExp :: CoreSyn.Expr GHC.Var -> Main.Exp
-toExp = \case
- CoreSyn.Var i -> Main.VarE (toId i)
+toExp :: GHC.Module -> CoreSyn.Expr GHC.Var -> Main.Exp
+toExp m = \case
+ CoreSyn.Var i -> Main.VarE (toId m i)
  CoreSyn.Lit i                  -> Main.LitE (toLit i)
- CoreSyn.App f x                -> Main.AppE (toExp f) (toExp x)
- CoreSyn.Lam var body           -> Main.LamE (toId var) (toExp body)
- CoreSyn.Let bind expr          -> Main.LetE (toBind bind) (toExp expr)
- CoreSyn.Case expr var typ alts -> Main.CaseE (toExp expr) (toId var) (toTyp typ) (map toAlt alts)
- CoreSyn.Cast expr _coercion    -> Main.CastE (toExp expr)
- CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp expr)
+ CoreSyn.App f x                -> Main.AppE (toExp m f) (toExp m x)
+ CoreSyn.Lam var body           -> Main.LamE (toId m var) (toExp m body)
+ CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
+ CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toId m var) (toTyp typ) (map (toAlt m) alts)
+ CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
+ CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp m expr)
  CoreSyn.Type typ               -> Main.TypE (toTyp typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
-toAlt :: (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
-toAlt (con,vars,e) = Alt (toAltCon con) (map toId vars) (toExp e)
+toAlt :: GHC.Module -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
+toAlt m (con,vars,e) = Alt (toAltCon con) (map (toId m) vars) (toExp m e)
 
 toAltCon :: CoreSyn.AltCon -> Main.AltCon
 toAltCon =
@@ -834,12 +838,40 @@ toTyp v = Main.Typ (S8.pack (GHC.showSDocUnsafe (GHC.ppr v)))
 toDataCon :: GHC.DataCon -> Main.DataCon
 toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataConName
 
-toId :: GHC.Id -> Main.Id
-toId thing = Main.Id bs unique
+toId :: GHC.Module -> GHC.Id -> Main.Id
+toId m thing = Main.Id bs unique
   where
-    bs = S8.pack (GHC.nameStableString name)
+    bs =
+      qualifiedNameByteString
+        (if GHC.isInternalName name
+           then qualify m name
+           else name)
     unique = Main.Unique (GHC.getKey (GHC.getUnique name))
     name = GHC.getName thing
+
+qualify :: GHC.Module -> GHC.Name -> GHC.Name
+qualify m name =
+  GHC.mkExternalName
+    (GHC.getUnique name)
+    m
+    (GHC.nameOccName name)
+    (GHC.nameSrcSpan name)
+
+qualifiedNameByteString :: GHC.Name -> ByteString
+qualifiedNameByteString n =
+  case GHC.nameModule_maybe n of
+    Nothing -> sort' <> ":" <> ident
+      where sort' =
+              if GHC.isInternalName n
+                then "internal"
+                else if GHC.isSystemName n
+                       then "system"
+                       else "unknown"
+    Just mo -> package <> ":" <> module' <> ":" <> ident
+      where package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId mo))
+            module' = GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName mo))
+  where
+    ident = GHC.fs_bs (GHC.getOccFS n)
 
 compile ::
      GHC.GhcMonad m

@@ -241,7 +241,7 @@ whnfId i@(Id bs _) = do
       case M.lookup i (globals) of
         Just e -> whnfExp e
         Nothing ->
-          case M.lookup bs (M.mapKeys idStableName globals) of
+          case M.lookup i globals of
             Just e -> whnfExp e
             Nothing ->
               case M.lookup bs primops of

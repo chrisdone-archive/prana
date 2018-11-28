@@ -37,13 +37,15 @@ main = do
                 NonRec v e -> [(v, e)]
                 Rec bs -> bs)
              binds)
-  case M.lookup "$main$Main$main" (M.mapKeys idStableName globals) of
-    Nothing -> error "Couldn't find main function."
-    Just e ->
-      catch
-        (runInterpreter globals e >>= print)
-        (\case
-           NotInScope (Id id' _) ->
-             error ("Not in scope: " ++ show id' ++ " (" ++ show id' ++ ")\n" ++
-                unlines (map (show . idStableName) (M.keys globals)))
-           err -> error (show err))
+  -- error ("Scope\n" ++
+  --      unlines (map show (M.toList globals)))
+  case M.lookup "main:Main:main" (M.mapKeys idStableName globals) of
+      Nothing -> error "Couldn't find main function."
+      Just e ->
+        catch
+          (runInterpreter globals e >>= print)
+          (\case
+             NotInScope (Id id' _) ->
+               error ("Not in scope: " ++ show id' ++ " (" ++ show id' ++ ")\n" ++
+                  unlines (map (show . idStableName) (M.keys globals)))
+             err -> error (show err))
