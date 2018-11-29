@@ -47,6 +47,7 @@ import qualified FastString as GHC
 import Data.Data
 import qualified Unique as GHC
 import GHC.Real
+import qualified InstEnv as GHC
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
@@ -779,25 +780,34 @@ doMake srcs  = do
     mapM_
       (\modSummary -> do
          liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
-         bs <- compile modSummary
+         guts <- compile modSummary
+         let bs = GHC.mg_binds guts
+             instances :: [GHC.ClsInst]
+             instances = GHC.mg_insts guts
+             methods :: [(GHC.Id, Int)]
+             methods =
+               concatMap
+                 (\clsInst ->
+                    let tyVars = GHC.is_tvs clsInst
+                        cls = GHC.is_cls clsInst
+                        methods = GHC.classMethods cls
+                     in zip methods [0 ..])
+                 instances
+
+         let module' = GHC.ms_mod modSummary
+             bindings =
+               encodeArray
+                 (map (encodeBind . toBind module')
+                      bs)
+             methodIndices =
+               encodeArray
+                 (map (\(id,i) -> encodeId (toId module' id) <> encodeInt i)
+                      methods)
+
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString
-                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/Class.html#t:ClassOpItem
-                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/src/Class.html#ClassOpItem
-                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/Class.html#v:classMethods
-                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/InstEnv.html#t:ClsInst
-                -- http://hackage.haskell.org/package/ghc-8.6.1/docs/HscTypes.html#v:mg_insts
-                --
-                -- From here, upwards, we can get a list of methods or
-                -- "class op"s or "selectors" (not sure which is
-                -- right), and then spit out an array of the method
-                -- name and its unique, along with its index in the
-                -- class. Hopefully that's enough.
-                   (encodeArray
-                      (map (encodeBind . toBind (GHC.ms_mod modSummary))
-                           bs)))))
+                (L.toLazyByteString (methodIndices <> bindings))))
       mgraph
 
 toBind :: GHC.Module -> CoreSyn.Bind GHC.Var -> Main.Bind
@@ -852,7 +862,7 @@ toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataCo
 toId :: GHC.Module -> GHC.Id -> Main.Id
 toId m thing = Main.Id bs unique
   where
-    bss =
+    bs =
       qualifiedNameByteString
         (if GHC.isInternalName name
            then qualify m name
@@ -887,13 +897,13 @@ qualifiedNameByteString n =
 compile ::
      GHC.GhcMonad m
   => GHC.ModSummary
-  -> m [CoreSyn.Bind GHC.Var]
+  -> m GHC.ModGuts
 compile modSummary = do
   parsedModule <- GHC.parseModule modSummary
   typecheckedModule <- GHC.typecheckModule parsedModule
   desugared <- GHC.desugarModule typecheckedModule
-  let binds = GHC.mg_binds (GHC.dm_core_module desugared)
-  pure binds
+  pure (GHC.dm_core_module desugared)
+
 
 moduleToFilePath :: GHC.Module -> FilePath
 moduleToFilePath module' = packageNameVersion ++ "_" ++ moduleNameString ++ ".prana"
@@ -1171,6 +1181,9 @@ encodeLit =
 
 encodeInteger :: Integer -> L.Builder
 encodeInteger = encodeLazyByteString . L.toLazyByteString . L.integerDec
+
+encodeInt :: Int -> L.Builder
+encodeInt = L.int64LE . fromIntegral
 
 encodeAltCon :: AltCon -> L.Builder
 encodeAltCon =

@@ -15,20 +15,23 @@ import           System.Environment
 main :: IO ()
 main = do
   args <- getArgs
-  binds <-
+  (indices,binds) <-
     fmap
-      concat
+      (\xs -> (concatMap fst xs, concatMap snd xs))
       (mapM
          (\fp -> do
             bytes <- L.readFile fp
-            case runGetOrFail (decodeArray decodeBind) bytes of
+            case runGetOrFail
+                   ((,) <$> decodeArray decodeMethodIndex <*>
+                    decodeArray decodeBind)
+                   bytes of
               Left e ->
                 error
                   ("failed to decode " ++
                    fp ++
                    ": " ++ show e ++ ", file contains: " ++ take 10 (show bytes))
-              Right (_, _, binds) -> do
-                pure binds)
+              Right (_, _, (indices,binds)) -> do
+                pure (indices,binds))
          args)
   let globals =
         M.fromList
@@ -37,12 +40,12 @@ main = do
                 NonRec v e -> [(v, e)]
                 Rec bs -> bs)
              binds)
-      methods = mempty
-  error
-    ("Methods\n" ++
-     unlines (map show (M.toList methods)) ++
-     "\n" ++ "Scope\n" ++ unlines (map show (M.toList globals)))
-  case M.lookup "main:Main:main" (M.mapKeys idStableName globals) of
+      methods = M.fromList indices
+  -- error
+  --   ("Methods\n" ++
+  --    unlines (map show (M.toList methods)) ++
+  --    "\n" ++ "Scope\n" ++ unlines (map show (M.toList globals)))
+  case M.lookup "main:Main.main" (M.mapKeys idStableName globals) of
     Nothing -> error "Couldn't find main function."
     Just e ->
       catch

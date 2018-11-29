@@ -12,6 +12,9 @@ import qualified Data.Map.Strict as M
 import           GHC.Real
 import           Prana.Types
 
+decodeMethodIndex :: Get (Id, Int)
+decodeMethodIndex = label "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
+
 decodeBind :: Get Bind
 decodeBind =
   label "decodeBind" $ do
@@ -70,6 +73,9 @@ decodeAltCon =
 
 decodeInteger :: Get Integer
 decodeInteger = label "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
+
+decodeInt :: Get Int
+decodeInt = label "decodeInteger" $ fmap fromIntegral getInt64le
 
 decodeAlt :: Get Alt
 decodeAlt =

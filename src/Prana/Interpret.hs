@@ -333,4 +333,4 @@ primops =
   M.fromList
     (map
        (opName &&& id)
-       [Op {opArity = 1, opName = "$ghc-prim$GHC.Prim$tagToEnum#"}])
+       [Op {opArity = 1, opName = "ghc-prim:GHC.Prim.tagToEnum#"}])
