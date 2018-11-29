@@ -896,7 +896,9 @@ qualifiedNameByteString n =
           then ClassCat
           else if S8.all isUpper (S.take 1 ident)
                  then DataCat
-                 else ValCat)
+                 else if S8.all (\c -> c=='(' || c==')' || c==',') ident
+                         then DataCat
+                         else ValCat)
       where package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId mo))
             module' = GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName mo))
   where
