@@ -43,7 +43,14 @@ data Exp
 data Id = Id
   { idStableName :: {-# UNPACK #-}!ByteString
   , idUnique :: {-# UNPACK #-}!Unique
+  , idCategory :: !Cat
   } deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data Cat
+  = ValCat
+  | DataCat
+  | ClassCat
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Typ = Typ ByteString
   deriving (Generic, Data, Typeable, Eq, Show, Ord)

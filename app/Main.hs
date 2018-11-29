@@ -51,11 +51,7 @@ main = do
       catch
         (runInterpreter globals methods e >>= print)
         (\case
-           NotInScope (Id id' u) ->
+           NotInScope i ->
              error
-               ("Not in scope: " ++
-                show id' ++
-                " (" ++
-                show u ++
-                ")\n" ++ unlines (map (show . idStableName) (M.keys globals)))
+               ("Not in scope: " ++ show i)
            err -> error (show err))

@@ -15,3 +15,7 @@ Generate ghc-prim, integer-simple and base:
 Run GHC compiler example:
 
     docker run -v`pwd`:`pwd` -w`pwd` --rm ghc-compile ghc Demo.hs && sudo chown chris:chris main_Demo.prana
+
+# Research
+
+Name prefixes: https://github.com/ghc/ghc/blob/master/compiler/basicTypes/OccName.hs#L621

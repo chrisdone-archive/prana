@@ -803,6 +803,8 @@ doMake srcs  = do
                encodeArray
                  (map (\(id,i) -> encodeId (toId module' id) <> encodeInt i)
                       methods)
+             -- dataCons =
+             --   encodeArray (map {-isDataConName-})
 
          liftIO
            (L.writeFile
@@ -860,9 +862,9 @@ toDataCon :: GHC.DataCon -> Main.DataCon
 toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataConName
 
 toId :: GHC.Module -> GHC.Id -> Main.Id
-toId m thing = Main.Id bs unique
+toId m thing = Main.Id bs unique cat
   where
-    bs =
+    (bs,cat) =
       qualifiedNameByteString
         (if GHC.isInternalName name
            then qualify m name
@@ -878,17 +880,23 @@ qualify m name =
     (GHC.nameOccName name)
     (GHC.nameSrcSpan name)
 
-qualifiedNameByteString :: GHC.Name -> ByteString
+qualifiedNameByteString :: GHC.Name -> (ByteString,Cat)
 qualifiedNameByteString n =
   case GHC.nameModule_maybe n of
-    Nothing -> sort' <> ":" <> ident
+    Nothing -> (sort' <> ":" <> ident, ValCat)
       where sort' =
               if GHC.isInternalName n
                 then "internal"
                 else if GHC.isSystemName n
                        then "system"
                        else "unknown"
-    Just mo -> package <> ":" <> module' <> "." <> ident
+    Just mo ->
+      ( package <> ":" <> module' <> "." <> ident
+      , if S.isPrefixOf "C:" ident
+          then ClassCat
+          else if S8.all isUpper (S.take 1 ident)
+                 then DataCat
+                 else ValCat)
       where package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId mo))
             module' = GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName mo))
   where
@@ -1203,7 +1211,15 @@ encodeType :: Typ -> L.Builder
 encodeType (Typ e) = encodeByteString e
 
 encodeId :: Id -> L.Builder
-encodeId (Id bs u) = encodeByteString bs <> encodeUnique u
+encodeId (Id bs u isDataCon) = encodeByteString bs <> encodeUnique u <> encodeCat isDataCon
+
+encodeCat :: Cat -> L.Builder
+encodeCat =
+  L.word8 .
+  (\case
+     ValCat -> 0
+     DataCat -> 1
+     ClassCat -> 2)
 
 encodeDataCon :: DataCon -> L.Builder
 encodeDataCon (DataCon e) = encodeUnique e

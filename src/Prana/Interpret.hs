@@ -95,9 +95,19 @@ runInterpreter globals methodIndices e = do
   ref2 <- newIORef methodIndices
   runReaderT (runEval (whnfExp e)) (Env ref mempty ref2)
 
+tracing :: Show a => String -> (a -> Eval b) -> a -> Eval b
+tracing prefix f x = do
+  liftIO (putStrLn (prefix ++ ": " ++ show x))
+  f x
+
+tracing2 :: (Show a, Show b) => String -> (a -> b -> Eval c) -> a -> b -> Eval c
+tracing2 prefix f x y = do
+  liftIO (putStrLn (prefix ++ ": " ++ show x ++ " " ++ show y))
+  f x y
+
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
-whnfExp =
+whnfExp = tracing "whnfExp" $
   \case
     -- No-op, lambdas are self-evaluating:
     LamE i e -> pure (LamWHNF i e)
@@ -125,19 +135,24 @@ whnfExp =
 -- * If @f@ is a data constructor, just return it with the new argument in the arg list.
 -- * If @f@ is an operator, reduce the arguments until saturated, then run it.
 whnfApp :: Exp -> Exp -> Eval WHNF
-whnfApp f arg = do
-  result <- whnfExp f
-  case result of
-    LamWHNF v body -> whnfExp (betaSubstitute v arg body)
-    OpWHNF op args -> whnfOp op args arg
-    ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
-    MethodWHNF i index -> whnfMethod i index arg
-    _ -> throw (TypeError (NotAFunction result))
+whnfApp =
+  tracing2 "whnfApp" $ \f arg -> do
+    case arg of
+      TypE {} -> whnfExp f -- TODO: Consider stripping out types from the Exp AST. Do they have a use?
+      _ -> do
+        result <- whnfExp f
+        case result of
+          LamWHNF v body -> whnfExp (betaSubstitute v arg body)
+          OpWHNF op args -> whnfOp op args arg
+          ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
+          MethodWHNF i index -> whnfMethod i index arg
+          _ -> throw (TypeError (NotAFunction result))
 
 -- | Given an index, force the (what should be) dictionary data
 -- constructor's Nth argument, yielding the instance method's code.
 whnfMethod :: Id -> Int -> Exp -> Eval WHNF
 whnfMethod methodid index dict = do
+  liftIO (putStrLn ("whnfMethod: " ++ show methodid))
   result <- whnfExp dict
   case result of
     ConWHNF _id args ->
@@ -162,6 +177,7 @@ whnfOp op args0 arg = do
 -- | Evaluate a case to WHNF.
 whnfCase :: Exp -> Id -> Typ -> [Alt] -> Eval WHNF
 whnfCase e v _ty alts = do
+  liftIO (putStrLn ("whnfCase: " ++ show e))
   whnf <- whnfExp e
   choice <- patternMatch whnf alts
   whnfExp (betaSubstitute v e choice)
@@ -204,25 +220,29 @@ whnfLit =
 
 -- | Resolve a locally let identifier, a global identifier, to its expression.
 whnfId :: Id -> Eval WHNF
-whnfId i@(Id bs _) = do
-  methodRef <- asks envMethods
-  methods <- liftIO (readIORef methodRef)
-  case M.lookup i methods of
-    Just index -> pure (MethodWHNF i index)
-    Nothing -> do
-      lets <- asks envLets
-      case M.lookup i lets of
-        Just e -> whnfExp e
+whnfId i@(Id bs _ cat) = do
+  liftIO (putStrLn ("whnfId: " ++ show i))
+  case cat of
+    ClassCat -> pure (ConWHNF i [])
+    DataCat -> pure (ConWHNF i [])
+    ValCat -> do
+      methodRef <- asks envMethods
+      methods <- liftIO (readIORef methodRef)
+      case M.lookup i methods of
+        Just index -> pure (MethodWHNF i index)
         Nothing -> do
-          globalRef <- asks envGlobals
-          globals <- liftIO (readIORef globalRef)
-          case M.lookup i (globals) of
+          lets <- asks envLets
+          case M.lookup i lets of
             Just e -> whnfExp e
-            Nothing ->
-              case M.lookup bs primops of
-                Just op -> pure (OpWHNF op [])
-                Nothing -> throw (NotInScope i)
-
+            Nothing -> do
+              globalRef <- asks envGlobals
+              globals <- liftIO (readIORef globalRef)
+              case M.lookup i globals of
+                Just e -> whnfExp e
+                Nothing ->
+                  case M.lookup bs primops of
+                    Just op -> pure (OpWHNF op [])
+                    Nothing -> throw (NotInScope i)
 
 -- | Replace all instances of @x@ with @replacement@, avoiding name capture.
 betaSubstitute :: Id -> Exp -> Exp -> Exp
@@ -274,7 +294,7 @@ insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
 patternMatch :: WHNF -> [Alt] -> Eval Exp
 patternMatch whnf alts =
   case whnf of
-    ConWHNF (Id _ i) args ->
+    ConWHNF (Id _ i _) args ->
       case find
              ((\case
                  DataAlt (DataCon j) -> i == j

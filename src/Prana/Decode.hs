@@ -7,8 +7,6 @@ module Prana.Decode where
 import           Data.Binary.Get
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
-import           Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 import           GHC.Real
 import           Prana.Types
 
@@ -77,6 +75,16 @@ decodeInteger = label "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
 decodeInt :: Get Int
 decodeInt = label "decodeInteger" $ fmap fromIntegral getInt64le
 
+decodeCat :: Get Cat
+decodeCat =
+  label "decodeCat" $
+  fmap
+    (\case
+       1 -> DataCat
+       2 -> ClassCat
+       _ -> ValCat)
+    getWord8
+
 decodeAlt :: Get Alt
 decodeAlt =
   label "decodeAlt" $
@@ -86,7 +94,7 @@ decodeType :: Get Typ
 decodeType = label "decodeType" $ Typ <$> decodeByteString
 
 decodeId :: Get Id
-decodeId = label "decodeId" $ Id <$> decodeByteString <*> decodeUnique
+decodeId = label "decodeId" $ Id <$> decodeByteString <*> decodeUnique <*> decodeCat
 
 decodeUnique :: Get Unique
 decodeUnique = label "decodeUnique" $ fmap (Unique . fromIntegral) getInt64le
