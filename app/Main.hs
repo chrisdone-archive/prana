@@ -52,8 +52,12 @@ main = do
   -- From: https://mail.haskell.org/pipermail/ghc-devs/2018-November/016592.html
   -- > I've also learned that GHC wraps the* Main.main* function with another
   -- > function called *:Main.main* which is the first function called by the RTS.
-  case M.lookup "main:Main.main" (M.mapKeys idStableName globals) of
-    Nothing -> error "Couldn't find main function."
+  case M.lookup "main:Demo.demo" {-"main:Main.main"-} (M.mapKeys idStableName globals) of
+    Nothing -> error $
+               ("Can't find main!\n") ++
+               ("Methods\n" ++
+                unlines (map show (M.keys methods)) ++
+                "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
     Just e ->
       catch
         (runInterpreter globals methods (e) >>= print) {-AppE e (LitE (Str "RealWorld"))-}

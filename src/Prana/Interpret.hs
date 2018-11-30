@@ -19,6 +19,7 @@ import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Builder as L
+import qualified Data.ByteString.Lazy.Char8 as L8
 import           Data.Generics
 import           Data.IORef
 import           Data.List
@@ -34,6 +35,7 @@ data Env = Env
   { envGlobals :: !(IORef (Map Id Exp))
   , envLets :: !(Map Id Exp)
   , envMethods :: !(IORef (Map Id Int))
+  , envDepth :: !Int
   }
 
 -- | Evaluation computation.
@@ -96,17 +98,23 @@ runInterpreter :: Map Id Exp -> Map Id Int -> Exp -> IO WHNF
 runInterpreter globals methodIndices e = do
   ref <- newIORef globals
   ref2 <- newIORef methodIndices
-  runReaderT (runEval (whnfExp e)) (Env ref mempty ref2)
+  runReaderT (runEval (whnfExp e)) (Env ref mempty ref2 0)
 
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
-whnfExp e0 =
-  do liftIO (S8.putStrLn (L.toStrict ("Eval: " <> L.toLazyByteString (pretty e0))))
-     go e0
+whnfExp e0 = do
+  depth <- asks envDepth
+  let indent = replicate (fromIntegral depth) ' '
+      out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
+  out ("Eval: " ++ show e0)
+  r <- local (\e -> e {envDepth = envDepth e + 2}) (go e0)
+  out ("Done: " ++ show r)
+  pure r
   where
-    go =
-      \case
+    go
         -- No-op, lambdas are self-evaluating:
+     =
+      \case
         LamE i e -> pure (LamWHNF i e)
         -- No-op, types are self-evaluating:
         TypE ty -> pure (TypWHNF ty)
@@ -132,17 +140,14 @@ whnfExp e0 =
 -- * If @f@ is a data constructor, just return it with the new argument in the arg list.
 -- * If @f@ is an operator, reduce the arguments until saturated, then run it.
 whnfApp :: Exp -> Exp -> Eval WHNF
-whnfApp f arg =
-    case arg of
-      TypE {} -> whnfExp f -- TODO: Consider stripping out types from the Exp AST. Do they have a use?
-      _ -> do
-        result <- whnfExp f
-        case result of
-          LamWHNF v body -> whnfExp (betaSubstitute v arg body)
-          OpWHNF op args -> whnfOp op args arg
-          ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
-          MethodWHNF i index -> whnfMethod i index arg
-          _ -> throw (TypeError (NotAFunction result))
+whnfApp f arg = do
+  result <- whnfExp f
+  case result of
+    LamWHNF v body -> whnfExp (betaSubstitute v arg body)
+    OpWHNF op args -> whnfOp op args arg
+    ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
+    MethodWHNF i index -> whnfMethod i index arg
+    _ -> throw (TypeError (NotAFunction result))
 
 -- | Given an index, force the (what should be) dictionary data
 -- constructor's Nth argument, yielding the instance method's code.
