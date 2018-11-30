@@ -225,6 +225,7 @@ whnfId i@(Id bs _ cat) = do
   case cat of
     ClassCat -> pure (ConWHNF i [])
     DataCat -> pure (ConWHNF i [])
+    ValCat | bs == "ghc-prim:GHC.Tuple.()" -> pure (ConWHNF i []) -- FIXME: Tuple, move this to GHC patch
     ValCat -> do
       methodRef <- asks envMethods
       methods <- liftIO (readIORef methodRef)
@@ -237,7 +238,7 @@ whnfId i@(Id bs _ cat) = do
             Nothing -> do
               globalRef <- asks envGlobals
               globals <- liftIO (readIORef globalRef)
-              case M.lookup i globals of
+              case M.lookup (idStableName i) (M.mapKeys idStableName globals) of
                 Just e -> whnfExp e
                 Nothing ->
                   case M.lookup bs primops of
