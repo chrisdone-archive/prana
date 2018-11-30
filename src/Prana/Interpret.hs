@@ -15,7 +15,10 @@ import           Control.Monad.IO.Class
 import           Control.Monad.Reader
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Internal as S
+import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Builder as L
 import           Data.Generics
 import           Data.IORef
 import           Data.List
@@ -95,39 +98,33 @@ runInterpreter globals methodIndices e = do
   ref2 <- newIORef methodIndices
   runReaderT (runEval (whnfExp e)) (Env ref mempty ref2)
 
-tracing :: Show a => String -> (a -> Eval b) -> a -> Eval b
-tracing prefix f x = do
-  liftIO (putStrLn (prefix ++ ": " ++ show x))
-  f x
-
-tracing2 :: (Show a, Show b) => String -> (a -> b -> Eval c) -> a -> b -> Eval c
-tracing2 prefix f x y = do
-  liftIO (putStrLn (prefix ++ ": " ++ show x ++ " " ++ show y))
-  f x y
-
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
-whnfExp = tracing "whnfExp" $
-  \case
-    -- No-op, lambdas are self-evaluating:
-    LamE i e -> pure (LamWHNF i e)
-    -- No-op, types are self-evaluating:
-    TypE ty -> pure (TypWHNF ty)
-    -- No-op, coerciones are self-evaluating:
-    CoercionE -> pure CoercionWHNF
-    -- Skip over ticks:
-    TickE e -> whnfExp e
-    -- Skip over casts:
-    CastE e -> whnfExp e
-    -- Lookup globals, primitives and lets:
-    VarE l -> whnfId l
-    -- Evaluate the body of a let, put the binding in scope:
-    LetE bind e -> whnfLet bind e
-    -- Produce a primitive/runtime value from the literal:
-    LitE l -> whnfLit l
-    AppE f arg -> whnfApp f arg
-    -- Case analysis.
-    CaseE e v ty alts -> whnfCase e v ty alts
+whnfExp e0 =
+  do liftIO (S8.putStrLn (L.toStrict ("Eval: " <> L.toLazyByteString (pretty e0))))
+     go e0
+  where
+    go =
+      \case
+        -- No-op, lambdas are self-evaluating:
+        LamE i e -> pure (LamWHNF i e)
+        -- No-op, types are self-evaluating:
+        TypE ty -> pure (TypWHNF ty)
+        -- No-op, coerciones are self-evaluating:
+        CoercionE -> pure CoercionWHNF
+        -- Skip over ticks:
+        TickE e -> whnfExp e
+        -- Skip over casts:
+        CastE e -> whnfExp e
+        -- Lookup globals, primitives and lets:
+        VarE l -> whnfId l
+        -- Evaluate the body of a let, put the binding in scope:
+        LetE bind e -> whnfLet bind e
+        -- Produce a primitive/runtime value from the literal:
+        LitE l -> whnfLit l
+        AppE f arg -> whnfApp f arg
+        -- Case analysis.
+        CaseE e v ty alts -> whnfCase e v ty alts
 
 -- | Evaluate an application to WHNF.
 --
@@ -135,8 +132,7 @@ whnfExp = tracing "whnfExp" $
 -- * If @f@ is a data constructor, just return it with the new argument in the arg list.
 -- * If @f@ is an operator, reduce the arguments until saturated, then run it.
 whnfApp :: Exp -> Exp -> Eval WHNF
-whnfApp =
-  tracing2 "whnfApp" $ \f arg -> do
+whnfApp f arg =
     case arg of
       TypE {} -> whnfExp f -- TODO: Consider stripping out types from the Exp AST. Do they have a use?
       _ -> do
@@ -152,7 +148,6 @@ whnfApp =
 -- constructor's Nth argument, yielding the instance method's code.
 whnfMethod :: Id -> Int -> Exp -> Eval WHNF
 whnfMethod methodid index dict = do
-  liftIO (putStrLn ("whnfMethod: " ++ show methodid))
   result <- whnfExp dict
   case result of
     ConWHNF _id args ->
@@ -177,7 +172,6 @@ whnfOp op args0 arg = do
 -- | Evaluate a case to WHNF.
 whnfCase :: Exp -> Id -> Typ -> [Alt] -> Eval WHNF
 whnfCase e v _ty alts = do
-  liftIO (putStrLn ("whnfCase: " ++ show e))
   whnf <- whnfExp e
   choice <- patternMatch whnf alts
   whnfExp (betaSubstitute v e choice)
@@ -220,12 +214,12 @@ whnfLit =
 
 -- | Resolve a locally let identifier, a global identifier, to its expression.
 whnfId :: Id -> Eval WHNF
-whnfId i@(Id bs _ cat) = do
-  liftIO (putStrLn ("whnfId: " ++ show i))
+whnfId i@(Id bs _ cat) =
   case cat of
     ClassCat -> pure (ConWHNF i [])
     DataCat -> pure (ConWHNF i [])
-    ValCat | bs == "ghc-prim:GHC.Tuple.()" -> pure (ConWHNF i []) -- FIXME: Tuple, move this to GHC patch
+    ValCat
+      | bs == "ghc-prim:GHC.Tuple.()" -> pure (ConWHNF i []) -- FIXME: Tuple, move this to GHC patch
     ValCat -> do
       methodRef <- asks envMethods
       methods <- liftIO (readIORef methodRef)

@@ -6,6 +6,7 @@ module Main where
 import           Control.Exception
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
+import           Data.Generics
 import qualified Data.Map.Strict as M
 import           Prana.Decode
 import           Prana.Interpret
@@ -15,7 +16,7 @@ import           System.Environment
 main :: IO ()
 main = do
   args <- getArgs
-  (indices,binds) <-
+  (indices, binds) <-
     fmap
       (\xs -> (concatMap fst xs, concatMap snd xs))
       (mapM
@@ -30,8 +31,15 @@ main = do
                   ("failed to decode " ++
                    fp ++
                    ": " ++ show e ++ ", file contains: " ++ take 10 (show bytes))
-              Right (_, _, (indices,binds)) -> do
-                pure (indices,binds))
+              Right (_, _, (indices, binds)) -> do
+                pure
+                  ( indices
+                  , everywhere
+                      (mkT
+                         (\case
+                            AppE e TypE {} -> e
+                            e -> e))
+                      binds))
          args)
   let globals =
         M.fromList
@@ -48,13 +56,12 @@ main = do
     Nothing -> error "Couldn't find main function."
     Just e ->
       catch
-        (runInterpreter globals methods (AppE e (LitE (Str "RealWorld"))) >>= print)
+        (runInterpreter globals methods (e) >>= print) {-AppE e (LitE (Str "RealWorld"))-}
         (\case
            NotInScope i ->
              error $
-               ("Not in scope: " ++ show i ++ "\n") ++
-
-                   ("Methods\n" ++
-                    unlines (map show (M.keys methods)) ++
-                    "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
+             ("Not in scope: " ++ show i ++ "\n") ++
+             ("Methods\n" ++
+              unlines (map show (M.keys methods)) ++
+              "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
            err -> error (show err))
