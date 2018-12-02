@@ -116,4 +116,17 @@ data Lit
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 instance Pretty Lit where
-  pretty = L.byteString . S8.pack . (++ ")") . ("("++) .show
+  pretty = \case
+              Char c -> render c
+              Str c -> render c
+              NullAddr -> "nullAddr#"
+              Int c -> render c
+              Int64 c -> render c
+              Word c -> render c
+              Word64 c -> render c
+              Float c -> render c
+              Double c -> render c
+              Label -> "Label"
+              Integer c -> render c
+    where render :: Show a => a -> L.Builder
+          render = L.byteString . S8.pack . show

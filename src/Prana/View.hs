@@ -14,32 +14,26 @@ import qualified Data.ByteString.Unsafe as S
 import           Data.Int
 import           Data.Word
 
+-- " A view on a Lit.
+-- data Lit = Str ByteString | ...
 newtype LitV = LitV ByteString
 
 {-# COMPLETE StrP #-}
 
+-- | The @Str ByteString@ case.
 pattern StrP :: ByteString -> LitV
-pattern StrP s <- (readStrP -> Just s) where
-  StrP s = LitV (builderBS (tag 1 <> encodeByteString s))
+pattern StrP s <- (readStrP -> Just s)
 
+-- | Check for the Str constructor, then access.
 readStrP :: LitV -> Maybe ByteString
 readStrP (LitV s) =
   if S.unsafeIndex s 0 == 1
     then Just (readByteString (S.unsafeDrop 1 s))
     else Nothing
-
-builderBS :: L.Builder -> ByteString
-builderBS = L.toStrict . L.toLazyByteString
-
-tag :: Word8 -> L.Builder
-tag = L.word8
-
-encodeByteString :: ByteString -> L.Builder
-encodeByteString x =
-  L.int64LE (fromIntegral (S.length x)) <>
-  L.byteString x
+{-# INLINE readStrP #-}
 
 {-# INLINE readByteString #-}
+-- | Read a ByteString from the encoding.
 readByteString :: ByteString -> ByteString
 readByteString bs = S.unsafeTake (readInt bs) (S.unsafeDrop 8 bs)
 

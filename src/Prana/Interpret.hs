@@ -17,7 +17,6 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Internal as S
-import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Builder as L
 import qualified Data.ByteString.Lazy.Char8 as L8
 import           Data.Generics
@@ -72,6 +71,25 @@ data WHNF
   | MethodWHNF !Id !Int
   deriving (Show)
 
+instance Pretty WHNF where
+  pretty =
+    \case
+      LamWHNF i e -> "(\\" <> pretty i <> " -> " <> pretty e <> ")"
+      LetWHNF _ e -> "(let in " <> pretty e <> ")"
+      TypWHNF {} -> "Type"
+      CoercionWHNF {} -> "Coercion"
+      OpWHNF op ws ->
+        "(" <> pretty op <> "[PrimOp] " <> mconcat (intersperse "" (map pretty ws)) <>
+        ")"
+      MethodWHNF op int ->
+        pretty op  <> "[Method]" <> L.byteString (S8.pack (show int))
+      PrimWHNF x -> pretty x
+      LabelWHNF -> "LabelWHNF"
+      IntegerWHNF i -> "" <> L.byteString (S8.pack (show i)) <> "[Integer]"
+      ConWHNF con ws ->
+        "(" <> pretty con <> "[Con] " <> mconcat (intersperse "" (map pretty ws)) <>
+        ")"
+
 -- | A primitive value.
 data Prim
   = CharPrim !Char
@@ -83,15 +101,22 @@ data Prim
   | ThreadIdPrim !ThreadId
   deriving (Show)
 
+instance Pretty Prim where pretty = L.byteString . S8.pack . show
+
 -- | Some address from GHC.Prim.
 data Addr = Addr !Addr#
 instance Show Addr where
   show (Addr a) = show (I# (addr2Int# a))
 
 data Op = Op
-  { opArity :: !Int
-  , opName :: !ByteString
+  { opArity :: {-# UNPACK #-} !Int
+  , opName :: {-# UNPACK #-} !ByteString
   } deriving (Show)
+
+instance Pretty Op where
+  pretty (Op arity name) =
+    L.byteString name <> "[arity=" <> (L.byteString . S8.pack . show $ arity) <>
+    "]"
 
 -- | Run the interpreter on the given expression.
 runInterpreter :: Map Id Exp -> Map Id Int -> Exp -> IO WHNF
@@ -106,9 +131,9 @@ whnfExp e0 = do
   depth <- asks envDepth
   let indent = replicate (fromIntegral depth) ' '
       out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
-  out ("Eval: " ++ show e0)
+  out ("Eval: " ++ L8.unpack (L.toLazyByteString (pretty e0)))
   r <- local (\e -> e {envDepth = envDepth e + 2}) (go e0)
-  out ("Done: " ++ show r)
+  out ("Done: " ++ L8.unpack (L.toLazyByteString (pretty r)))
   pure r
   where
     go
@@ -160,7 +185,8 @@ whnfMethod methodid index dict = do
         Just whnf -> whnfExp whnf
         Nothing ->
           throw (TypeError (MissingDictionaryMethod methodid index result))
-    _ -> throw (TypeError (NotAnInstanceDictionary methodid result))
+    _ -> pure result
+    -- _ -> throw (TypeError (NotAnInstanceDictionary methodid result))
 
 -- | Force the arguments to WHNF until fully saturated (has all args),
 -- then run it.
