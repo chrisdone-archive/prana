@@ -43,6 +43,8 @@ import GHC.Generics
 import Data.Word
 import Data.Semigroup
 import qualified DataCon as GHC
+import qualified CorePrep as GHC
+import qualified TyCon as GHC
 import qualified FastString as GHC
 import Data.Data
 import qualified Unique as GHC
@@ -781,7 +783,17 @@ doMake srcs  = do
       (\modSummary -> do
          liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
          guts <- compile modSummary
-         let bs = GHC.mg_binds guts
+         let module' = GHC.ms_mod modSummary
+             tycons = GHC.mg_tcs guts
+             dflags = hsc_dflags hsc_env
+             location = GHC.ms_location modSummary
+             data_tycons = filter GHC.isDataTyCon tycons
+             core_binds = GHC.mg_binds guts
+         bs <- pure core_binds
+         -- bs <-
+         --      liftIO (GHC.corePrepPgm hsc_env module' location
+         --                              core_binds data_tycons)
+         let
              instances :: [GHC.ClsInst]
              instances = GHC.mg_insts guts
              methods :: [(GHC.Id, Int)]
@@ -794,7 +806,7 @@ doMake srcs  = do
                      in zip methods [0 ..])
                  instances
 
-         let module' = GHC.ms_mod modSummary
+         let
              bindings =
                encodeArray
                  (map (encodeBind . toBind module')
