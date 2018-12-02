@@ -100,7 +100,7 @@ decodeUnique :: Get Unique
 decodeUnique = label "decodeUnique" $ fmap (Unique . fromIntegral) getInt64le
 
 decodeDataCon :: Get DataCon
-decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeUnique
+decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeId
 
 decodeByteString :: Get ByteString
 decodeByteString =

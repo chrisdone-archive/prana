@@ -843,12 +843,12 @@ toExp m = \case
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
 toAlt :: GHC.Module -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
-toAlt m (con,vars,e) = Alt (toAltCon con) (map (toId m) vars) (toExp m e)
+toAlt m (con,vars,e) = Alt (toAltCon m con) (map (toId m) vars) (toExp m e)
 
-toAltCon :: CoreSyn.AltCon -> Main.AltCon
-toAltCon =
+toAltCon :: GHC.Module -> CoreSyn.AltCon -> Main.AltCon
+toAltCon m =
   \case
-    CoreSyn.DataAlt dataCon -> DataAlt (toDataCon dataCon)
+    CoreSyn.DataAlt dataCon -> DataAlt (toDataCon m dataCon)
     CoreSyn.LitAlt literal  -> LitAlt (toLit literal)
     CoreSyn.DEFAULT         -> DEFAULT
 
@@ -870,10 +870,10 @@ toLit =
 toTyp :: GHC.Type -> Main.Typ
 toTyp v = Main.Typ (S8.pack (GHC.showSDocUnsafe (GHC.ppr v)))
 
-toDataCon :: GHC.DataCon -> Main.DataCon
-toDataCon = Main.DataCon . Main.Unique . GHC.getKey . GHC.getUnique . GHC.dataConName
+toDataCon :: GHC.Module -> GHC.DataCon -> Main.DataCon
+toDataCon m = Main.DataCon . toId m . GHC.dataConName
 
-toId :: GHC.Module -> GHC.Id -> Main.Id
+toId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.Id
 toId m thing = Main.Id bs unique cat
   where
     (bs,cat) =
@@ -1236,7 +1236,7 @@ encodeCat =
      ClassCat -> 2)
 
 encodeDataCon :: DataCon -> L.Builder
-encodeDataCon (DataCon e) = encodeUnique e
+encodeDataCon (DataCon e) = encodeId e
 
 encodeUnique :: Unique -> L.Builder
 encodeUnique (Unique x) = L.int64LE (fromIntegral x)

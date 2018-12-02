@@ -320,10 +320,10 @@ insertBind (Rec pairs) = \m0 -> foldl (\m (k, v) -> M.insert k v m) m0 pairs
 patternMatch :: WHNF -> [Alt] -> Eval Exp
 patternMatch whnf alts =
   case whnf of
-    ConWHNF (Id _ i _) args ->
+    ConWHNF (Id bs _ _) args ->
       case find
              ((\case
-                 DataAlt (DataCon j) -> i == j
+                 DataAlt (DataCon (Id bs' _ _)) -> bs == bs'
                  _ -> False) .
               altCon)
              alts of

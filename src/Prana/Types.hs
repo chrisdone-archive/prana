@@ -91,14 +91,14 @@ data AltCon
 instance Pretty AltCon where
   pretty =
     \case
-      DataAlt dc -> L.byteString . S8.pack . show $ dc
+      DataAlt (DataCon i) -> pretty i
       LitAlt l -> pretty l
       DEFAULT -> "_"
 
 newtype Unique = Unique Int
  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-newtype DataCon = DataCon Unique
+newtype DataCon = DataCon Id
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Lit
