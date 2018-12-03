@@ -79,16 +79,21 @@ instance Pretty WHNF where
       TypWHNF {} -> "Type"
       CoercionWHNF {} -> "Coercion"
       OpWHNF op ws ->
-        "(" <> pretty op <> "[PrimOp] " <> mconcat (intersperse "" (map pretty ws)) <>
+        "(" <> pretty op <> "[PrimOp] " <>
+        mconcat (intersperse ", " (map pretty ws)) <>
         ")"
       MethodWHNF op int ->
-        pretty op  <> "[Method]" <> L.byteString (S8.pack (show int))
+        pretty op <> "[Method][Idx=" <> L.byteString (S8.pack (show int) <> "]")
       PrimWHNF x -> pretty x
       LabelWHNF -> "LabelWHNF"
       IntegerWHNF i -> "" <> L.byteString (S8.pack (show i)) <> "[Integer]"
       ConWHNF con ws ->
-        "(" <> pretty con <> "[Con] " <> mconcat (intersperse "" (map pretty ws)) <>
-        ")"
+        "(" <> pretty con <> "[Con]" <>
+        (if null ws
+           then "["
+           else " [") <>
+        mconcat (intersperse ", " (map pretty ws)) <>
+        "])"
 
 -- | A primitive value.
 data Prim
@@ -264,7 +269,11 @@ whnfId i@(Id bs _ cat) =
               globalRef <- asks envGlobals
               globals <- liftIO (readIORef globalRef)
               case M.lookup (idStableName i) (M.mapKeys idStableName globals) of
-                Just e -> whnfExp e
+                Just e -> do depth <- asks envDepth
+                             let indent = replicate (fromIntegral depth) ' '
+                                 out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
+                             out ("Resolved: " ++ L8.unpack (L.toLazyByteString (pretty i <> " = " <> pretty e)))
+                             whnfExp e
                 Nothing ->
                   case M.lookup bs primops of
                     Just op -> pure (OpWHNF op [])
