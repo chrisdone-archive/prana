@@ -23,6 +23,13 @@ data Bind
   | Rec [(Id, Exp)]
   deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
+instance Pretty Bind where
+  pretty =
+    \case
+      NonRec i e -> pretty i <> " = " <> pretty e
+      Rec pairs ->
+        mconcat (intersperse "; " (map (pretty . uncurry NonRec) pairs))
+
 data Exp
   = VarE Id
   | LitE Lit
@@ -43,7 +50,7 @@ instance Pretty Exp where
       LitE l -> pretty l
       AppE f x -> "(" <> pretty f <> " " <> pretty x <> ")"
       LamE i e -> "(\\" <> pretty i <> " -> " <> pretty e <> ")"
-      LetE _ e -> "(let in " <> pretty e <> ")"
+      LetE b e -> "(let { " <> pretty b <> " } in " <> pretty e <> ")"
       CastE e -> pretty e
       TypE {} -> "Type"
       CoercionE {} -> "Coercion"
