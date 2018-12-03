@@ -184,14 +184,16 @@ whnfApp f arg = do
 whnfMethod :: Id -> Int -> Exp -> Eval WHNF
 whnfMethod methodid index dict = do
   result <- whnfExp dict
-  case result of
-    ConWHNF _id args ->
-      case lookup index (zip [0 ..] args) of
-        Just whnf -> whnfExp whnf
-        Nothing ->
-          throw (TypeError (MissingDictionaryMethod methodid index result))
-    _ -> pure result
-    -- _ -> throw (TypeError (NotAnInstanceDictionary methodid result))
+  if index == -1
+    then pure result
+    else case result of
+           ConWHNF _id args ->
+             case lookup index (zip [0 ..] args) of
+               Just whnf -> whnfExp whnf
+               Nothing ->
+                 throw
+                   (TypeError (MissingDictionaryMethod methodid index result))
+           _ -> throw (TypeError (NotAnInstanceDictionary methodid result))
 
 -- | Force the arguments to WHNF until fully saturated (has all args),
 -- then run it.
@@ -259,7 +261,7 @@ whnfId i@(Id bs _ cat) =
     ValCat -> do
       methodRef <- asks envMethods
       methods <- liftIO (readIORef methodRef)
-      case M.lookup i methods of
+      case M.lookup i methods <|> M.lookup (idStableName i) (M.mapKeys idStableName methods) of
         Just index -> pure (MethodWHNF i index)
         Nothing -> do
           lets <- asks envLets
@@ -269,11 +271,15 @@ whnfId i@(Id bs _ cat) =
               globalRef <- asks envGlobals
               globals <- liftIO (readIORef globalRef)
               case M.lookup (idStableName i) (M.mapKeys idStableName globals) of
-                Just e -> do depth <- asks envDepth
-                             let indent = replicate (fromIntegral depth) ' '
-                                 out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
-                             out ("Resolved: " ++ L8.unpack (L.toLazyByteString (pretty i <> " = " <> pretty e)))
-                             whnfExp e
+                Just e -> do
+                  depth <- asks envDepth
+                  let indent = replicate (fromIntegral depth) ' '
+                      out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
+                  out
+                    ("Resolved: " ++
+                     L8.unpack
+                       (L.toLazyByteString (pretty i <> " = " <> pretty e)))
+                  whnfExp e
                 Nothing ->
                   case M.lookup bs primops of
                     Just op -> pure (OpWHNF op [])

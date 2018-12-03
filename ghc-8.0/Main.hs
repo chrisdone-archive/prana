@@ -804,7 +804,9 @@ doMake srcs  = do
                     let tyVars = GHC.is_tvs clsInst
                         cls = GHC.is_cls clsInst
                         methods = GHC.classAllSelIds cls
-                     in zip methods [0 ..])
+                     in if length methods == 1
+                           then zip methods [-1]
+                           else zip methods [0 ..])
                  instances
 
          let
