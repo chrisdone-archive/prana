@@ -50,6 +50,7 @@ import Data.Data
 import qualified Unique as GHC
 import GHC.Real
 import qualified InstEnv as GHC
+import qualified Class as GHC
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
@@ -802,7 +803,7 @@ doMake srcs  = do
                  (\clsInst ->
                     let tyVars = GHC.is_tvs clsInst
                         cls = GHC.is_cls clsInst
-                        methods = GHC.classMethods cls
+                        methods = GHC.classAllSelIds cls
                      in zip methods [0 ..])
                  instances
 
