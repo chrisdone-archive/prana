@@ -145,7 +145,7 @@ whnfExp e0 = do
         -- No-op, lambdas are self-evaluating:
      =
       \case
-        LamE i e -> pure (LamWHNF i e)
+        LamE _ i e -> pure (LamWHNF i e)
         -- No-op, types are self-evaluating:
         TypE ty -> pure (TypWHNF ty)
         -- No-op, coerciones are self-evaluating:
@@ -282,6 +282,7 @@ whnfId i@(Id bs _ cat) =
                       out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
                   out
                     ("Resolved: " ++
+                     show e ++ "\n" ++
                      L8.unpack
                        (L.toLazyByteString (pretty i <> " = " <> pretty e)))
                   whnfExp e
@@ -302,10 +303,10 @@ betaSubstitute x replacement = go
             else VarE y
         e@LitE {} -> e
         AppE f a -> AppE (go f) (go a)
-        LamE y e ->
+        LamE t y e ->
           if y == x
-            then LamE y e
-            else LamE y (go e)
+            then LamE t y e
+            else LamE t y (go e)
         CaseE e y ty alts ->
           CaseE
             (go e)

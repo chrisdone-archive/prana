@@ -34,7 +34,7 @@ data Exp
   = VarE Id
   | LitE Lit
   | AppE Exp Exp
-  | LamE Id Exp
+  | LamE Bool Id Exp
   | CaseE Exp Id Typ [Alt]
   | TypE Typ
   | CoercionE
@@ -49,7 +49,9 @@ instance Pretty Exp where
       VarE i -> pretty i
       LitE l -> pretty l
       AppE f x -> "(" <> pretty f <> " " <> pretty x <> ")"
-      LamE i e -> "(\\" <> pretty i <> " -> " <> pretty e <> ")"
+      LamE ty i e -> "(\\" <> (if ty
+                                  then "@"
+                                  else "") <> pretty i <> " -> " <> pretty e <> ")"
       LetE b e -> "(let { " <> pretty b <> " } in " <> pretty e <> ")"
       CastE e -> pretty e
       TypE {} -> "Type"

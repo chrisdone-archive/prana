@@ -30,7 +30,7 @@ decodeExpr =
       0 -> VarE <$> decodeId
       1 -> LitE <$> decodeLit
       2 -> AppE <$> decodeExpr <*> decodeExpr
-      3 -> LamE <$> decodeId <*> decodeExpr
+      3 -> LamE <$> decodeBool <*> decodeId <*> decodeExpr
       4 -> LetE <$> decodeBind <*> decodeExpr
       5 ->
         CaseE <$> decodeExpr <*> decodeId <*> decodeType <*>
@@ -74,6 +74,15 @@ decodeInteger = label "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
 
 decodeInt :: Get Int
 decodeInt = label "decodeInteger" $ fmap fromIntegral getInt64le
+
+decodeBool :: Get Bool
+decodeBool =
+  label "decodeBool" $
+  fmap
+    (\case
+       1 -> True
+       _ -> False)
+    getWord8
 
 decodeCat :: Get Cat
 decodeCat =

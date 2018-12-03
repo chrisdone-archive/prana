@@ -45,6 +45,7 @@ import Data.Semigroup
 import qualified DataCon as GHC
 import qualified CorePrep as GHC
 import qualified TyCon as GHC
+import qualified Var as GHC (isTyVar)
 import qualified FastString as GHC
 import Data.Data
 import qualified Unique as GHC
@@ -837,7 +838,7 @@ toExp m = \case
  CoreSyn.Var i -> Main.VarE (toId m i)
  CoreSyn.Lit i                  -> Main.LitE (toLit i)
  CoreSyn.App f x                -> Main.AppE (toExp m f) (toExp m x)
- CoreSyn.Lam var body           -> Main.LamE (toId m var) (toExp m body)
+ CoreSyn.Lam var body           -> Main.LamE (GHC.isTyVar var) (toId m var) (toExp m body)
  CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
  CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toId m var) (toTyp typ) (map (toAlt m) alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
@@ -1181,7 +1182,7 @@ encodeExpr =
     Main.VarE i                  -> tag 0 <> encodeId i
     Main.LitE i                  -> tag 1 <> encodeLit i
     Main.AppE f x                -> tag 2 <> encodeExpr f <> encodeExpr x
-    Main.LamE var body           -> tag 3 <> encodeId var <> encodeExpr body
+    Main.LamE ty var body        -> tag 3 <> encodeBool ty <> encodeId var <> encodeExpr body
     Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
     Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <> encodeArray (map encodeAlt alts)
     Main.CastE expr              -> tag 6 <> encodeExpr expr
@@ -1209,6 +1210,12 @@ encodeInteger = encodeLazyByteString . L.toLazyByteString . L.integerDec
 
 encodeInt :: Int -> L.Builder
 encodeInt = L.int64LE . fromIntegral
+
+encodeBool :: Bool -> L.Builder
+encodeBool =
+  \case
+    True -> tag 1
+    False -> tag 0
 
 encodeAltCon :: AltCon -> L.Builder
 encodeAltCon =
