@@ -31,9 +31,9 @@ import           Prana.Types
 
 -- | An environment to evaluate expressions in.
 data Env = Env
-  { envGlobals :: !(IORef (Map Id Exp))
+  { envGlobals :: !(IORef (Map ByteString Exp))
   , envLets :: !(Map Id Exp)
-  , envMethods :: !(IORef (Map Id Int))
+  , envMethods :: !(IORef (Map ByteString Int))
   , envDepth :: !Int
   }
 
@@ -124,7 +124,7 @@ instance Pretty Op where
     "]"
 
 -- | Run the interpreter on the given expression.
-runInterpreter :: Map Id Exp -> Map Id Int -> Exp -> IO WHNF
+runInterpreter :: Map ByteString Exp -> Map ByteString Int -> Exp -> IO WHNF
 runInterpreter globals methodIndices e = do
   ref <- newIORef globals
   ref2 <- newIORef methodIndices
@@ -135,7 +135,7 @@ whnfExp :: Exp -> Eval WHNF
 whnfExp e0 = do
   depth <- asks envDepth
   let indent = replicate (fromIntegral depth) ' '
-      out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
+      out v = when False (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
   out ("Eval: " ++ L8.unpack (L.toLazyByteString (pretty e0)))
   r <- local (\e -> e {envDepth = envDepth e + 2}) (go e0)
   out ("Done: " ++ L8.unpack (L.toLazyByteString (pretty r)))
@@ -266,7 +266,7 @@ whnfId i@(Id bs _ cat) =
     ValCat -> do
       methodRef <- asks envMethods
       methods <- liftIO (readIORef methodRef)
-      case M.lookup i methods <|> M.lookup (idStableName i) (M.mapKeys idStableName methods) of
+      case M.lookup (idStableName i) methods of
         Just index -> pure (MethodWHNF i index)
         Nothing -> do
           lets <- asks envLets
@@ -275,11 +275,11 @@ whnfId i@(Id bs _ cat) =
             Nothing -> do
               globalRef <- asks envGlobals
               globals <- liftIO (readIORef globalRef)
-              case M.lookup (idStableName i) (M.mapKeys idStableName globals) of
+              case M.lookup (idStableName i) globals of
                 Just e -> do
                   depth <- asks envDepth
                   let indent = replicate (fromIntegral depth) ' '
-                      out v = liftIO (S8.putStrLn (S8.pack (indent ++ v)))
+                      out v = when False (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
                   out
                     ("Resolved: " ++
                      show e ++ "\n" ++

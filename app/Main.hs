@@ -4,6 +4,7 @@
 module Main where
 
 import           Control.Exception
+import           Control.Monad
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
 import           Data.Generics
@@ -45,18 +46,21 @@ main = do
                             e -> e))
                       binds))
          args)
-  let globals =
-        M.fromList
-          (concatMap
-             (\case
-                NonRec v e -> [(v, e)]
-                Rec bs -> bs)
-             binds)
-      methods = M.fromList indices
+  let !globals =
+         (M.mapKeys
+            idStableName
+            (M.fromList
+               (concatMap
+                  (\case
+                     NonRec v e -> [(v, e)]
+                     Rec bs -> bs)
+                  binds)))
+      !methods = (M.mapKeys idStableName methods')
+      methods' = M.fromList indices
   -- From: https://mail.haskell.org/pipermail/ghc-devs/2018-November/016592.html
   -- > I've also learned that GHC wraps the* Main.main* function with another
   -- > function called *:Main.main* which is the first function called by the RTS.
-  case M.lookup "main:Demo.demo" (M.mapKeys idStableName globals) {-"main:Main.main"-}
+  case M.lookup "main:Demo.demo" globals {-"main:Main.main"-}
         of
     Nothing ->
       error $
@@ -64,9 +68,11 @@ main = do
       ("Methods\n" ++
        unlines (map show (M.keys methods)) ++
        "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
-    Just e ->
+    Just e -> do
       catch
-        (runInterpreter globals methods (e) >>= print) {-AppE e (LitE (Str "RealWorld"))-}
+        (do replicateM_ 1 (runInterpreter globals methods (e) >>= print
+                          )
+            ) {-AppE e (LitE (Str "RealWorld"))-}
         (\case
            NotInScope i ->
              error $
