@@ -204,12 +204,15 @@ whnfOp op args0 arg = do
    in if length args == opArity op
         then case op of
                Op {opName = "ghc-prim:GHC.Prim.-#"}
-                 | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args -> pure (PrimWHNF (IntPrim (i-j)))
+                 | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args ->
+                   pure (PrimWHNF (IntPrim (i - j)))
                Op {opName = "ghc-prim:GHC.Prim.+#"}
-                 | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args -> pure (PrimWHNF (IntPrim (i+j)))
-               _ -> error
-                      ("Primop is saturated, apply: " ++
-                       show op ++ " with args: " ++ show args)
+                 | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args ->
+                   pure (PrimWHNF (IntPrim (i + j)))
+               _ ->
+                 error
+                   ("Primop is saturated, apply: " ++
+                    show op ++ " with args: " ++ show args)
         else pure (OpWHNF op args)
 
 -- | Evaluate a case to WHNF.
