@@ -19,7 +19,7 @@ import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Lazy.Builder as L
 import qualified Data.ByteString.Lazy.Char8 as L8
-import           Data.Generics
+import           Data.Typeable
 import           Data.IORef
 import           Data.List
 import           Data.Map.Strict (Map)
@@ -232,6 +232,7 @@ whnfLet bind e =
     (\env -> env {envLets = insertBind bind (envLets env)})
     (do whnf <- whnfExp e
         pure (LetWHNF bind whnf))
+
 
 -- | Create a WHNF value from a literal.
 whnfLit :: Lit -> Eval WHNF
