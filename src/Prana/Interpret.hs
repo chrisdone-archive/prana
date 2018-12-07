@@ -135,7 +135,7 @@ whnfExp :: Exp -> Eval WHNF
 whnfExp e0 = do
   depth <- asks envDepth
   let indent = replicate (fromIntegral depth) ' '
-      out v = when False (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
+      out v = when True (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
   out ("Eval: " ++ L8.unpack (L.toLazyByteString (pretty e0)))
   r <- local (\e -> e {envDepth = envDepth e + 2}) (go e0)
   out ("Done: " ++ L8.unpack (L.toLazyByteString (pretty r)))
@@ -283,7 +283,7 @@ whnfId i@(Id bs _ cat) =
                 Just e -> do
                   depth <- asks envDepth
                   let indent = replicate (fromIntegral depth) ' '
-                      out v = when False (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
+                      out v = when True (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
                   out
                     ("Resolved: " ++
                      show e ++ "\n" ++
@@ -348,7 +348,7 @@ patternMatch whnf alts =
     ConWHNF (Id bs _ _) args ->
       case find
              ((\case
-                 DataAlt (DataCon (Id bs' _ _)) -> bs == bs'
+                 DataAlt (DataCon (Id bs' _ _) _) -> bs == bs'
                  _ -> False) .
               altCon)
              alts of

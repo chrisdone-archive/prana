@@ -109,7 +109,17 @@ decodeUnique :: Get Unique
 decodeUnique = label "decodeUnique" $ fmap (Unique . fromIntegral) getInt64le
 
 decodeDataCon :: Get DataCon
-decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeId
+decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeId <*> decodeArray decodeStrictness
+
+decodeStrictness :: Get Strictness
+decodeStrictness =
+  label
+    "decodeStrictness"
+    (fmap
+       (\case
+          0 -> Strict
+          _ -> NonStrict)
+       getWord8)
 
 decodeByteString :: Get ByteString
 decodeByteString =

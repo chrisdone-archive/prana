@@ -48,6 +48,7 @@ import qualified TyCon as GHC
 import qualified Var as GHC (isTyVar)
 import qualified FastString as GHC
 import Data.Data
+import Data.String (fromString)
 import qualified Unique as GHC
 import GHC.Real
 import qualified InstEnv as GHC
@@ -875,7 +876,16 @@ toTyp :: GHC.Type -> Main.Typ
 toTyp v = Main.Typ (S8.pack (GHC.showSDocUnsafe (GHC.ppr v)))
 
 toDataCon :: GHC.Module -> GHC.DataCon -> Main.DataCon
-toDataCon m = Main.DataCon . toId m . GHC.dataConName
+toDataCon m dc =
+  Main.DataCon
+    (toId m (GHC.dataConName dc))
+    (map toStrictness (GHC.dataConImplBangs dc))
+  where
+    toStrictness =
+      \case
+        GHC.HsLazy -> NonStrict
+        GHC.HsStrict -> Strict
+        GHC.HsUnpack mc -> Strict
 
 toId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.Id
 toId m thing = Main.Id bs unique cat
@@ -1246,7 +1256,13 @@ encodeCat =
      ClassCat -> 2)
 
 encodeDataCon :: DataCon -> L.Builder
-encodeDataCon (DataCon e) = encodeId e
+encodeDataCon (DataCon e ss) = encodeId e <> encodeArray (map encodeStrictness ss)
+
+encodeStrictness :: Strictness -> L.Builder
+encodeStrictness =
+  \case
+    Strict -> L.word8 0
+    NonStrict -> L.word8 1
 
 encodeUnique :: Unique -> L.Builder
 encodeUnique (Unique x) = L.int64LE (fromIntegral x)

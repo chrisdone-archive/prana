@@ -12,6 +12,7 @@ import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy.Builder as L
 import           Data.Data
 import           Data.List
+import           Data.String
 import           GHC.Generics
 
 class Pretty a where
@@ -100,14 +101,17 @@ data AltCon
 instance Pretty AltCon where
   pretty =
     \case
-      DataAlt (DataCon i) -> pretty i
+      DataAlt (DataCon i strictness) -> pretty i <> "[" <> fromString (show strictness) <> "]"
       LitAlt l -> pretty l
       DEFAULT -> "_"
 
 newtype Unique = Unique Int
  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-newtype DataCon = DataCon Id
+data Strictness = Strict | NonStrict
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data DataCon = DataCon Id [Strictness]
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Lit

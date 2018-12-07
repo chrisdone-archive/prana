@@ -72,6 +72,7 @@ main = do
       catch
         (do replicateM_ 1 (runInterpreter globals methods (e) >>= print
                           )
+            pure ()
             ) {-AppE e (LitE (Str "RealWorld"))-}
         (\case
            NotInScope i ->
