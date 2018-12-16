@@ -76,10 +76,10 @@ instance Pretty WHNF where
     \case
       LamWHNF i e -> "(\\" <> pretty i <> " -> " <> pretty e <> ")"
       LetWHNF _ e -> "(let in " <> pretty e <> ")"
-      TypWHNF {} -> "Type"
+      TypWHNF (Typ ty) -> "Type[" <> L.byteString ty <> "]"
       CoercionWHNF {} -> "Coercion"
       OpWHNF op ws ->
-        "(" <> pretty op <> "[PrimOp] " <>
+        "(" <> pretty op <> " " <>
         mconcat (intersperse ", " (map pretty ws)) <>
         ")"
       MethodWHNF op int ->
@@ -120,7 +120,7 @@ data Op = Op
 
 instance Pretty Op where
   pretty (Op arity name) =
-    L.byteString name <> "[arity=" <> (L.byteString . S8.pack . show $ arity) <>
+    L.byteString name <> "[PrimOp,arity=" <> (L.byteString . S8.pack . show $ arity) <>
     "]"
 
 -- | Run the interpreter on the given expression.
@@ -145,6 +145,7 @@ whnfExp e0 = do
         -- No-op, lambdas are self-evaluating:
      =
       \case
+        LamE True _ e -> go e
         LamE _ i e -> pure (LamWHNF i e)
         -- No-op, types are self-evaluating:
         TypE ty -> pure (TypWHNF ty)
@@ -170,14 +171,21 @@ whnfExp e0 = do
 -- * If @f@ is a data constructor, just return it with the new argument in the arg list.
 -- * If @f@ is an operator, reduce the arguments until saturated, then run it.
 whnfApp :: Exp -> Exp -> Eval WHNF
-whnfApp f arg = do
-  result <- whnfExp f
-  case result of
-    LamWHNF v body -> whnfExp (betaSubstitute v arg body)
-    OpWHNF op args -> whnfOp op args arg
-    ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
-    MethodWHNF i index -> whnfMethod i index arg
-    _ -> throw (TypeError (NotAFunction result))
+whnfApp f arg =
+  case arg of
+    TypE {} -> do
+      result <- whnfExp f
+      case result of
+        OpWHNF op args -> whnfOp op args arg
+        _ -> pure result
+    _ -> do
+      result <- whnfExp f
+      case result of
+        LamWHNF v body -> whnfExp (betaSubstitute v arg body)
+        OpWHNF op args -> whnfOp op args arg
+        ConWHNF i args -> pure (ConWHNF i (args ++ [arg]))
+        MethodWHNF i index -> whnfMethod i index arg
+        _ -> throw (TypeError (NotAFunction result))
 
 -- | Given an index, force the (what should be) dictionary data
 -- constructor's Nth argument, yielding the instance method's code.
@@ -209,6 +217,11 @@ whnfOp op args0 arg = do
                Op {opName = "ghc-prim:GHC.Prim.+#"}
                  | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args ->
                    pure (PrimWHNF (IntPrim (i + j)))
+               Op {opName = "ghc-prim:GHC.Prim.<#"}
+                 | [PrimWHNF (IntPrim (I# i)), PrimWHNF (IntPrim (I# j))] <- args ->
+                   pure (PrimWHNF (IntPrim (I# (i <# j))))
+               -- Op {opName="ghc-prim:GHC.Prim.tagToEnum#"} ->
+               --   undefined
                _ ->
                  error
                    ("Primop is saturated, apply: " ++
@@ -404,7 +417,8 @@ primops =
   M.fromList
     (map
        (opName &&& id)
-       [ Op {opArity = 1, opName = "ghc-prim:GHC.Prim.tagToEnum#"}
+       [ Op {opArity = 2, opName = "ghc-prim:GHC.Prim.tagToEnum#"}
        , Op {opArity = 2, opName = "ghc-prim:GHC.Prim.-#"}
        , Op {opArity = 2, opName = "ghc-prim:GHC.Prim.+#"}
+       , Op {opArity = 2, opName = "ghc-prim:GHC.Prim.<#"}
        ])

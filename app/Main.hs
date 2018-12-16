@@ -7,7 +7,6 @@ import           Control.Exception
 import           Control.Monad
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
-import           Data.Generics
 import qualified Data.Map.Strict as M
 import           Prana.Decode
 import           Prana.Interpret
@@ -33,28 +32,17 @@ main = do
                    fp ++
                    ": " ++ show e ++ ", file contains: " ++ take 10 (show bytes))
               Right (_, _, (indices, binds)) -> do
-                pure
-                  ( indices
-                  , everywhere
-                      (mkT
-                         (\case
-                            AppE e TypE {} -> e
-                            LamE ty i e ->
-                              if ty
-                                then e
-                                else LamE ty i e
-                            e -> e))
-                      binds))
+                pure (indices, binds))
          args)
   let !globals =
-         (M.mapKeys
-            idStableName
-            (M.fromList
-               (concatMap
-                  (\case
-                     NonRec v e -> [(v, e)]
-                     Rec bs -> bs)
-                  binds)))
+        (M.mapKeys
+           idStableName
+           (M.fromList
+              (concatMap
+                 (\case
+                    NonRec v e -> [(v, e)]
+                    Rec bs -> bs)
+                 binds)))
       !methods = (M.mapKeys idStableName methods')
       methods' = M.fromList indices
   -- From: https://mail.haskell.org/pipermail/ghc-devs/2018-November/016592.html
@@ -70,10 +58,8 @@ main = do
        "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
     Just e -> do
       catch
-        (do replicateM_ 1 (runInterpreter globals methods (e) >>= print
-                          )
-            pure ()
-            ) {-AppE e (LitE (Str "RealWorld"))-}
+        (do replicateM_ 1 (runInterpreter globals methods (e) >>= print)
+            pure ())
         (\case
            NotInScope i ->
              error $

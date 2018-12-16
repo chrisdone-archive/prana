@@ -55,7 +55,7 @@ instance Pretty Exp where
                                   else "") <> pretty i <> " -> " <> pretty e <> ")"
       LetE b e -> "(let { " <> pretty b <> " } in " <> pretty e <> ")"
       CastE e -> pretty e
-      TypE {} -> "Type"
+      TypE (Typ ty) -> "Type[" <> L.byteString ty <> "]"
       CoercionE {} -> "Coercion"
       TickE e -> pretty e
       CaseE e _ty _i alts ->
