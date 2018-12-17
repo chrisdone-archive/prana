@@ -218,10 +218,11 @@ whnfOp op args0 arg = do
                  | [PrimWHNF (IntPrim i), PrimWHNF (IntPrim j)] <- args ->
                    pure (PrimWHNF (IntPrim (i + j)))
                Op {opName = "ghc-prim:GHC.Prim.<#"}
-                 | [PrimWHNF (IntPrim (I# i)), PrimWHNF (IntPrim (I# j))] <- args ->
-                   pure (PrimWHNF (IntPrim (I# (i <# j))))
-               -- Op {opName="ghc-prim:GHC.Prim.tagToEnum#"} ->
-               --   undefined
+                 | [PrimWHNF (IntPrim (I# i)), PrimWHNF (IntPrim (I# j))] <-
+                    args -> pure (PrimWHNF (IntPrim (I# (i <# j))))
+               Op {opName = "ghc-prim:GHC.Prim.tagToEnum#"}
+                 | [TypWHNF (Typ _ty), PrimWHNF (IntPrim 0)] <- args ->
+                   error "TODO: Implement tagToEnum#"
                _ ->
                  error
                    ("Primop is saturated, apply: " ++
