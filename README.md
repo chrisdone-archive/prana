@@ -1,21 +1,13 @@
 # prana
 
-# GHC 8.0
+Build a docker image with a patched GHC that outputs .prana files:
 
-Generate ghc-prim, integer-simple and base:
+    $ sh scripts/buildimage.sh
 
-    docker build . -f Dockerfile.ghc-8.0 -t ghc-compile
-    docker run -v`pwd`:`pwd` -w`pwd` --rm ghc-compile cp /root/ghc_build/ghc-8.0/libraries/libraries.tar.gz .
-    mkdir libraries-8.0/
-    cd libraries-8.0/
-    tar xf ../libraries.tar.gz
-    cd ..
-    rm libraries.tar.gz
+Copy the compiled standard libraries (ghc-prim, integer-gmp and base):
 
-Run GHC compiler example:
+    $ sh scripts/copylibs.sh
 
-    docker run -v`pwd`:`pwd` -w`pwd` --rm ghc-compile ghc Demo.hs && sudo chown chris:chris main_Demo.prana
+Run the demo:
 
-# Research
-
-Name prefixes: https://github.com/ghc/ghc/blob/master/compiler/basicTypes/OccName.hs#L621
+    $ sh scripts/compiledemo.sh
