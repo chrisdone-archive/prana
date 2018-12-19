@@ -1,4 +1,4 @@
-# prana
+# prana [experiment; WIP]
 
 An interpreter for GHC Haskell programs
 
