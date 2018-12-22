@@ -34,6 +34,7 @@ data Env = Env
   { envGlobals :: !(IORef (Map ByteString Exp))
   , envLets :: !(Map Id Exp)
   , envMethods :: !(IORef (Map ByteString Int))
+  , envDataCons :: !(IORef (Map ByteString [Id]))
   , envDepth :: !Int
   }
 
@@ -76,7 +77,7 @@ instance Pretty WHNF where
     \case
       LamWHNF i e -> "(\\" <> pretty i <> " -> " <> pretty e <> ")"
       LetWHNF _ e -> "(let in " <> pretty e <> ")"
-      TypWHNF (Typ ty) -> "Type[" <> L.byteString ty <> "]"
+      TypWHNF ty -> pretty ty
       CoercionWHNF {} -> "Coercion"
       OpWHNF op ws ->
         "(" <> pretty op <> " " <>
@@ -124,11 +125,12 @@ instance Pretty Op where
     "]"
 
 -- | Run the interpreter on the given expression.
-runInterpreter :: Map ByteString Exp -> Map ByteString Int -> Exp -> IO WHNF
-runInterpreter globals methodIndices e = do
+runInterpreter :: Map ByteString Exp -> Map ByteString Int -> Map ByteString [Id] -> Exp -> IO WHNF
+runInterpreter globals methodIndices dataCons e = do
   ref <- newIORef globals
   ref2 <- newIORef methodIndices
-  runReaderT (runEval (whnfExp e)) (Env ref mempty ref2 0)
+  ref3 <- newIORef dataCons
+  runReaderT (runEval (whnfExp e)) (Env ref mempty ref2 ref3 0)
 
 -- | Evaluate the expression to WHNF and no further.
 whnfExp :: Exp -> Eval WHNF
@@ -221,8 +223,31 @@ whnfOp op args0 arg = do
                  | [PrimWHNF (IntPrim (I# i)), PrimWHNF (IntPrim (I# j))] <-
                     args -> pure (PrimWHNF (IntPrim (I# (i <# j))))
                Op {opName = "ghc-prim:GHC.Prim.tagToEnum#"}
-                 | [TypWHNF (Typ _ty), PrimWHNF (IntPrim 0)] <- args ->
-                   error "TODO: Implement tagToEnum#"
+                 | [TypWHNF ty, PrimWHNF (IntPrim index)] <- args ->
+                   case ty of
+                     TyConApp i _ -> do
+                       ref <- asks envDataCons
+                       dataCons <- liftIO (readIORef ref)
+                       case M.lookup (idStableName i) dataCons of
+                         Nothing ->
+                           error
+                             ("tagToEnum# couldn't find data type: " ++ show i)
+                         Just cons ->
+                           case lookup index (zip [0 ..] cons) of
+                             Nothing ->
+                               error
+                                 ("tagToEnum# couldn't find data constructor: " ++
+                                  show i ++ " for tag " ++ show index)
+                             Just ident -> do
+                               depth <- asks envDepth
+                               let indent = replicate (fromIntegral depth) ' '
+                                   out v = when True (liftIO (S8.putStrLn (S8.pack (indent ++ v))))
+                                   ret = ConWHNF ident []
+                               out ("Prim: tagToEnum# " ++ show index ++ " => " ++ show ret)
+                               pure ret
+                     t ->
+                       error
+                         ("tagToEnum# expects a TyConApp, but got: " ++ show t)
                _ ->
                  error
                    ("Primop is saturated, apply: " ++

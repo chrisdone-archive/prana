@@ -50,12 +50,18 @@ instance Pretty Exp where
       VarE i -> pretty i
       LitE l -> pretty l
       AppE f x -> "(" <> pretty f <> " " <> pretty x <> ")"
-      LamE ty i e -> "(\\" <> (if ty
-                                  then "@"
-                                  else "") <> pretty i <> " -> " <> pretty e <> ")"
+      LamE ty i e ->
+        "(\\" <>
+        (if ty
+           then "@"
+           else "") <>
+        pretty i <>
+        " -> " <>
+        pretty e <>
+        ")"
       LetE b e -> "(let { " <> pretty b <> " } in " <> pretty e <> ")"
       CastE e -> pretty e
-      TypE (Typ ty) -> "Type[" <> L.byteString ty <> "]"
+      TypE ty ->  pretty ty
       CoercionE {} -> "Coercion"
       TickE e -> pretty e
       CaseE e _ty _i alts ->
@@ -78,8 +84,17 @@ data Cat
   | ClassCat
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data Typ = Typ ByteString
+data Typ = TyConApp Id [Typ] | OpaqueType ByteString
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+instance Pretty Typ where
+  pretty =
+    \case
+      (OpaqueType ty) -> "Type[" <> L.byteString ty <> "]"
+      (TyConApp i tys) ->
+        "TyConApp(" <> pretty i <> ")[" <>
+        mconcat (intersperse ", " (map pretty tys)) <>
+        "]"
 
 data Alt = Alt
   { altCon :: AltCon

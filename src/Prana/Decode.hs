@@ -13,6 +13,12 @@ import           Prana.Types
 decodeMethodIndex :: Get (Id, Int)
 decodeMethodIndex = label "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
 
+decodeEnums :: Get (Id, [Id])
+decodeEnums = do
+  tyId <- label "decodeEnums type" decodeId
+  cons <- label "decodeEnums cons" (decodeArray decodeId)
+  pure (tyId, cons)
+
 decodeBind :: Get Bind
 decodeBind =
   label "decodeBind" $ do
@@ -100,7 +106,12 @@ decodeAlt =
   Alt <$> decodeAltCon <*> decodeArray decodeId <*> decodeExpr
 
 decodeType :: Get Typ
-decodeType = label "decodeType" $ Typ <$> decodeByteString
+decodeType =
+  label "decodeType" $ do
+    tag <- getWord8
+    case tag of
+      0 -> OpaqueType <$> decodeByteString
+      _ -> TyConApp <$> decodeId <*> decodeArray decodeType
 
 decodeId :: Get Id
 decodeId = label "decodeId" $ Id <$> decodeByteString <*> decodeUnique <*> decodeCat

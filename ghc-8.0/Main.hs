@@ -44,6 +44,7 @@ import Data.Word
 import Data.Semigroup
 import qualified DataCon as GHC
 import qualified CorePrep as GHC
+import qualified Type as GHC
 import qualified TyCon as GHC
 import qualified Var as GHC (isTyVar)
 import qualified FastString as GHC
@@ -847,10 +848,10 @@ toExp m = \case
  CoreSyn.App f x                -> Main.AppE (toExp m f) (toExp m x)
  CoreSyn.Lam var body           -> Main.LamE (GHC.isTyVar var) (toId m var) (toExp m body)
  CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
- CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toId m var) (toTyp typ) (map (toAlt m) alts)
+ CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toId m var) (toTyp m typ) (map (toAlt m) alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
  CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp m expr)
- CoreSyn.Type typ               -> Main.TypE (toTyp typ)
+ CoreSyn.Type typ               -> Main.TypE (toTyp m typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
 toAlt :: GHC.Module -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
@@ -878,8 +879,12 @@ toLit =
     GHC.MachLabel _ _ _     -> Label
     GHC.LitInteger i _typ   -> Integer i
 
-toTyp :: GHC.Type -> Main.Typ
-toTyp v = Main.Typ (S8.pack (GHC.showSDocUnsafe (GHC.ppr v)))
+toTyp :: GHC.Module -> GHC.Type -> Main.Typ
+toTyp m t =
+  case GHC.splitTyConApp_maybe t of
+    Nothing -> Main.OpaqueType (S8.pack (GHC.showSDocUnsafe (GHC.ppr t)))
+    Just (tyCon, tys) ->
+      Main.TyConApp (toId m (GHC.tyConName tyCon)) (map (toTyp m) tys)
 
 toDataCon :: GHC.Module -> GHC.DataCon -> Main.DataCon
 toDataCon m dc =
@@ -1248,7 +1253,10 @@ tag :: Word8 -> L.Builder
 tag = L.word8
 
 encodeType :: Typ -> L.Builder
-encodeType (Typ e) = encodeByteString e
+encodeType =
+  \case
+    OpaqueType e -> tag 0 <> encodeByteString e
+    TyConApp i es -> tag 1 <> encodeId i <> encodeArray (map encodeType es)
 
 encodeId :: Id -> L.Builder
 encodeId (Id bs u isDataCon) = encodeByteString bs <> encodeUnique u <> encodeCat isDataCon

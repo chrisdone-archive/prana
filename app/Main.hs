@@ -15,15 +15,19 @@ import           System.Environment
 
 main :: IO ()
 main = do
+  let fst3 (x,_,_) = x
+      snd3 (_,x,_) = x
+      thd3 (_,_,x) = x
   args <- getArgs
-  (indices, binds) <-
+  (indices, enums, binds) <-
     fmap
-      (\xs -> (concatMap fst xs, concatMap snd xs))
+      (\xs -> (concatMap fst3 xs, concatMap snd3 xs, concatMap thd3 xs))
       (mapM
          (\fp -> do
             bytes <- L.readFile fp
             case runGetOrFail
-                   ((,) <$> decodeArray decodeMethodIndex <*>
+                   ((,,) <$> decodeArray decodeMethodIndex <*>
+                    decodeArray decodeEnums <*>
                     decodeArray decodeBind)
                    bytes of
               Left e ->
@@ -31,8 +35,8 @@ main = do
                   ("failed to decode " ++
                    fp ++
                    ": " ++ show e ++ ", file contains: " ++ take 10 (show bytes))
-              Right (_, _, (indices, binds)) -> do
-                pure (indices, binds))
+              Right (_, _, (indices, enums, binds)) -> do
+                pure (indices, enums, binds))
          args)
   let !globals =
         (M.mapKeys
@@ -45,10 +49,11 @@ main = do
                  binds)))
       !methods = (M.mapKeys idStableName methods')
       methods' = M.fromList indices
+      enums' = M.mapKeys idStableName (M.fromList enums)
   -- From: https://mail.haskell.org/pipermail/ghc-devs/2018-November/016592.html
   -- > I've also learned that GHC wraps the* Main.main* function with another
   -- > function called *:Main.main* which is the first function called by the RTS.
-  case M.lookup "main:Demo.demo" globals {-"main:Main.main"-}
+  case M.lookup "main:Demo.demo" globals
         of
     Nothing ->
       error $
@@ -58,7 +63,7 @@ main = do
        "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
     Just e -> do
       catch
-        (do replicateM_ 1 (runInterpreter globals methods (e) >>= print)
+        (do replicateM_ 1 (runInterpreter globals methods enums' e >>= print)
             pure ())
         (\case
            NotInScope i ->
