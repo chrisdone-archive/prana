@@ -790,12 +790,9 @@ doMake srcs  = do
              tycons = GHC.mg_tcs guts
              dflags = hsc_dflags hsc_env
              location = GHC.ms_location modSummary
-             data_tycons = filter GHC.isDataTyCon tycons
+             enumTyCons = filter GHC.isEnumerationTyCon tycons
              core_binds = GHC.mg_binds guts
          bs <- pure core_binds
-         -- bs <-
-         --      liftIO (GHC.corePrepPgm hsc_env module' location
-         --                              core_binds data_tycons)
          let
              instances :: [GHC.ClsInst]
              instances = GHC.mg_insts guts
@@ -820,13 +817,22 @@ doMake srcs  = do
                encodeArray
                  (map (\(id,i) -> encodeId (toId module' id) <> encodeInt i)
                       methods)
-             -- dataCons =
-             --   encodeArray (map {-isDataConName-})
+             enumCons =
+               encodeArray
+                 (map
+                    (\tyCon ->
+                       let dataCons = GHC.tyConDataCons tyCon
+                       in encodeId (toId module' (GHC.tyConName tyCon)) <>
+                          encodeArray
+                            (map (\dataCon ->
+                                    encodeId (toId module' (GHC.dataConName dataCon)))
+                                 dataCons))
+                    enumTyCons)
 
          liftIO
            (L.writeFile
                 (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (methodIndices <> bindings))))
+                (L.toLazyByteString (methodIndices <> enumCons <> bindings))))
       mgraph
 
 toBind :: GHC.Module -> CoreSyn.Bind GHC.Var -> Main.Bind
