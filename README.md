@@ -40,6 +40,8 @@ Challenges:
   nodes. This would (ideally) allow keeping the AST in CPU cache,
   avoiding mainline memory accesses, leading to nice speeds.
 
+* Consider use of unboxed sums for the WHNF data type.
+
 ## Setup
 
 Build a docker image with a patched GHC that outputs .prana files:
