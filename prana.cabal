@@ -20,6 +20,8 @@ executable prana
   ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N -O2
   build-depends:       base
                      , prana, bytestring, binary, containers, syb, deepseq
+                     , optparse-simple
+                     , optparse-applicative
   default-language:    Haskell2010
 
 test-suite prana-test

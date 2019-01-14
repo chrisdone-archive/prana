@@ -19,24 +19,30 @@ class Pretty a where
   pretty :: a -> L.Builder
 
 data Bind
-  = NonRec Id
+  = NonRec VarId
            Exp
-  | Rec [(Id, Exp)]
+  | Rec [(VarId, Exp)]
   deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
 instance Pretty Bind where
   pretty =
     \case
-      NonRec i e -> pretty i <> " = " <> pretty e
+      NonRec _i e -> {-pretty i-}"TODO" <> " = " <> pretty e
       Rec pairs ->
         mconcat (intersperse "; " (map (pretty . uncurry NonRec) pairs))
 
 data Exp
-  = VarE Id
+  = VarE VarId
+  | ConE ConId
+  | PrimOpE PrimId
+  | WiredInE WiredId
+  | MethodE MethodId
+  | FFIE FFIId
+  | DictE DictId
   | LitE Lit
   | AppE Exp Exp
-  | LamE Bool Id Exp
-  | CaseE Exp Id Typ [Alt]
+  | LamE Bool VarId Exp
+  | CaseE Exp VarId Typ [Alt]
   | TypE Typ
   | CoercionE
   | LetE Bind Exp
@@ -47,15 +53,16 @@ data Exp
 instance Pretty Exp where
   pretty =
     \case
-      VarE i -> pretty i
+      VarE _i -> "TODO:VarE" {-pretty i-}
+      ConE _i -> "TODO:ConE" {-pretty i-}
       LitE l -> pretty l
       AppE f x -> "(" <> pretty f <> " " <> pretty x <> ")"
-      LamE ty i e ->
+      LamE ty _i e ->
         "(\\" <>
         (if ty
            then "@"
            else "") <>
-        pretty i <>
+        "TODO"{-pretty i-} <>
         " -> " <>
         pretty e <>
         ")"
@@ -69,14 +76,26 @@ instance Pretty Exp where
         mconcat (intersperse ";" (map pretty alts)) <>
         " })"
 
-instance Pretty Id where
-  pretty (Id i _ _) = L.byteString i
+data ConId = ConId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data Id = Id
-  { idStableName :: {-# UNPACK #-}!ByteString
-  , idUnique :: {-# UNPACK #-}!Unique
-  , idCategory :: !Cat
-  } deriving (Generic, Data, Typeable, Eq, Show, Ord)
+data PrimId = PrimId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data WiredId = WiredId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data MethodId = MethodId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data FFIId = FFIId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data DictId = DictId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data VarId = LocalIndex !Int | ExportedIndex !Int
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Cat
   = ValCat
@@ -84,27 +103,30 @@ data Cat
   | ClassCat
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data Typ = TyConApp Id [Typ] | OpaqueType ByteString
+data TyId = TyId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data Typ = TyConApp TyId [Typ] | OpaqueType ByteString
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 instance Pretty Typ where
   pretty =
     \case
       (OpaqueType ty) -> "Type[" <> L.byteString ty <> "]"
-      (TyConApp i tys) ->
-        "TyConApp(" <> pretty i <> ")[" <>
+      (TyConApp _i tys) ->
+        "TyConApp(" <> "TODO"{-pretty i-} <> ")[" <>
         mconcat (intersperse ", " (map pretty tys)) <>
         "]"
 
 data Alt = Alt
   { altCon :: AltCon
-  , altVars :: [Id]
+  , altVars :: [VarId]
   , altExp :: Exp
   } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 instance Pretty Alt where
   pretty (Alt con ids e) =
-    pretty con <> "(" <> mconcat (intersperse " " (map pretty ids)) <> ") -> " <>
+    pretty con <> "(" <> mconcat (intersperse " " (map (const "TODO"{-pretty-}) ids)) <> ") -> " <>
     pretty e
 
 data AltCon
@@ -116,7 +138,7 @@ data AltCon
 instance Pretty AltCon where
   pretty =
     \case
-      DataAlt (DataCon i strictness) -> pretty i <> "[" <> fromString (show strictness) <> "]"
+      DataAlt (DataCon _i strictness) -> "TODO"{-pretty i-} <> "[" <> fromString (show strictness) <> "]"
       LitAlt l -> pretty l
       DEFAULT -> "_"
 
@@ -126,7 +148,7 @@ newtype Unique = Unique Int
 data Strictness = Strict | NonStrict
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data DataCon = DataCon Id [Strictness]
+data DataCon = DataCon ConId [Strictness]
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Lit
@@ -158,3 +180,18 @@ instance Pretty Lit where
               Integer c -> render c
     where render :: Show a => a -> L.Builder
           render = L.byteString . S8.pack . show
+
+data ExportedId =
+  ExportedId
+    { exportedIdPackage :: {-# UNPACK  #-}!ByteString
+    , exportedIdModule  :: {-# UNPACK  #-}!ByteString
+    , exportedIdName    :: {-# UNPACK  #-}!ByteString
+    } deriving (Show, Ord, Eq)
+
+data LocalId =
+  LocalId
+    { localIdPackage :: {-# UNPACK  #-}!ByteString
+    , localIdModule  :: {-# UNPACK  #-}!ByteString
+    , localIdName    :: {-# UNPACK  #-}!ByteString
+    , localIdUnique  :: {-# UNPACK  #-}!Int
+    } deriving (Show, Ord, Eq)

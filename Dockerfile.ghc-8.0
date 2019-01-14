@@ -68,7 +68,9 @@ ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
 
 ENV PREFIX /root/prana
 
-RUN mkdir -p $PREFIX/package.conf.d && \
+RUN mkdir $PREFIX && \
+    touch $PREFIX/names.txt && \
+    mkdir -p $PREFIX/package.conf.d && \
     ghc-pkg --package-db $PREFIX/package.conf.d recache && \
     ghc-pkg --package-db $PREFIX/package.conf.d list
 
@@ -82,6 +84,9 @@ RUN echo 'import Distribution.Simple; main = defaultMain' > Setup.hs && \
 RUN cp dist/build/genprimopcode/genprimopcode .
 
 WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
+
+# Clear the names database
+RUN rm $PREFIX/names.txt; touch $PREFIX/names.txt
 
 RUN cp /root/ghc_build/ghc-8.0/compiler/stage2/build/primops.txt ../../compiler/prelude/primops.txt && \
     ghc Setup.hs && \
@@ -109,6 +114,3 @@ RUN ghc -hide-all-packages -package Cabal Setup.hs -XNoImplicitPrelude
 RUN ./Setup configure -finteger-gmp --package-db $PREFIX/package.conf.d --prefix $PREFIX --ghc-options=-O0 && \
     ./Setup build -v && \
     ./Setup install
-
-WORKDIR /root/ghc_build/ghc-8.0/libraries/
-RUN find . -name '*.prana' | grep -v 'main_Main.prana' | xargs tar czf libraries.tar.gz
