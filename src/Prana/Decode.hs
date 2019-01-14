@@ -10,6 +10,16 @@ import qualified Data.ByteString.Char8 as S8
 import           GHC.Real
 import           Prana.Types
 
+decodeExportedId :: Get ExportedId
+decodeExportedId =
+  ExportedId <$> decodeShortByteString <*> decodeShortByteString <*>
+  decodeShortByteString
+
+decodeLocalId :: Get LocalId
+decodeLocalId =
+  LocalId <$> decodeShortByteString <*> decodeShortByteString <*>
+  decodeShortByteString <*> decodeInt
+
 decodeMethodIndex :: Get (Id, Int)
 decodeMethodIndex = label "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
 
@@ -136,6 +146,12 @@ decodeByteString :: Get ByteString
 decodeByteString =
   label "decodeByteString" $ do
     len <- getInt64le
+    getByteString (fromIntegral len)
+
+decodeShortByteString :: Get ByteString
+decodeShortByteString =
+  label "decodeShortByteString" $ do
+    len <- getInt16le
     getByteString (fromIntegral len)
 
 decodeChar :: Get Char

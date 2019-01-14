@@ -3,18 +3,84 @@
 
 module Main where
 
-import           Control.Exception
-import           Control.Monad
-import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
-import qualified Data.Map.Strict as M
+import           Data.Binary.Get
+import qualified Data.ByteString.Char8 as S8
+import qualified Data.ByteString.Lazy.Builder as L
+import           Data.Function
+import           Data.List
+import           Options.Applicative.Simple
 import           Prana.Decode
-import           Prana.Interpret
 import           Prana.Types
-import           System.Environment
 
 main :: IO ()
 main = do
+  (_, runCmd) <-
+    simpleOptions "0" "Prana" "Prana desc" (pure ()) $ do
+      addCommand
+        "exported-names"
+        "List all exported names"
+        listExporteds
+        (strOption (long "path"))
+      addCommand
+        "local-names"
+        "List all local names"
+        listLocals
+        (strOption (long "path"))
+  runCmd
+
+listExporteds :: FilePath -> IO ()
+listExporteds path = do
+  bytes <- L.readFile path
+  case runGetOrFail (decodeArray decodeExportedId) bytes of
+    Left e -> error (show e)
+    Right (_, _, es) ->
+      mapM_
+        (\modules@((i0:_):_) -> do
+           S8.putStrLn (exportedIdPackage i0)
+           mapM_
+             (\ids@(i:_) -> do
+                S8.putStrLn ("\n  " <> exportedIdModule i <> "\n")
+                mapM_ (S8.putStrLn . ("    " <>) . exportedIdName) ids)
+             modules
+           S8.putStrLn "")
+        packages
+      where packages =
+              map
+                (groupBy (on (==) exportedIdModule))
+                (groupBy (on (==) exportedIdPackage) es)
+
+listLocals :: FilePath -> IO ()
+listLocals path = do
+  bytes <- L.readFile path
+  case runGetOrFail
+         (decodeArray decodeExportedId *> decodeArray decodeLocalId)
+         bytes of
+    Left e -> error (show e)
+    Right (_, _, es) ->
+      mapM_
+        (\modules@((i0:_):_) -> do
+           S8.putStrLn (localIdPackage i0)
+           mapM_
+             (\ids@(i:_) -> do
+                S8.putStrLn ("\n  " <> localIdModule i <> "\n")
+                mapM_
+                  (\n ->
+                     S8.putStrLn
+                       ("    " <> localIdName n <> " " <>
+                        L.toStrict
+                          (L.toLazyByteString
+                             (L.int64HexFixed (fromIntegral (localIdUnique n))))))
+                  ids)
+             modules
+           S8.putStrLn "")
+        packages
+      where packages =
+              map
+                (groupBy (on (==) localIdModule))
+                (groupBy (on (==) localIdPackage) es)
+
+{-main = do
   let fst3 (x,_,_) = x
       snd3 (_,x,_) = x
       thd3 (_,_,x) = x
@@ -72,4 +138,4 @@ main = do
              ("Methods\n" ++
               unlines (map show (M.keys methods)) ++
               "\n" ++ "Scope\n" ++ unlines (map show (M.keys globals)))
-           err -> error (show err))
+           err -> error (show err))-}

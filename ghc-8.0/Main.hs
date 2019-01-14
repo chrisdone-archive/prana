@@ -1,5 +1,6 @@
 -- <prana>
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE CPP #-}
@@ -41,7 +42,13 @@ module Main  where
 -- <prana>
 import GHC.Generics
 import Data.Word
+import System.Directory (renameFile)
+import qualified Data.Int
+import Data.Bits
+import qualified Data.ByteString.Unsafe as S
+import Control.Concurrent (threadDelay)
 import Data.Semigroup
+import Control.Exception (IOException, bracket, catch)
 import qualified DataCon as GHC
 import qualified CorePrep as GHC
 import qualified Type as GHC
@@ -782,82 +789,242 @@ doMake srcs  = do
     return ()
 
 -- <prana>
-    mgraph <- GHC.getModuleGraph
-    mapM_
-      (\modSummary -> do
-         liftIO (hPutStrLn stderr ("Writing " ++ moduleToFilePath (GHC.ms_mod modSummary)))
-         guts <- compile modSummary
-         let module' = GHC.ms_mod modSummary
-             tycons = GHC.mg_tcs guts
-             dflags = hsc_dflags hsc_env
-             location = GHC.ms_location modSummary
-             enumTyCons = filter GHC.isEnumerationTyCon tycons
-             core_binds = GHC.mg_binds guts
-         bs <- pure core_binds
-         let
-             instances :: [GHC.ClsInst]
-             instances = GHC.mg_insts guts
-             methods :: [(GHC.Id, Int)]
-             methods =
-               concatMap
-                 (\clsInst ->
-                    let tyVars = GHC.is_tvs clsInst
-                        cls = GHC.is_cls clsInst
-                        methods = GHC.classAllSelIds cls
-                     in if length methods == 1
-                           then zip methods [-1]
-                           else zip methods [0 ..])
-                 instances
+    doPrana
 
-         let
-             bindings =
-               encodeArray
-                 (map (encodeBind . toBind module')
-                      bs)
-             methodIndices =
-               encodeArray
-                 (map (\(id,i) -> encodeId (toId module' id) <> encodeInt i)
-                      methods)
-             enumCons =
-               encodeArray
-                 (map
-                    (\tyCon ->
-                       let dataCons = GHC.tyConDataCons tyCon
-                       in encodeId (toId module' (GHC.tyConName tyCon)) <>
-                          encodeArray
-                            (map (\dataCon ->
-                                    encodeId (toId module' (GHC.dataConName dataCon)))
-                                 dataCons))
-                    enumTyCons)
+doPrana = do
+  mgraph <- GHC.getModuleGraph
+  withIdDatabase
+    (\(exportedIds0, localIds0) ->
+       foldM
+         (\(exportedIds00, localIds00) modSummary -> do
+            liftIO
+              (putStr
+                 ("Writing " ++
+                  moduleToFilePath (GHC.ms_mod modSummary) ++ " ... "))
+            guts <- compile modSummary
+            let bs = GHC.mg_binds guts
+                m = GHC.ms_mod modSummary
+                shallowIds =
+                  filter (isFromModule m) (concatMap shallowBindingVars bs)
+                deepIds = filter (isFromModule m) ((deepBindingVars bs))
+                exportedIds =
+                  exportedIds00 ++
+                  map (toExportedId m) (filter GHC.isExportedId shallowIds)
+                localIds =
+                  concat
+                    [ localIds00
+                    , map
+                        (toLocalId m)
+                        (filter (not . GHC.isExportedId) deepIds)
+                    , map
+                        (toLocalId m)
+                        (filter (not . GHC.isExportedId) shallowIds)
+                    ]
+                context =
+                  Context
+                    { contextModule = m
+                    , contextExportedIds = exportedIds
+                    , contextLocalIds = localIds
+                    }
+                binds = map (toBind context) bs
+            liftIO
+              (L.writeFile
+                 (moduleToFilePath m)
+                 (L.toLazyByteString (encodeArray (map encodeBind binds))))
+            liftIO (putStrLn ("done."))
+            pure (exportedIds, localIds))
+         (exportedIds0, localIds0)
+         -- FIXME: This is a hack to avoid the compilation of Cabal's
+         -- Setup.hs main package before we've built base, ghc-prim
+         -- and integer-gmp.
+         (filter
+            (\modSummary ->
+               GHC.unpackFS
+                 (GHC.unitIdFS (GHC.moduleUnitId (GHC.ms_mod modSummary))) /= "main")
+            mgraph))
 
-         liftIO
-           (L.writeFile
-                (moduleToFilePath (GHC.ms_mod modSummary))
-                (L.toLazyByteString (methodIndices <> enumCons <> bindings))))
-      mgraph
+deepBindingVars :: [CoreSyn.Bind GHC.Var] -> [GHC.Var]
+deepBindingVars = ordNub . concatMap getBindings
+  where
+    getBindings =
+      concatMap
+        (\case
+           CoreSyn.Let bs _ -> shallowBindingVars bs
+           CoreSyn.Lam var _ -> [var]
+           CoreSyn.Case _ var _ alts ->
+             var :
+             concatMap (\(_con, vars, e) -> vars) alts
+           _ -> []) .
+      listify (const True)
 
-toBind :: GHC.Module -> CoreSyn.Bind GHC.Var -> Main.Bind
+shallowBindingVars :: CoreSyn.Bind GHC.Var -> [GHC.Var]
+shallowBindingVars =
+  \case
+    CoreSyn.NonRec i _ -> [i]
+    CoreSyn.Rec rs -> map fst rs
+
+-- without ordNub and using plain listify: -rw-r--r-- 1 root root 7.3M Jan 15 23:53 /root/prana/names.txt
+
+isFromModule m = maybe True (== m) . GHC.nameModule_maybe . GHC.getName
+
+withIdDatabase :: (([ExportedId], [LocalId]) -> Ghc ([ExportedId],[LocalId])) -> Ghc ()
+withIdDatabase cont =
+  GHC.gbracket
+    (liftIO lock)
+    (const (liftIO unlock))
+    (\() -> do
+       existing <- liftIO (S.readFile namesLocked)
+       (exported, locals) <- cont (decodeIds existing)
+       liftIO
+         (L.writeFile
+            namesReady
+            (L.toLazyByteString (encodeExportedIds exported <> encodeLocalIds locals)))
+       liftIO (renameFile namesReady namesLocked))
+  where
+    lock =
+      catch
+        (renameFile namesUnlocked namesLocked)
+        (\(_ :: IOException) -> do
+           putStrLn ("Waiting for lock on " ++ namesUnlocked ++ " ...")
+           threadDelay (1000 * 1000)
+           lock)
+    unlock = renameFile namesLocked namesUnlocked
+
+namesLocked = namesUnlocked ++ ".lock"
+namesUnlocked = "/root/prana/names.txt"
+namesReady = namesLocked ++ ".new"
+
+decodeIds :: ByteString -> ([ExportedId],[LocalId])
+decodeIds s0
+  | S.null s0 = ([], [])
+  | otherwise = decodeExported (readInt s0) [] (S.drop 8 s0)
+  where
+    decodeExported 0 acc s =
+      (reverse acc, decodeLocal (readInt s) [] (S.drop 8 s))
+    decodeExported n acc s =
+      let (pkg, s') = readShortByteString s
+          (md, s'') = readShortByteString s'
+          (name, s''') = readShortByteString s''
+       in decodeExported
+            (n - 1)
+            (ExportedId
+               { exportedIdPackage = pkg
+               , exportedIdModule = md
+               , exportedIdName = name
+               } :
+             acc)
+            s'''
+    decodeLocal 0 acc _ = reverse acc
+    decodeLocal n acc s =
+      let (pkg, s') = readShortByteString s
+          (md, s'') = readShortByteString s'
+          (name, s''') = readShortByteString s''
+       in decodeLocal
+            (n - 1)
+            (LocalId
+               { localIdPackage = pkg
+               , localIdModule = md
+               , localIdName = name
+               , localIdUnique = readInt s'''
+               } :
+             acc)
+            (S.drop 8 s''')
+
+encodeExportedIds :: [ExportedId] -> L.Builder
+encodeExportedIds =
+  encodeArray .
+  map
+    (\(ExportedId pkg md name) ->
+       encodeShortByteString pkg <> encodeShortByteString md <>
+       encodeShortByteString name)
+
+encodeLocalIds :: [LocalId] -> L.Builder
+encodeLocalIds =
+  encodeArray .
+  map
+    (\(LocalId pkg md name uniq) ->
+       encodeShortByteString pkg <> encodeShortByteString md <>
+       encodeShortByteString name <>
+       L.int64LE (fromIntegral uniq))
+
+{-# INLINE readByteString #-}
+-- | Read a ByteString from the encoding.
+readByteString :: ByteString -> (ByteString, ByteString)
+readByteString bs = (str, leftover)
+  where str = S.unsafeTake (readInt bs) (S.unsafeDrop 8 bs)
+        leftover = S.unsafeDrop (readInt bs + 8) bs
+
+-- | Read a ByteString from the encoding.
+readShortByteString :: ByteString -> (ByteString, ByteString)
+readShortByteString bs = (str, leftover)
+  where str = S.unsafeTake (fromIntegral (readInt16 bs)) (S.unsafeDrop 2 bs)
+        leftover = S.unsafeDrop (fromIntegral (readInt16 bs + 2)) bs
+
+{-# INLINE readInt16 #-}
+readInt16 :: ByteString -> Data.Int.Int16
+readInt16 = fromIntegral . readWord16le
+
+{-# INLINE readInt #-}
+readInt :: ByteString -> Int
+readInt = fromIntegral . readInt64
+
+{-# INLINE readInt64 #-}
+readInt64 :: ByteString -> Data.Int.Int64
+readInt64 = fromIntegral . readWord64
+
+readWord16le :: ByteString -> Word16
+readWord16le = \s ->
+              (fromIntegral (s `S.unsafeIndex` 1) `unsafeShiftL` 8) .|.
+              (fromIntegral (s `S.unsafeIndex` 0) )
+
+{-# INLINE readWord64 #-}
+readWord64 :: ByteString -> Word64
+readWord64 s =
+  x7 `unsafeShiftL` 56 .|. x6 `unsafeShiftL` 48 .|. x5 `unsafeShiftL` 40 .|.
+  x4 `unsafeShiftL` 32 .|.
+  x3 `unsafeShiftL` 24 .|.
+  x2 `unsafeShiftL` 16 .|.
+  x1 `unsafeShiftL` 8 .|.
+  x0
+  where
+    x0 = fromIntegral (S.unsafeIndex s 0) :: Word64
+    x1 = fromIntegral (S.unsafeIndex s 1) :: Word64
+    x2 = fromIntegral (S.unsafeIndex s 2) :: Word64
+    x3 = fromIntegral (S.unsafeIndex s 3) :: Word64
+    x4 = fromIntegral (S.unsafeIndex s 4) :: Word64
+    x5 = fromIntegral (S.unsafeIndex s 5) :: Word64
+    x6 = fromIntegral (S.unsafeIndex s 6) :: Word64
+    x7 = fromIntegral (S.unsafeIndex s 7) :: Word64
+
+data Context =
+  Context { contextModule :: GHC.Module
+          , contextExportedIds :: [ExportedId]
+          , contextLocalIds :: [LocalId]
+          , contextCons :: [ConId]
+          }
+
+toBind :: Context -> CoreSyn.Bind GHC.Var -> Main.Bind
 toBind m = \case
-  CoreSyn.NonRec v e -> Main.NonRec (toId m v) (toExp m e)
-  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toId m v,toExp m e)) bs)
+  CoreSyn.NonRec v e -> Main.NonRec (toVarId m v) (toExp m e)
+  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toVarId m v,toExp m e)) bs)
 
-toExp :: GHC.Module -> CoreSyn.Expr GHC.Var -> Main.Exp
+toExp :: Context -> CoreSyn.Expr GHC.Var -> Main.Exp
 toExp m = \case
- CoreSyn.Var i -> Main.VarE (toId m i)
+ CoreSyn.Var i                  -> toSomeIdExp m i
  CoreSyn.Lit i                  -> Main.LitE (toLit i)
  CoreSyn.App f x                -> Main.AppE (toExp m f) (toExp m x)
- CoreSyn.Lam var body           -> Main.LamE (GHC.isTyVar var) (toId m var) (toExp m body)
+ CoreSyn.Lam var body           -> Main.LamE (GHC.isTyVar var) (toVarId m var) (toExp m body)
  CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
- CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toId m var) (toTyp m typ) (map (toAlt m) alts)
+ CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toVarId m var) (toTyp m typ) (map (toAlt m) alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
  CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp m expr)
  CoreSyn.Type typ               -> Main.TypE (toTyp m typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
-toAlt :: GHC.Module -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
-toAlt m (con,vars,e) = Alt (toAltCon m con) (map (toId m) vars) (toExp m e)
+toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
+toAlt m (con,vars,e) = Alt (toAltCon m con) (map (toVarId m) vars) (toExp m e)
 
-toAltCon :: GHC.Module -> CoreSyn.AltCon -> Main.AltCon
+toAltCon :: Context -> CoreSyn.AltCon -> Main.AltCon
 toAltCon m =
   \case
     CoreSyn.DataAlt dataCon -> DataAlt (toDataCon m dataCon)
@@ -879,17 +1046,17 @@ toLit =
     GHC.MachLabel _ _ _     -> Label
     GHC.LitInteger i _typ   -> Integer i
 
-toTyp :: GHC.Module -> GHC.Type -> Main.Typ
+toTyp :: Context -> GHC.Type -> Main.Typ
 toTyp m t =
   case GHC.splitTyConApp_maybe t of
     Nothing -> Main.OpaqueType (S8.pack (GHC.showSDocUnsafe (GHC.ppr t)))
     Just (tyCon, tys) ->
-      Main.TyConApp (toId m (GHC.tyConName tyCon)) (map (toTyp m) tys)
+      Main.TyConApp (toTyId m (GHC.tyConName tyCon)) (map (toTyp m) tys)
 
-toDataCon :: GHC.Module -> GHC.DataCon -> Main.DataCon
+toDataCon :: Context -> GHC.DataCon -> Main.DataCon
 toDataCon m dc =
   Main.DataCon
-    (toId m (GHC.dataConName dc))
+    (toConId m (GHC.dataConName dc))
     (map toStrictness (GHC.dataConImplBangs dc))
   where
     toStrictness =
@@ -898,16 +1065,80 @@ toDataCon m dc =
         GHC.HsStrict -> Strict
         GHC.HsUnpack mc -> Strict
 
-toId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.Id
-toId m thing = Main.Id bs unique cat
+toConId :: GHC.NamedThing thing => Context -> thing -> Main.ConId
+toConId _ _ = Main.ConId
+
+toTyId :: GHC.NamedThing thing => Context -> thing -> Main.TyId
+toTyId _ _ = Main.TyId
+
+toSomeIdExp :: Context -> GHC.Var -> Main.Exp
+toSomeIdExp m var =
+  case GHC.isDataConId_maybe var of
+    Nothing ->
+      case GHC.isPrimOpId_maybe var of
+        Nothing -> Main.VarE (toVarId m var)
+        Just primOp -> Main.PrimOpE Main.PrimId
+    Just dataCon -> Main.ConE Main.ConId
+
+toVarId :: Context -> GHC.Var -> Main.VarId
+toVarId m var =
+  if GHC.isExportedId var
+    then case lookup i0 (zip (contextExportedIds m) [0 ..]) of
+           Just idx -> ExportedIndex idx
+           Nothing ->
+             error
+               (unlines
+                  [ "Not in exported scope: " ++
+                    show (toExportedId (contextModule m) var)
+                  , "I have these in that package and module:"
+                  , unlines
+                      (map
+                         show
+                         (filter
+                            (\i ->
+                               exportedIdPackage i == exportedIdPackage i0 &&
+                               exportedIdModule i == exportedIdModule i0)
+                            (contextExportedIds m)))
+                  ])
+    else case lookup
+                (toLocalId (contextModule m) var)
+                (zip (contextLocalIds m) [0 ..]) of
+           Just idx -> LocalIndex idx
+           Nothing ->
+             error
+               ("Not in local scope: " ++ show (toLocalId (contextModule m) var))
   where
-    (bs,cat) =
-      qualifiedNameByteString
-        (if GHC.isInternalName name
-           then qualify m name
-           else name)
-    unique = Main.Unique (GHC.getKey (GHC.getUnique name))
-    name = GHC.getName thing
+    i0 = toExportedId (contextModule m) var
+
+toExportedId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.ExportedId
+toExportedId m thing =
+  if GHC.isInternalName name
+    then error "toExportedId: external name given"
+    else Main.ExportedId package module' name'
+  where
+    package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
+    module' =
+      GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName (GHC.nameModule name)))
+    name' = GHC.fs_bs (GHC.getOccFS name)
+    name = case GHC.nameModule_maybe n of
+             Nothing -> qualify m n
+             Just{} -> n
+          where n = GHC.getName thing
+
+toLocalId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.LocalId
+toLocalId m thing =
+  if GHC.isInternalName name
+    then error "toLocalId: external name given"
+    else Main.LocalId package module' name' (GHC.getKey (GHC.getUnique name))
+  where
+    package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
+    module' =
+      GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName (GHC.nameModule name)))
+    name' = GHC.fs_bs (GHC.getOccFS name)
+    name = case GHC.nameModule_maybe n of
+             Nothing -> qualify m n
+             Just{} -> n
+          where n = GHC.getName thing
 
 qualify :: GHC.Module -> GHC.Name -> GHC.Name
 qualify m name =
@@ -1210,6 +1441,8 @@ encodeExpr =
     Main.TickE expr              -> tag 7 <> encodeExpr expr
     Main.TypE typ                -> tag 8 <> encodeType typ
     Main.CoercionE               -> tag 9
+    Main.ConE i                  -> tag 10 <> encodeConId i
+    Main.PrimOpE i               -> tag 11 <> encodePrimId i
 
 encodeLit :: Main.Lit -> L.Builder
 encodeLit =
@@ -1256,10 +1489,20 @@ encodeType :: Typ -> L.Builder
 encodeType =
   \case
     OpaqueType e -> tag 0 <> encodeByteString e
-    TyConApp i es -> tag 1 <> encodeId i <> encodeArray (map encodeType es)
+    TyConApp i es -> tag 1 <> encodeTyId i <> encodeArray (map encodeType es)
 
-encodeId :: Id -> L.Builder
-encodeId (Id bs u isDataCon) = encodeByteString bs <> encodeUnique u <> encodeCat isDataCon
+encodeId :: VarId -> L.Builder
+encodeId (LocalIndex x) = L.int64LE (fromIntegral x)
+encodeId (ExportedIndex x) = L.int64LE (fromIntegral x)
+
+encodeConId :: ConId -> L.Builder
+encodeConId _ = mempty
+
+encodePrimId :: PrimId -> L.Builder
+encodePrimId _ = mempty
+
+encodeTyId :: TyId -> L.Builder
+encodeTyId _ = mempty
 
 encodeCat :: Cat -> L.Builder
 encodeCat =
@@ -1270,7 +1513,7 @@ encodeCat =
      ClassCat -> 2)
 
 encodeDataCon :: DataCon -> L.Builder
-encodeDataCon (DataCon e ss) = encodeId e <> encodeArray (map encodeStrictness ss)
+encodeDataCon (DataCon e ss) = encodeConId e <> encodeArray (map encodeStrictness ss)
 
 encodeStrictness :: Strictness -> L.Builder
 encodeStrictness =
@@ -1286,6 +1529,11 @@ encodeByteString x =
   L.int64LE (fromIntegral (S.length x)) <>
   L.byteString x
 
+encodeShortByteString :: ByteString -> L.Builder
+encodeShortByteString x =
+  L.int16LE (fromIntegral (S.length x)) <>
+  L.byteString x
+
 encodeLazyByteString :: L.ByteString -> L.Builder
 encodeLazyByteString x =
   L.int64LE (fromIntegral (L.length x)) <>
@@ -1296,3 +1544,111 @@ encodeChar = L.int64LE . fromIntegral . fromEnum
 
 encodeArray :: [L.Builder] -> L.Builder
 encodeArray v = L.int64LE (fromIntegral (length v)) <> mconcat v
+
+--------------------------------------------------------------------------------
+-- Extra utils
+
+-- See Note: Order of constructors
+data Set a    = Bin {-# UNPACK #-} !Size !a !(Set a) !(Set a)
+              | Tip
+
+type Size     = Int
+
+-- | /O(1)/. Create a singleton set.
+singleton_set :: a -> Set a
+singleton_set x = Bin 1 x Tip Tip
+{-# INLINE singleton_set #-}
+
+-- See Note: Type of local 'go' function
+insert_set :: Ord a => a -> Set a -> Set a
+insert_set = go
+  where
+    go :: Ord a => a -> Set a -> Set a
+    go !x Tip = singleton_set x
+    go !x (Bin sz y l r) = case compare x y of
+        LT -> balanceL y (go x l) r
+        GT -> balanceR y l (go x r)
+        EQ -> Bin sz x l r
+{-# INLINABLE insert_set #-}
+
+balanceL :: a -> Set a -> Set a -> Set a
+balanceL x l r = case r of
+  Tip -> case l of
+           Tip -> Bin 1 x Tip Tip
+           (Bin _ _ Tip Tip) -> Bin 2 x l Tip
+           (Bin _ lx Tip (Bin _ lrx _ _)) -> Bin 3 lrx (Bin 1 lx Tip Tip) (Bin 1 x Tip Tip)
+           (Bin _ lx ll@(Bin _ _ _ _) Tip) -> Bin 3 lx ll (Bin 1 x Tip Tip)
+           (Bin ls lx ll@(Bin lls _ _ _) lr@(Bin lrs lrx lrl lrr))
+             | lrs < ratio*lls -> Bin (1+ls) lx ll (Bin (1+lrs) x lr Tip)
+             | otherwise -> Bin (1+ls) lrx (Bin (1+lls+size lrl) lx ll lrl) (Bin (1+size lrr) x lrr Tip)
+
+  (Bin rs _ _ _) -> case l of
+           Tip -> Bin (1+rs) x Tip r
+
+           (Bin ls lx ll lr)
+              | ls > delta*rs  -> case (ll, lr) of
+                   (Bin lls _ _ _, Bin lrs lrx lrl lrr)
+                     | lrs < ratio*lls -> Bin (1+ls+rs) lx ll (Bin (1+rs+lrs) x lr r)
+                     | otherwise -> Bin (1+ls+rs) lrx (Bin (1+lls+size lrl) lx ll lrl) (Bin (1+rs+size lrr) x lrr r)
+                   (_, _) -> error "Failure in Data.Map.balanceL"
+              | otherwise -> Bin (1+ls+rs) x l r
+{-# NOINLINE balanceL #-}
+
+balanceR :: a -> Set a -> Set a -> Set a
+balanceR x l r = case l of
+  Tip -> case r of
+           Tip -> Bin 1 x Tip Tip
+           (Bin _ _ Tip Tip) -> Bin 2 x Tip r
+           (Bin _ rx Tip rr@(Bin _ _ _ _)) -> Bin 3 rx (Bin 1 x Tip Tip) rr
+           (Bin _ rx (Bin _ rlx _ _) Tip) -> Bin 3 rlx (Bin 1 x Tip Tip) (Bin 1 rx Tip Tip)
+           (Bin rs rx rl@(Bin rls rlx rll rlr) rr@(Bin rrs _ _ _))
+             | rls < ratio*rrs -> Bin (1+rs) rx (Bin (1+rls) x Tip rl) rr
+             | otherwise -> Bin (1+rs) rlx (Bin (1+size rll) x Tip rll) (Bin (1+rrs+size rlr) rx rlr rr)
+
+  (Bin ls _ _ _) -> case r of
+           Tip -> Bin (1+ls) x l Tip
+
+           (Bin rs rx rl rr)
+              | rs > delta*ls  -> case (rl, rr) of
+                   (Bin rls rlx rll rlr, Bin rrs _ _ _)
+                     | rls < ratio*rrs -> Bin (1+ls+rs) rx (Bin (1+ls+rls) x l rl) rr
+                     | otherwise -> Bin (1+ls+rs) rlx (Bin (1+ls+size rll) x l rll) (Bin (1+rrs+size rlr) rx rlr rr)
+                   (_, _) -> error "Failure in Data.Map.balanceR"
+              | otherwise -> Bin (1+ls+rs) x l r
+{-# NOINLINE balanceR #-}
+
+delta,ratio :: Int
+delta = 3
+ratio = 2
+
+size :: Set a -> Int
+size Tip = 0
+size (Bin sz _ _ _) = sz
+{-# INLINE size #-}
+
+empty_set  :: Set a
+empty_set = Tip
+{-# INLINE empty_set #-}
+
+-- | /O(log n)/. Is the element in the set?
+member :: Ord a => a -> Set a -> Bool
+member = go
+  where
+    go !_ Tip = False
+    go !x (Bin _ y l r) = case compare x y of
+      LT -> go x l
+      GT -> go x r
+      EQ -> True
+{-# INLINABLE member #-}
+
+-- We define 'ordNub' here to give GHC as many opportunities to
+-- optimize as possible.
+
+ordNub :: Ord a => [a] -> [a]
+ordNub = go empty_set
+  where
+    go _ [] = []
+    go s (x : xs) =
+      if member x s
+        then go s xs
+        else x : go (insert_set x s) xs
