@@ -65,6 +65,7 @@ import qualified Class as GHC
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Lazy.Char8 as L8
 import qualified Data.ByteString.Builder as L
 import           Data.ByteString (ByteString)
 import qualified Outputable as GHC
@@ -806,9 +807,8 @@ doPrana dflags' = do
               guts <- compile modSummary
               let bs = GHC.mg_binds guts
                   m = GHC.ms_mod modSummary
-                  shallowIds =
-                    filter (isFromModule m) (concatMap shallowBindingVars bs)
-                  deepIds = filter (isFromModule m) ((deepBindingVars bs))
+                  shallowIds = concatMap shallowBindingVars bs
+                  deepIds = deepBindingVars bs
                   exportedIds =
                     exportedIds00 ++
                     map (toExportedId m) (filter GHC.isExportedId shallowIds)
@@ -867,7 +867,7 @@ deepBindingVars = ordNub . concatMap getBindings
       concatMap
         (\case
            CoreSyn.Let bs _ -> shallowBindingVars bs
-           CoreSyn.Lam var _ -> [var]
+           CoreSyn.Lam var e -> [var]
            CoreSyn.Case _ var _ alts ->
              var :
              concatMap (\(_con, vars, e) -> vars) alts
@@ -880,9 +880,7 @@ shallowBindingVars =
     CoreSyn.NonRec i _ -> [i]
     CoreSyn.Rec rs -> map fst rs
 
--- without ordNub and using plain listify: -rw-r--r-- 1 root root 7.3M Jan 15 23:53 /root/prana/names.txt
-
-isFromModule m = maybe True (== m) . GHC.nameModule_maybe . GHC.getName
+-- isFromModule m _ = maybe True (== m) . GHC.nameModule_maybe . GHC.getName
 
 withIdDatabase :: (([ExportedId], [LocalId]) -> Ghc ([ExportedId],[LocalId])) -> Ghc ()
 withIdDatabase cont =
@@ -1094,24 +1092,26 @@ toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
 toSomeIdExp m var =
-  case GHC.isDataConId_maybe var of
-    Just dataCon -> Main.ConE Main.ConId
-    Nothing ->
-      case GHC.isPrimOpId_maybe var of
-        Just primOp -> Main.PrimOpE Main.PrimId
-        Nothing ->
-          case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
-            Just wiredIn -> Main.WiredInE Main.WiredId
-            Nothing ->
-              case GHC.isClassOpId_maybe var of
-                Just cls -> Main.MethodE Main.MethodId
-                Nothing ->
-                  case GHC.isFCallId_maybe var of
-                    Just fcall -> Main.FFIE Main.FFIId
-                    Nothing ->
-                      case GHC.isDictId var of
-                        True -> Main.DictE Main.DictId
-                        False -> Main.VarE (toVarId m var)
+  if GHC.isSystemName (GHC.getName var)
+    then Main.SysE Main.SysId
+    else case GHC.isDataConId_maybe var of
+           Just dataCon -> Main.ConE Main.ConId
+           Nothing ->
+             case GHC.isPrimOpId_maybe var of
+               Just primOp -> Main.PrimOpE Main.PrimId
+               Nothing ->
+                 case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
+                   Just wiredIn -> Main.WiredInE Main.WiredId
+                   Nothing ->
+                     case GHC.isClassOpId_maybe var of
+                       Just cls -> Main.MethodE Main.MethodId
+                       Nothing ->
+                         case GHC.isFCallId_maybe var of
+                           Just fcall -> Main.FFIE Main.FFIId
+                           Nothing ->
+                             case GHC.isDictId var of
+                               True -> Main.DictE Main.DictId
+                               False -> Main.VarE (toVarId m var)
 
 toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
@@ -1154,11 +1154,16 @@ toVarId m var =
                                localIdPackage i == localIdPackage i1 &&
                                localIdModule i == localIdModule i1)
                             (contextLocalIds m)))
-                  , "Expression: "
+                  , "Expression:"
                   , maybe
                       ""
                       (showSDoc (contextDynFlags m) . ppr)
                       (contextCore m)
+                  ,"AKA:"
+                  ,maybe
+                       ""
+                       (L8.unpack . L.toLazyByteString . showExpr False)
+                       (contextCore m)
                   ])
   where
     i0 = toExportedId (contextModule m) var
@@ -1508,6 +1513,7 @@ encodeExpr =
     Main.MethodE i               -> tag 13 <> encodeMethodId i
     Main.DictE i                 -> tag 14 <> encodeDictId i
     Main.FFIE i                  -> tag 15 <> encodeFFIId i
+    Main.SysE i                  -> tag 16 <> encodeSysId i
 
 encodeLit :: Main.Lit -> L.Builder
 encodeLit =
@@ -1574,6 +1580,9 @@ encodeFFIId _ = mempty
 
 encodePrimId :: PrimId -> L.Builder
 encodePrimId _ = mempty
+
+encodeSysId :: SysId -> L.Builder
+encodeSysId _ = mempty
 
 encodeWiredIn :: WiredId -> L.Builder
 encodeWiredIn _ = mempty
@@ -1729,3 +1738,95 @@ ordNub = go empty_set
       if member x s
         then go s xs
         else x : go (insert_set x s) xs
+
+
+--------------------------------------------------------------------------------
+-- Pretty core
+
+
+showBind :: Bool -> CoreSyn.Bind GHC.Var -> L.Builder
+showBind ps =
+  \case
+    CoreSyn.NonRec var expr ->
+      par ps ("NonRec " <> showVar True var <> " " <> showExpr True expr)
+    CoreSyn.Rec exprs ->
+      par
+        ps
+        ("Rec [" <>
+         mconcat (intersperse
+                    ","
+                    (map
+                       (\(x, y) ->
+                          "(" <> showVar False x <> ", " <> showExpr False y <>
+                          ")")
+                       exprs)) <>
+         "]")
+
+showVar :: Bool -> GHC.Var -> L.Builder
+showVar ps v = par ps ("Var " <> showL (GHC.nameStableString (GHC.getName v)))
+
+showId :: Bool -> GHC.Id -> L.Builder
+showId ps v = par ps ("Id " <> showL (GHC.nameStableString (GHC.getName v)))
+
+showExpr :: Bool -> CoreSyn.Expr GHC.Var -> L.Builder
+showExpr ps =
+  \case
+    CoreSyn.Var vid -> par ps ("Var " <> showId ps vid)
+    CoreSyn.Lit literal -> par ps ("Lit " <> showLiteral True literal)
+    CoreSyn.App f x ->
+      par ps ("App " <> showExpr True f <> " " <> showExpr True x)
+    CoreSyn.Lam var body ->
+      par ps ("Lam " <> showVar True var <> " " <> showExpr True body)
+    CoreSyn.Let bind expr ->
+      par ps ("Let " <> (showBind True bind) <> " " <> showExpr True expr)
+    CoreSyn.Case expr var typ alts ->
+      par
+        ps
+        ("Case " <> showExpr True expr <> " " <> showVar True var <> " " <>
+         showType typ <>
+         " [" <>
+         mconcat (intersperse ", " (map showAlt alts)) <>
+         "] ")
+    CoreSyn.Cast expr coercion -> par ps ("Cast " <> showExpr True expr)
+    CoreSyn.Tick tickishVar expr -> par ps ("Tick " <> showExpr True expr)
+    CoreSyn.Type typ -> "Type"
+    CoreSyn.Coercion coercion -> "Coercion"
+
+showAlt :: (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> L.Builder
+showAlt (con, vs, e) =
+  "(" <> showAltCon con <> ", [" <> mconcat (intersperse ", " (map (showVar False) vs)) <>
+  "], " <>
+  showExpr False e <>
+  ")"
+
+showAltCon :: CoreSyn.AltCon -> L.Builder
+showAltCon =
+  \case
+    CoreSyn.DataAlt dataCon -> fromString "DataAlt"
+    CoreSyn.LitAlt literal  -> fromString "LitAlt"
+    CoreSyn.DEFAULT         -> fromString "DEFAULT"
+
+showLiteral :: Bool -> GHC.Literal -> L.Builder
+showLiteral ps =
+  \case
+    GHC.MachChar ch -> par ps ("MachChar " <> showL ch)
+    GHC.MachStr str -> par ps ("MachStr " <> showL str)
+    GHC.MachNullAddr -> "MachNullAddr"
+    GHC.MachInt i -> par ps ("MachInt " <> showL i)
+    GHC.MachInt64 i -> par ps ("MachInt64 " <> showL i)
+    GHC.MachWord i -> par ps ("MachWord " <> showL i)
+    GHC.MachWord64 i -> par ps ("MachWord64 " <> showL i)
+    GHC.MachFloat i -> par ps ("MachFloat " <> showL i)
+    GHC.MachDouble i -> par ps ("MachDouble " <> showL i)
+    GHC.MachLabel fastString mint functionOrData -> par ps ("MachLabel ")
+    GHC.LitInteger i typ -> par ps ("LitInteger " <> showL i <> " " <> showType typ)
+
+showL :: Show i => i -> L.Builder
+showL i = fromString (show i)
+
+showType :: GHC.Type -> L.Builder
+showType _ = "Type"
+
+par :: Bool -> L.Builder -> L.Builder
+par True x = "(" <> x <> ")"
+par _    x = x
