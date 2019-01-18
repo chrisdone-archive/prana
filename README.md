@@ -13,11 +13,11 @@ The current implementation is bad and just a feeler.
 
 Challenges:
 
-* Names of Core identifiers are not properly globally unique. GHC's
+* ~~Names of Core identifiers are not properly globally unique. GHC's
   Unique is per run of GHC, not global across runs. Make a process
   that normalizes all these names into a monotonically increasing
   integer. Then have a separate mapping from Int to ByteString with a
-  human-friendly description of the binding.
+  human-friendly description of the binding.~~
 
 * Implement LET and LAMBDA using an environment, rather than
   beta-substitution. Beta-substitution requires reconstructing a fresh
@@ -73,3 +73,9 @@ How it works:
 `fib 2` output:
 
 https://gist.github.com/chrisdone/999ef8fa071268511d061ded1884f0f5
+
+## File sizes of compiled byte-code
+
+Output here:
+
+https://gist.github.com/chrisdone/5ed9adf9dba5fd82d582e9f2bbc30c9f
