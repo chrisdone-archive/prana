@@ -19,6 +19,12 @@ Challenges:
   integer. Then have a separate mapping from Int to ByteString with a
   human-friendly description of the binding.~~
 
+  **Done.** There is now a `names.txt` file that contains a binary
+  encoded list of exported names and a list of local names. Their
+  index in the list determines what will be put into the
+  AST. E.g. `VarE (LocalIndex 123)` represents the 123rd local
+  variable in `names.txt`.
+
 * Implement LET and LAMBDA using an environment, rather than
   beta-substitution. Beta-substitution requires reconstructing a fresh
   tree, which is not efficient.
