@@ -790,9 +790,9 @@ doMake srcs  = do
     return ()
 
 -- <prana>
-    doPrana
+    doPrana dflags'
 
-doPrana = do
+doPrana dflags' = do
   mgraph <- GHC.getModuleGraph
   withIdDatabase
     (\(exportedIds0, localIds0) -> do
@@ -848,6 +848,8 @@ doPrana = do
                     { contextModule = m
                     , contextExportedIds = exportedIds
                     , contextLocalIds = localIds
+                    , contextCore = Nothing
+                    , contextDynFlags = dflags'
                     }
                 binds = map (toBind context) bs
             liftIO
@@ -1018,12 +1020,14 @@ data Context =
           , contextExportedIds :: [ExportedId]
           , contextLocalIds :: [LocalId]
           , contextCons :: [ConId]
+          , contextCore :: Maybe (CoreSyn.Expr GHC.Var)
+          , contextDynFlags :: GHC.DynFlags
           }
 
 toBind :: Context -> CoreSyn.Bind GHC.Var -> Main.Bind
 toBind m = \case
-  CoreSyn.NonRec v e -> Main.NonRec (toVarId m v) (toExp m e)
-  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toVarId m v,toExp m e)) bs)
+  CoreSyn.NonRec v e -> Main.NonRec (toVarId m v) (toExp m {contextCore=Just e} e)
+  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toVarId m v,toExp m {contextCore=Just e} e)) bs)
 
 toExp :: Context -> CoreSyn.Expr GHC.Var -> Main.Exp
 toExp m = \case
@@ -1128,10 +1132,13 @@ toVarId m var =
                                exportedIdPackage i == exportedIdPackage i0 &&
                                exportedIdModule i == exportedIdModule i0)
                             (contextExportedIds m)))
+                  , "Expression: "
+                  , maybe
+                      ""
+                      (showSDoc (contextDynFlags m) . ppr)
+                      (contextCore m)
                   ])
-    else case lookup
-                i1
-                (zip (contextLocalIds m) [0 ..]) of
+    else case lookup i1 (zip (contextLocalIds m) [0 ..]) of
            Just idx -> LocalIndex idx
            Nothing ->
              error
@@ -1147,6 +1154,11 @@ toVarId m var =
                                localIdPackage i == localIdPackage i1 &&
                                localIdModule i == localIdModule i1)
                             (contextLocalIds m)))
+                  , "Expression: "
+                  , maybe
+                      ""
+                      (showSDoc (contextDynFlags m) . ppr)
+                      (contextCore m)
                   ])
   where
     i0 = toExportedId (contextModule m) var
@@ -1155,7 +1167,7 @@ toVarId m var =
 toExportedId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.ExportedId
 toExportedId m thing =
   if GHC.isInternalName name
-    then error "toExportedId: external name given"
+    then error "toExportedId: internal name given"
     else Main.ExportedId package module' name'
   where
     package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
@@ -1170,7 +1182,7 @@ toExportedId m thing =
 toLocalId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.LocalId
 toLocalId m thing =
   if GHC.isInternalName name
-    then error "toLocalId: external name given"
+    then error "toLocalId: internal name given"
     else Main.LocalId package module' name' (GHC.getKey (GHC.getUnique name))
   where
     package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
