@@ -11,7 +11,7 @@ constructed from pra meaning movement and an meaning constant.
 
 The current implementation is bad and just a feeler.
 
-Challenges:
+Challenges and thoughts:
 
 * ~~Names of Core identifiers are not properly globally unique. GHC's
   Unique is per run of GHC, not global across runs. Make a process
@@ -22,8 +22,16 @@ Challenges:
   **Done.** There is now a `names.txt` file that contains a binary
   encoded list of exported names and a list of local names. Their
   index in the list determines what will be put into the
-  AST. E.g. `VarE (LocalIndex 123)` represents the 123rd local
-  variable in `names.txt`.
+  AST.
+
+  E.g. `VarE (ExportedIndex 123)` represents the 123rd global
+  variable in `names.txt`. This can be used for the `Vector Exp`-type
+  of data structure described in a later bullet point.
+
+  Meanwhile, `VarE (LocalIndex 5678)` means "a globally unique
+  identifier" that is declared and used within a local module and
+  therefore its value has to be looked up from a dynamic environment
+  of bound things via let/lambdas.
 
 * Implement LET and LAMBDA using an environment, rather than
   beta-substitution. Beta-substitution requires reconstructing a fresh
@@ -36,9 +44,15 @@ Challenges:
   small enough vector it'll fit in cache and O(n) Int64 comparisons
   over 10 elements is fast.
 
+  In practice I think the data structure for globals will be:
+  `Unboxed.Vector (Int, Int)` where they map to (index, offset) that
+  that can let you find a view on an `Exp` via `S.take offset (S.drop
+  index bs)`.
+
 * Ignoring type applications for which functions don't actually even
   accept an argument for that type. Except tagToEnum _does_ expect a
-  type argument. Core is incoherent that way.
+  type argument. Core is incoherent that way. We should normalize it
+  before writing byte-code to disk.
 
 * Instead of decoding the AST with the `binary` package, use a
   PatternSynonym (as demonstrated in `Prana.View`) to simply walk the
