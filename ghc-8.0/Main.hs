@@ -45,10 +45,13 @@ import Digraph (flattenSCC)
 import Data.Word
 import System.Directory (renameFile)
 import qualified Data.Int
+import Data.Coerce (coerce)
 import Data.Bits
 import qualified Data.ByteString.Unsafe as S
 import Control.Concurrent (threadDelay)
 import Data.Semigroup
+import Control.Arrow ((&&&))
+import Data.Function (on)
 import Control.Exception (IOException, bracket, catch)
 import qualified DataCon as GHC
 import qualified CorePrep as GHC
@@ -808,7 +811,7 @@ doPrana dflags' = do
               let bs = GHC.mg_binds guts
                   m = GHC.ms_mod modSummary
                   shallowIds = concatMap shallowBindingVars bs
-                  deepIds = deepBindingVars bs
+                  deepIds = deepBindingVars m bs
                   exportedIds =
                     exportedIds00 ++
                     map (toExportedId m) (filter GHC.isExportedId shallowIds)
@@ -860,8 +863,13 @@ doPrana dflags' = do
          ms
        pure (exportedIds, localIds))
 
-deepBindingVars :: [CoreSyn.Bind GHC.Var] -> [GHC.Var]
-deepBindingVars = ordNub . concatMap getBindings
+newtype OnSecond a b = OnSecond { getPair :: (a, b)}
+instance Eq b => Eq (OnSecond a b) where (==) = on (==) (snd . getPair)
+instance Ord b =>  Ord (OnSecond a b) where compare = on compare (snd . getPair)
+
+deepBindingVars :: GHC.Module -> [CoreSyn.Bind GHC.Var] -> [GHC.Var]
+deepBindingVars m =
+  map (fst . getPair) . ordNub . map (OnSecond . (id &&& toLocalId m)) . concatMap getBindings
   where
     getBindings =
       concatMap
@@ -869,8 +877,7 @@ deepBindingVars = ordNub . concatMap getBindings
            CoreSyn.Let bs _ -> shallowBindingVars bs
            CoreSyn.Lam var e -> [var]
            CoreSyn.Case _ var _ alts ->
-             var :
-             concatMap (\(_con, vars, e) -> vars) alts
+             var : concatMap (\(_con, vars, e) -> vars) alts
            _ -> []) .
       listify (const True)
 
@@ -1092,26 +1099,24 @@ toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
 toSomeIdExp m var =
-  if GHC.isSystemName (GHC.getName var)
-    then Main.SysE Main.SysId
-    else case GHC.isDataConId_maybe var of
-           Just dataCon -> Main.ConE Main.ConId
-           Nothing ->
-             case GHC.isPrimOpId_maybe var of
-               Just primOp -> Main.PrimOpE Main.PrimId
-               Nothing ->
-                 case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
-                   Just wiredIn -> Main.WiredInE Main.WiredId
-                   Nothing ->
-                     case GHC.isClassOpId_maybe var of
-                       Just cls -> Main.MethodE Main.MethodId
-                       Nothing ->
-                         case GHC.isFCallId_maybe var of
-                           Just fcall -> Main.FFIE Main.FFIId
-                           Nothing ->
-                             case GHC.isDictId var of
-                               True -> Main.DictE Main.DictId
-                               False -> Main.VarE (toVarId m var)
+  case GHC.isDataConId_maybe var of
+    Just dataCon -> Main.ConE Main.ConId
+    Nothing ->
+      case GHC.isPrimOpId_maybe var of
+        Just primOp -> Main.PrimOpE Main.PrimId
+        Nothing ->
+          case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
+            Just wiredIn -> Main.WiredInE Main.WiredId
+            Nothing ->
+              case GHC.isClassOpId_maybe var of
+                Just cls -> Main.MethodE Main.MethodId
+                Nothing ->
+                  case GHC.isFCallId_maybe var of
+                    Just fcall -> Main.FFIE Main.FFIId
+                    Nothing ->
+                      case GHC.isDictId var of
+                        True -> Main.DictE Main.DictId
+                        False -> Main.VarE (toVarId m var)
 
 toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
@@ -1198,6 +1203,8 @@ toLocalId m thing =
              Nothing -> qualify m n
              Just{} -> n
           where n = GHC.getName thing
+
+
 
 qualify :: GHC.Module -> GHC.Name -> GHC.Name
 qualify m name =
