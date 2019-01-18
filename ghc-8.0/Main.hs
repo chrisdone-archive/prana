@@ -1520,7 +1520,6 @@ encodeExpr =
     Main.MethodE i               -> tag 13 <> encodeMethodId i
     Main.DictE i                 -> tag 14 <> encodeDictId i
     Main.FFIE i                  -> tag 15 <> encodeFFIId i
-    Main.SysE i                  -> tag 16 <> encodeSysId i
 
 encodeLit :: Main.Lit -> L.Builder
 encodeLit =
@@ -1587,9 +1586,6 @@ encodeFFIId _ = mempty
 
 encodePrimId :: PrimId -> L.Builder
 encodePrimId _ = mempty
-
-encodeSysId :: SysId -> L.Builder
-encodeSysId _ = mempty
 
 encodeWiredIn :: WiredId -> L.Builder
 encodeWiredIn _ = mempty

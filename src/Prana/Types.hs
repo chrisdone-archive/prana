@@ -35,7 +35,6 @@ data Exp
   = VarE VarId
   | ConE ConId
   | PrimOpE PrimId
-  | SysE SysId
   | WiredInE WiredId
   | MethodE MethodId
   | FFIE FFIId
@@ -81,9 +80,6 @@ data ConId = ConId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data PrimId = PrimId
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
-data SysId = SysId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data WiredId = WiredId
