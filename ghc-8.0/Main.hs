@@ -40,30 +40,32 @@
 module Main  where
 
 -- <prana>
-import GHC.Exts (lazy)
-import GHC.Generics
-import Digraph (flattenSCC)
-import Data.Word
-import System.Directory (renameFile)
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
+import           GHC.Exts (lazy)
+import           GHC.Generics
+import           Digraph (flattenSCC)
+import           Data.Word
+import           System.Directory (renameFile)
 import qualified Data.Int
-import Data.Coerce (coerce)
-import Data.Bits
+import           Data.Coerce (coerce)
+import           Data.Bits
 import qualified Data.ByteString.Unsafe as S
-import Control.Concurrent (threadDelay)
-import Data.Semigroup
-import Control.Arrow ((&&&))
-import Data.Function (on)
-import Control.Exception (IOException, bracket, catch)
+import           Control.Concurrent (threadDelay)
+import           Data.Semigroup
+import           Control.Arrow ((&&&))
+import           Data.Function (on)
+import           Control.Exception (IOException, bracket, catch)
 import qualified DataCon as GHC
 import qualified CorePrep as GHC
 import qualified Type as GHC
 import qualified TyCon as GHC
 import qualified Var as GHC (isTyVar)
 import qualified FastString as GHC
-import Data.Data
-import Data.String (fromString)
+import           Data.Data
+import           Data.String (fromString)
 import qualified Unique as GHC
-import GHC.Real
+import           GHC.Real
 import qualified InstEnv as GHC
 import qualified Class as GHC
 import qualified Data.ByteString as S
@@ -87,62 +89,62 @@ import GHC              ( -- DynFlags(..), HscTarget(..),
                           -- GhcMode(..), GhcLink(..),
                           Ghc, GhcMonad(..),
                           LoadHowMuch(..) )
-import CmdLineParser
+import           CmdLineParser
 
 -- Implementations of the various modes (--show-iface, mkdependHS. etc.)
-import LoadIface        ( showIface )
-import HscMain          ( newHscEnv )
-import DriverPipeline   ( oneShot, compileFile )
-import DriverMkDepend   ( doMkDependHS )
+import           LoadIface ( showIface )
+import           HscMain ( newHscEnv )
+import           DriverPipeline ( oneShot, compileFile )
+import           DriverMkDepend ( doMkDependHS )
 #ifdef GHCI
-import GHCi.UI          ( interactiveUI, ghciWelcomeMsg, defaultGhciSettings )
+import           GHCi.UI ( interactiveUI, ghciWelcomeMsg, defaultGhciSettings )
 #endif
 
 -- Frontend plugins
 #ifdef GHCI
-import DynamicLoading
-import Plugins
+import           DynamicLoading
+import           Plugins
 #else
-import DynamicLoading   ( pluginError )
+import           DynamicLoading ( pluginError )
 #endif
-import Module           ( ModuleName )
+import           Module ( ModuleName )
 
 
 -- Various other random stuff that we need
-import Config
-import Constants
-import HscTypes
-import Packages         ( pprPackages, pprPackagesSimple, pprModuleMap )
-import DriverPhases
-import BasicTypes       ( failed )
-import StaticFlags
-import DynFlags
-import ErrUtils
-import FastString
-import Outputable hiding ((<>))
+import           Config
+import           Constants
+import           HscTypes
+import           Packages ( pprPackages, pprPackagesSimple, pprModuleMap )
+import           DriverPhases
+import           BasicTypes ( failed )
+import           StaticFlags
+import           DynFlags
+import           ErrUtils
+import           FastString
+import           Outputable hiding ((<>))
 import qualified Outputable ((<>))
-import SrcLoc
-import Util
-import Panic
-import UniqSupply
-import MonadUtils       ( liftIO )
+import           SrcLoc
+import           Util
+import           Panic
+import           UniqSupply
+import           MonadUtils ( liftIO )
 
 -- Imports for --abi-hash
-import LoadIface           ( loadUserInterface )
-import Module              ( mkModuleName )
-import Finder              ( findImportedModule, cannotFindInterface )
-import TcRnMonad           ( initIfaceCheck )
-import Binary              ( openBinMem, put_, fingerprintBinMem )
+import           LoadIface ( loadUserInterface )
+import           Module ( mkModuleName )
+import           Finder ( findImportedModule, cannotFindInterface )
+import           TcRnMonad ( initIfaceCheck )
+import           Binary ( openBinMem, put_, fingerprintBinMem )
 
 -- Standard Haskell libraries
-import System.IO
-import System.Environment
-import System.Exit
-import System.FilePath
-import Control.Monad
-import Data.Char
-import Data.List
-import Data.Maybe
+import           System.IO
+import           System.Environment
+import           System.Exit
+import           System.FilePath
+import           Control.Monad
+import           Data.Char
+import           Data.List
+import           Data.Maybe
 
 -----------------------------------------------------------------------------
 -- ToDo:
@@ -1639,111 +1641,16 @@ encodeArray v = L.int64LE (fromIntegral (length v)) <> mconcat v
 --------------------------------------------------------------------------------
 -- Extra utils
 
--- See Note: Order of constructors
-data Set a    = Bin {-# UNPACK #-} !Size !a !(Set a) !(Set a)
-              | Tip
-
-type Size     = Int
-
--- | /O(1)/. Create a singleton set.
-singleton_set :: a -> Set a
-singleton_set x = Bin 1 x Tip Tip
-{-# INLINE singleton_set #-}
-
--- See Note: Type of local 'go' function
-insert_set :: Ord a => a -> Set a -> Set a
-insert_set = go
-  where
-    go :: Ord a => a -> Set a -> Set a
-    go !x Tip = singleton_set x
-    go !x (Bin sz y l r) = case compare x y of
-        LT -> balanceL y (go x l) r
-        GT -> balanceR y l (go x r)
-        EQ -> Bin sz x l r
-{-# INLINABLE insert_set #-}
-
-balanceL :: a -> Set a -> Set a -> Set a
-balanceL x l r = case r of
-  Tip -> case l of
-           Tip -> Bin 1 x Tip Tip
-           (Bin _ _ Tip Tip) -> Bin 2 x l Tip
-           (Bin _ lx Tip (Bin _ lrx _ _)) -> Bin 3 lrx (Bin 1 lx Tip Tip) (Bin 1 x Tip Tip)
-           (Bin _ lx ll@(Bin _ _ _ _) Tip) -> Bin 3 lx ll (Bin 1 x Tip Tip)
-           (Bin ls lx ll@(Bin lls _ _ _) lr@(Bin lrs lrx lrl lrr))
-             | lrs < ratio*lls -> Bin (1+ls) lx ll (Bin (1+lrs) x lr Tip)
-             | otherwise -> Bin (1+ls) lrx (Bin (1+lls+size lrl) lx ll lrl) (Bin (1+size lrr) x lrr Tip)
-
-  (Bin rs _ _ _) -> case l of
-           Tip -> Bin (1+rs) x Tip r
-
-           (Bin ls lx ll lr)
-              | ls > delta*rs  -> case (ll, lr) of
-                   (Bin lls _ _ _, Bin lrs lrx lrl lrr)
-                     | lrs < ratio*lls -> Bin (1+ls+rs) lx ll (Bin (1+rs+lrs) x lr r)
-                     | otherwise -> Bin (1+ls+rs) lrx (Bin (1+lls+size lrl) lx ll lrl) (Bin (1+rs+size lrr) x lrr r)
-                   (_, _) -> error "Failure in Data.Map.balanceL"
-              | otherwise -> Bin (1+ls+rs) x l r
-{-# NOINLINE balanceL #-}
-
-balanceR :: a -> Set a -> Set a -> Set a
-balanceR x l r = case l of
-  Tip -> case r of
-           Tip -> Bin 1 x Tip Tip
-           (Bin _ _ Tip Tip) -> Bin 2 x Tip r
-           (Bin _ rx Tip rr@(Bin _ _ _ _)) -> Bin 3 rx (Bin 1 x Tip Tip) rr
-           (Bin _ rx (Bin _ rlx _ _) Tip) -> Bin 3 rlx (Bin 1 x Tip Tip) (Bin 1 rx Tip Tip)
-           (Bin rs rx rl@(Bin rls rlx rll rlr) rr@(Bin rrs _ _ _))
-             | rls < ratio*rrs -> Bin (1+rs) rx (Bin (1+rls) x Tip rl) rr
-             | otherwise -> Bin (1+rs) rlx (Bin (1+size rll) x Tip rll) (Bin (1+rrs+size rlr) rx rlr rr)
-
-  (Bin ls _ _ _) -> case r of
-           Tip -> Bin (1+ls) x l Tip
-
-           (Bin rs rx rl rr)
-              | rs > delta*ls  -> case (rl, rr) of
-                   (Bin rls rlx rll rlr, Bin rrs _ _ _)
-                     | rls < ratio*rrs -> Bin (1+ls+rs) rx (Bin (1+ls+rls) x l rl) rr
-                     | otherwise -> Bin (1+ls+rs) rlx (Bin (1+ls+size rll) x l rll) (Bin (1+rrs+size rlr) rx rlr rr)
-                   (_, _) -> error "Failure in Data.Map.balanceR"
-              | otherwise -> Bin (1+ls+rs) x l r
-{-# NOINLINE balanceR #-}
-
-delta,ratio :: Int
-delta = 3
-ratio = 2
-
-size :: Set a -> Int
-size Tip = 0
-size (Bin sz _ _ _) = sz
-{-# INLINE size #-}
-
-empty_set  :: Set a
-empty_set = Tip
-{-# INLINE empty_set #-}
-
--- | /O(log n)/. Is the element in the set?
-member :: Ord a => a -> Set a -> Bool
-member = go
-  where
-    go !_ Tip = False
-    go !x (Bin _ y l r) = case compare x y of
-      LT -> go x l
-      GT -> go x r
-      EQ -> True
-{-# INLINABLE member #-}
-
 -- We define 'ordNub' here to give GHC as many opportunities to
 -- optimize as possible.
-
 ordNub :: Ord a => [a] -> [a]
-ordNub = go empty_set
+ordNub = go Set.empty
   where
     go _ [] = []
     go s (x : xs) =
-      if member x s
+      if Set.member x s
         then go s xs
-        else x : go (insert_set x s) xs
-
+        else x : go (Set.insert x s) xs
 
 --------------------------------------------------------------------------------
 -- Pretty core
@@ -1835,96 +1742,3 @@ showType _ = "Type"
 par :: Bool -> L.Builder -> L.Builder
 par True x = "(" <> x <> ")"
 par _    x = x
-
---------------------------------------------------------------------------------
--- Map implementation
-
-data Map k a  = BinMap {-# UNPACK #-} !Size !k a !(Map k a) !(Map k a)
-              | TipMap
-
-
-lookup_map :: Ord k => k -> Map k a -> Maybe a
-lookup_map = go
-  where
-    go !_ TipMap = Nothing
-    go k (BinMap _ kx x l r) = case compare k kx of
-      LT -> go k l
-      GT -> go k r
-      EQ -> Just x
-
-insert_map :: Ord k => k -> a -> Map k a -> Map k a
-insert_map kx0 = go kx0 kx0
-  where
-    -- Unlike insertR, we only get sharing here
-    -- when the inserted value is at the same address
-    -- as the present value. We try anyway; this condition
-    -- seems particularly likely to occur in 'union'.
-    go :: Ord k => k -> k -> a -> Map k a -> Map k a
-    go orig !_  x TipMap = singleton_map (lazy orig) x
-    go orig !kx x t@(BinMap sz ky y l r) =
-        case compare kx ky of
-            LT | l' `ptrEq` l -> t
-               | otherwise -> balanceL_map ky y l' r
-               where !l' = go orig kx x l
-            GT | r' `ptrEq` r -> t
-               | otherwise -> balanceR_map ky y l r'
-               where !r' = go orig kx x r
-            EQ | x `ptrEq` y && (lazy orig `seq` (orig `ptrEq` ky)) -> t
-               | otherwise -> BinMap sz (lazy orig) x l r
-
-singleton_map :: k -> a -> Map k a
-singleton_map k x = BinMap 1 k x TipMap TipMap
-
-balanceL_map :: k -> a -> Map k a -> Map k a -> Map k a
-balanceL_map k x l r = case r of
-  TipMap -> case l of
-           TipMap -> BinMap 1 k x TipMap TipMap
-           (BinMap _ _ _ TipMap TipMap) -> BinMap 2 k x l TipMap
-           (BinMap _ lk lx TipMap (BinMap _ lrk lrx _ _)) -> BinMap 3 lrk lrx (BinMap 1 lk lx TipMap TipMap) (BinMap 1 k x TipMap TipMap)
-           (BinMap _ lk lx ll@(BinMap _ _ _ _ _) TipMap) -> BinMap 3 lk lx ll (BinMap 1 k x TipMap TipMap)
-           (BinMap ls lk lx ll@(BinMap lls _ _ _ _) lr@(BinMap lrs lrk lrx lrl lrr))
-             | lrs < ratio*lls -> BinMap (1+ls) lk lx ll (BinMap (1+lrs) k x lr TipMap)
-             | otherwise -> BinMap (1+ls) lrk lrx (BinMap (1+lls+size_map lrl) lk lx ll lrl) (BinMap (1+size_map lrr) k x lrr TipMap)
-
-  (BinMap rs _ _ _ _) -> case l of
-           TipMap -> BinMap (1+rs) k x TipMap r
-
-           (BinMap ls lk lx ll lr)
-              | ls > delta*rs  -> case (ll, lr) of
-                   (BinMap lls _ _ _ _, BinMap lrs lrk lrx lrl lrr)
-                     | lrs < ratio*lls -> BinMap (1+ls+rs) lk lx ll (BinMap (1+rs+lrs) k x lr r)
-                     | otherwise -> BinMap (1+ls+rs) lrk lrx (BinMap (1+lls+size_map lrl) lk lx ll lrl) (BinMap (1+rs+size_map lrr) k x lrr r)
-                   (_, _) -> error "Failure in Data.Map.balanceL"
-              | otherwise -> BinMap (1+ls+rs) k x l r
-{-# NOINLINE balanceL_map #-}
-
-balanceR_map :: k -> a -> Map k a -> Map k a -> Map k a
-balanceR_map k x l r = case l of
-  TipMap -> case r of
-           TipMap -> BinMap 1 k x TipMap TipMap
-           (BinMap _ _ _ TipMap TipMap) -> BinMap 2 k x TipMap r
-           (BinMap _ rk rx TipMap rr@(BinMap _ _ _ _ _)) -> BinMap 3 rk rx (BinMap 1 k x TipMap TipMap) rr
-           (BinMap _ rk rx (BinMap _ rlk rlx _ _) TipMap) -> BinMap 3 rlk rlx (BinMap 1 k x TipMap TipMap) (BinMap 1 rk rx TipMap TipMap)
-           (BinMap rs rk rx rl@(BinMap rls rlk rlx rll rlr) rr@(BinMap rrs _ _ _ _))
-             | rls < ratio*rrs -> BinMap (1+rs) rk rx (BinMap (1+rls) k x TipMap rl) rr
-             | otherwise -> BinMap (1+rs) rlk rlx (BinMap (1+size_map rll) k x TipMap rll) (BinMap (1+rrs+size_map rlr) rk rx rlr rr)
-
-  (BinMap ls _ _ _ _) -> case r of
-           TipMap -> BinMap (1+ls) k x l TipMap
-
-           (BinMap rs rk rx rl rr)
-              | rs > delta*ls  -> case (rl, rr) of
-                   (BinMap rls rlk rlx rll rlr, BinMap rrs _ _ _ _)
-                     | rls < ratio*rrs -> BinMap (1+ls+rs) rk rx (BinMap (1+ls+rls) k x l rl) rr
-                     | otherwise -> BinMap (1+ls+rs) rlk rlx (BinMap (1+ls+size_map rll) k x l rll) (BinMap (1+rrs+size_map rlr) rk rx rlr rr)
-                   (_, _) -> error "Failure in Data.Map.balanceR"
-              | otherwise -> BinMap (1+ls+rs) k x l r
-{-# NOINLINE balanceR_map #-}
-
-size_map :: Map k a -> Int
-size_map TipMap              = 0
-size_map (BinMap sz _ _ _ _) = sz
-{-# INLINE size_map #-}
-
-ptrEq :: p1 -> p2 -> Bool
-ptrEq _ _ = False
