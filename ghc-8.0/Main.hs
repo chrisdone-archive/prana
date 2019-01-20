@@ -42,6 +42,7 @@ module Main  where
 -- <prana>
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
+import qualified Data.Map as M
 import           GHC.Exts (lazy)
 import           GHC.Generics
 import           Digraph (flattenSCC)
@@ -801,6 +802,7 @@ doMake srcs  = do
 
 doPrana dflags' = do
   mgraph <- GHC.getModuleGraph
+  liftIO (hSetBuffering stdout NoBuffering)
   withIdDatabase
     (\(exportedIds0, localIds0) -> do
        (exportedIds, localIds, ms) <-
@@ -841,7 +843,9 @@ doPrana dflags' = do
                    (GHC.unitIdFS (GHC.moduleUnitId (GHC.ms_mod modSummary))) /=
                  "main")
               mgraph)
-       {-mapM_
+       let !exportedMap = M.fromList (zip exportedIds [0 ..])
+           !localMap = M.fromList (zip localIds [0 ..])
+       mapM_
          (\(modSummary, guts) -> do
             liftIO
               (putStr
@@ -849,21 +853,20 @@ doPrana dflags' = do
                   moduleToFilePath (GHC.ms_mod modSummary) ++ " ... "))
             let m = GHC.ms_mod modSummary
                 bs = GHC.mg_binds guts
-                context =
-                  Context
-                    { contextModule = m
-                    , contextExportedIds = exportedIds
-                    , contextLocalIds = localIds
-                    , contextCore = Nothing
-                    , contextDynFlags = dflags'
-                    }
+                context = Context
+                            { contextModule = m
+                            , contextExportedIds = exportedMap
+                            , contextLocalIds = localMap
+                            , contextCore = Nothing
+                            , contextDynFlags = dflags'
+                            }
                 binds = map (toBind context) bs
             liftIO
               (L.writeFile
                  (moduleToFilePath m)
                  (L.toLazyByteString (encodeArray (map encodeBind binds))))
             liftIO (putStrLn ("done.")))
-         ms-}
+         ms
        pure (exportedIds, localIds))
 
 newtype OnSecond a b = OnSecond { getPair :: (a, b)}
@@ -1026,9 +1029,8 @@ readWord64 s =
 
 data Context =
   Context { contextModule :: GHC.Module
-          , contextExportedIds :: [ExportedId]
-          , contextLocalIds :: [LocalId]
-          , contextCons :: [ConId]
+          , contextExportedIds :: M.Map ExportedId Int
+          , contextLocalIds :: M.Map LocalId Int
           , contextCore :: Maybe (CoreSyn.Expr GHC.Var)
           , contextDynFlags :: GHC.DynFlags
           }
@@ -1125,7 +1127,7 @@ toSomeIdExp m var =
 toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
   if GHC.isExportedId var
-    then case lookup i0 (zip (contextExportedIds m) [0 ..]) of
+    then case M.lookup i0 (contextExportedIds m) of
            Just idx -> ExportedIndex idx
            Nothing ->
              error
@@ -1140,14 +1142,14 @@ toVarId m var =
                             (\i ->
                                exportedIdPackage i == exportedIdPackage i0 &&
                                exportedIdModule i == exportedIdModule i0)
-                            (contextExportedIds m)))
+                            (M.keys (contextExportedIds m))))
                   , "Expression: "
                   , maybe
                       ""
                       (showSDoc (contextDynFlags m) . ppr)
                       (contextCore m)
                   ])
-    else case lookup i1 (zip (contextLocalIds m) [0 ..]) of
+    else case M.lookup i1 (contextLocalIds m) of
            Just idx -> LocalIndex idx
            Nothing ->
              error
@@ -1162,7 +1164,7 @@ toVarId m var =
                             (\i ->
                                localIdPackage i == localIdPackage i1 &&
                                localIdModule i == localIdModule i1)
-                            (contextLocalIds m)))
+                            (M.keys (contextLocalIds m))))
                   , "Expression:"
                   , maybe
                       ""
