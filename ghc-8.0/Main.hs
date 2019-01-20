@@ -40,6 +40,7 @@
 module Main  where
 
 -- <prana>
+import GHC.Exts (lazy)
 import GHC.Generics
 import Digraph (flattenSCC)
 import Data.Word
@@ -838,7 +839,7 @@ doPrana dflags' = do
                    (GHC.unitIdFS (GHC.moduleUnitId (GHC.ms_mod modSummary))) /=
                  "main")
               mgraph)
-       mapM_
+       {-mapM_
          (\(modSummary, guts) -> do
             liftIO
               (putStr
@@ -860,7 +861,7 @@ doPrana dflags' = do
                  (moduleToFilePath m)
                  (L.toLazyByteString (encodeArray (map encodeBind binds))))
             liftIO (putStrLn ("done.")))
-         ms
+         ms-}
        pure (exportedIds, localIds))
 
 newtype OnSecond a b = OnSecond { getPair :: (a, b)}
@@ -898,6 +899,7 @@ withIdDatabase cont =
        liftIO (putStrLn "Locked names database.")
        existing <- liftIO (S.readFile namesLocked)
        (exported, locals) <- cont (decodeIds existing)
+       liftIO (putStrLn "Writing names database ...")
        liftIO
          (L.writeFile
             namesReady
@@ -1833,3 +1835,96 @@ showType _ = "Type"
 par :: Bool -> L.Builder -> L.Builder
 par True x = "(" <> x <> ")"
 par _    x = x
+
+--------------------------------------------------------------------------------
+-- Map implementation
+
+data Map k a  = BinMap {-# UNPACK #-} !Size !k a !(Map k a) !(Map k a)
+              | TipMap
+
+
+lookup_map :: Ord k => k -> Map k a -> Maybe a
+lookup_map = go
+  where
+    go !_ TipMap = Nothing
+    go k (BinMap _ kx x l r) = case compare k kx of
+      LT -> go k l
+      GT -> go k r
+      EQ -> Just x
+
+insert_map :: Ord k => k -> a -> Map k a -> Map k a
+insert_map kx0 = go kx0 kx0
+  where
+    -- Unlike insertR, we only get sharing here
+    -- when the inserted value is at the same address
+    -- as the present value. We try anyway; this condition
+    -- seems particularly likely to occur in 'union'.
+    go :: Ord k => k -> k -> a -> Map k a -> Map k a
+    go orig !_  x TipMap = singleton_map (lazy orig) x
+    go orig !kx x t@(BinMap sz ky y l r) =
+        case compare kx ky of
+            LT | l' `ptrEq` l -> t
+               | otherwise -> balanceL_map ky y l' r
+               where !l' = go orig kx x l
+            GT | r' `ptrEq` r -> t
+               | otherwise -> balanceR_map ky y l r'
+               where !r' = go orig kx x r
+            EQ | x `ptrEq` y && (lazy orig `seq` (orig `ptrEq` ky)) -> t
+               | otherwise -> BinMap sz (lazy orig) x l r
+
+singleton_map :: k -> a -> Map k a
+singleton_map k x = BinMap 1 k x TipMap TipMap
+
+balanceL_map :: k -> a -> Map k a -> Map k a -> Map k a
+balanceL_map k x l r = case r of
+  TipMap -> case l of
+           TipMap -> BinMap 1 k x TipMap TipMap
+           (BinMap _ _ _ TipMap TipMap) -> BinMap 2 k x l TipMap
+           (BinMap _ lk lx TipMap (BinMap _ lrk lrx _ _)) -> BinMap 3 lrk lrx (BinMap 1 lk lx TipMap TipMap) (BinMap 1 k x TipMap TipMap)
+           (BinMap _ lk lx ll@(BinMap _ _ _ _ _) TipMap) -> BinMap 3 lk lx ll (BinMap 1 k x TipMap TipMap)
+           (BinMap ls lk lx ll@(BinMap lls _ _ _ _) lr@(BinMap lrs lrk lrx lrl lrr))
+             | lrs < ratio*lls -> BinMap (1+ls) lk lx ll (BinMap (1+lrs) k x lr TipMap)
+             | otherwise -> BinMap (1+ls) lrk lrx (BinMap (1+lls+size_map lrl) lk lx ll lrl) (BinMap (1+size_map lrr) k x lrr TipMap)
+
+  (BinMap rs _ _ _ _) -> case l of
+           TipMap -> BinMap (1+rs) k x TipMap r
+
+           (BinMap ls lk lx ll lr)
+              | ls > delta*rs  -> case (ll, lr) of
+                   (BinMap lls _ _ _ _, BinMap lrs lrk lrx lrl lrr)
+                     | lrs < ratio*lls -> BinMap (1+ls+rs) lk lx ll (BinMap (1+rs+lrs) k x lr r)
+                     | otherwise -> BinMap (1+ls+rs) lrk lrx (BinMap (1+lls+size_map lrl) lk lx ll lrl) (BinMap (1+rs+size_map lrr) k x lrr r)
+                   (_, _) -> error "Failure in Data.Map.balanceL"
+              | otherwise -> BinMap (1+ls+rs) k x l r
+{-# NOINLINE balanceL_map #-}
+
+balanceR_map :: k -> a -> Map k a -> Map k a -> Map k a
+balanceR_map k x l r = case l of
+  TipMap -> case r of
+           TipMap -> BinMap 1 k x TipMap TipMap
+           (BinMap _ _ _ TipMap TipMap) -> BinMap 2 k x TipMap r
+           (BinMap _ rk rx TipMap rr@(BinMap _ _ _ _ _)) -> BinMap 3 rk rx (BinMap 1 k x TipMap TipMap) rr
+           (BinMap _ rk rx (BinMap _ rlk rlx _ _) TipMap) -> BinMap 3 rlk rlx (BinMap 1 k x TipMap TipMap) (BinMap 1 rk rx TipMap TipMap)
+           (BinMap rs rk rx rl@(BinMap rls rlk rlx rll rlr) rr@(BinMap rrs _ _ _ _))
+             | rls < ratio*rrs -> BinMap (1+rs) rk rx (BinMap (1+rls) k x TipMap rl) rr
+             | otherwise -> BinMap (1+rs) rlk rlx (BinMap (1+size_map rll) k x TipMap rll) (BinMap (1+rrs+size_map rlr) rk rx rlr rr)
+
+  (BinMap ls _ _ _ _) -> case r of
+           TipMap -> BinMap (1+ls) k x l TipMap
+
+           (BinMap rs rk rx rl rr)
+              | rs > delta*ls  -> case (rl, rr) of
+                   (BinMap rls rlk rlx rll rlr, BinMap rrs _ _ _ _)
+                     | rls < ratio*rrs -> BinMap (1+ls+rs) rk rx (BinMap (1+ls+rls) k x l rl) rr
+                     | otherwise -> BinMap (1+ls+rs) rlk rlx (BinMap (1+ls+size_map rll) k x l rll) (BinMap (1+rrs+size_map rlr) rk rx rlr rr)
+                   (_, _) -> error "Failure in Data.Map.balanceR"
+              | otherwise -> BinMap (1+ls+rs) k x l r
+{-# NOINLINE balanceR_map #-}
+
+size_map :: Map k a -> Int
+size_map TipMap              = 0
+size_map (BinMap sz _ _ _ _) = sz
+{-# INLINE size_map #-}
+
+ptrEq :: p1 -> p2 -> Bool
+ptrEq _ _ = False
