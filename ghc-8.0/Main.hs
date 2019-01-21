@@ -1036,25 +1036,62 @@ data Context =
           }
 
 toBind :: Context -> CoreSyn.Bind GHC.Var -> Main.Bind
-toBind m = \case
-  CoreSyn.NonRec v e -> Main.NonRec (toVarId m v) (toExp m {contextCore=Just e} e)
-  CoreSyn.Rec bs -> Main.Rec (map (\(v,e) -> (toVarId m v,toExp m {contextCore=Just e} e)) bs)
+toBind m =
+  \case
+    CoreSyn.NonRec v e ->
+      Main.NonRec
+        (toVarId m v)
+        (either
+           (\eee ->
+              error
+                (eee ++
+                 ", core was: " ++
+                 L8.unpack (L.toLazyByteString (showExpr True e))))
+           id
+           (toExp m {contextCore = Just e} e))
+    CoreSyn.Rec bs ->
+      Main.Rec
+        (map
+           (\(v, e) ->
+              ( toVarId m v
+              , either
+                  (\eee ->
+                     error
+                       (eee ++
+                        ", core was: " ++
+                        L8.unpack (L.toLazyByteString (showExpr True e))))
+                  id
+                  (toExp m {contextCore = Just e} e)))
+           bs)
 
-toExp :: Context -> CoreSyn.Expr GHC.Var -> Main.Exp
-toExp m = \case
- CoreSyn.Var i                  -> toSomeIdExp m i
- CoreSyn.Lit i                  -> Main.LitE (toLit i)
- CoreSyn.App f x                -> Main.AppE (toExp m f) (toExp m x)
- CoreSyn.Lam var body           -> Main.LamE (GHC.isTyVar var) (toVarId m var) (toExp m body)
- CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
- CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toVarId m var) (toTyp m typ) (map (toAlt m) alts)
- CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
- CoreSyn.Tick _tickishVar expr  -> (toExp m expr)
- CoreSyn.Type typ               -> Main.TypE (toTyp m typ)
- CoreSyn.Coercion _coercion     -> Main.CoercionE
+toExp :: Context -> CoreSyn.Expr GHC.Var -> Either String Main.Exp
+toExp m =
+  \case
+    CoreSyn.App f (CoreSyn.Type _) -> toExp m f
+    -- ^ v Skip over type and coerce applications.
+    CoreSyn.App f (CoreSyn.Coercion _) -> toExp m f
+    CoreSyn.App f x -> Main.AppE <$> toExp m f <*> toExp m x
+    CoreSyn.Lam var body ->
+      if GHC.isTyVar var -- Skip lambdas of types.
+         then toExp m body
+         else Main.LamE <$> pure (toVarId m var) <*> toExp m body
+    CoreSyn.Let bind expr ->
+      Main.LetE <$> pure (toBind m bind) <*> toExp m expr
+    CoreSyn.Case expr var typ alts ->
+      Main.CaseE <$> toExp m expr <*> pure (toVarId m var) <*>
+      pure (toTyp m typ) <*>
+      (mapM (toAlt m) alts)
+    CoreSyn.Var i -> pure (toSomeIdExp m i)
+    CoreSyn.Lit i -> pure (Main.LitE (toLit i))
+    CoreSyn.Cast expr _coercion -> toExp m expr
+    CoreSyn.Tick _tickishVar expr -> toExp m expr
+    -- Types should only appear in argument position.
+    CoreSyn.Type typ -> Left "Did not expect a type here!"
+    -- Coercions should only appear in an argument position.
+    CoreSyn.Coercion _coercion -> Left "Did not expect a coercion here!"
 
-toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Alt
-toAlt m (con,vars,e) = Alt (toAltCon m con) (map (toVarId m) vars) (toExp m e)
+toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Either String Alt
+toAlt m (con,vars,e) = Alt <$> pure (toAltCon m con) <*> pure (map (toVarId m) vars) <*> (toExp m e)
 
 toAltCon :: Context -> CoreSyn.AltCon -> Main.AltCon
 toAltCon m =
@@ -1513,13 +1550,9 @@ encodeExpr =
     Main.VarE i                  -> tag 0 <> encodeId i
     Main.LitE i                  -> tag 1 <> encodeLit i
     Main.AppE f x                -> tag 2 <> encodeExpr f <> encodeExpr x
-    Main.LamE ty var body        -> tag 3 <> encodeBool ty <> encodeId var <> encodeExpr body
+    Main.LamE var body           -> tag 3 <> encodeId var <> encodeExpr body
     Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
     Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <> encodeArray (map encodeAlt alts)
-    Main.CastE expr              -> tag 6 <> encodeExpr expr
-    -- Main.TickE expr              -> tag 7 <> encodeExpr expr
-    Main.TypE typ                -> tag 8 <> encodeType typ
-    Main.CoercionE               -> tag 9
     Main.ConE i                  -> tag 10 <> encodeConId i
     Main.PrimOpE i               -> tag 11 <> encodePrimId i
     Main.WiredInE i              -> tag 12 <> encodeWiredIn i

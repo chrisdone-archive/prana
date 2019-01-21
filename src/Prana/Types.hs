@@ -8,11 +8,8 @@
 module Prana.Types where
 
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy.Builder as L
 import           Data.Data
-import           Data.List
-import           Data.String
 import           GHC.Generics
 
 class Pretty a where
@@ -24,55 +21,32 @@ data Bind
   | Rec [(VarId, Exp)]
   deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
-instance Pretty Bind where
-  pretty =
-    \case
-      NonRec _i e -> {-pretty i-}"TODO" <> " = " <> pretty e
-      Rec pairs ->
-        mconcat (intersperse "; " (map (pretty . uncurry NonRec) pairs))
-
 data Exp
-  = VarE VarId
-  | ConE ConId
-  | PrimOpE PrimId
-  | WiredInE WiredId
-  | MethodE MethodId
-  | FFIE FFIId
-  | DictE DictId
+  --
+  -- Core tree shapes
+  --
+  = AppE Exp Exp -- ^ Apply a function to an argument.
+  | LamE VarId Exp -- ^ A lambda.
+  | CaseE Exp VarId Typ [Alt] -- ^ A case analysis.
+  | LetE Bind Exp -- ^ Let binding of variables.
+  --
+  -- Constants
+  --
   | LitE Lit
-  | AppE Exp Exp
-  | LamE Bool VarId Exp
-  | CaseE Exp VarId Typ [Alt]
-  | TypE Typ
-  | CoercionE
-  | LetE Bind Exp
-  | CastE Exp
+  --
+  -- Various namespaces variables
+  --
+  | VarE VarId -- ^ Locally lambda bound or global variable.
+  | ConE ConId -- ^ Data constructor.
+  | PrimOpE PrimId -- ^ A primitive operation.
+  | FFIE FFIId -- ^ A foreign function call.
+  | WiredInE WiredId -- ^ Reference to a wired in name.
+  --
+  -- Type-class infrastructure
+  --
+  | MethodE MethodId -- ^ A generic method call.
+  | DictE DictId -- ^ A dictionary passed to a method.
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
-instance Pretty Exp where
-  pretty =
-    \case
-      VarE _i -> "TODO:VarE" {-pretty i-}
-      ConE _i -> "TODO:ConE" {-pretty i-}
-      LitE l -> pretty l
-      AppE f x -> "(" <> pretty f <> " " <> pretty x <> ")"
-      LamE ty _i e ->
-        "(\\" <>
-        (if ty
-           then "@"
-           else "") <>
-        "TODO"{-pretty i-} <>
-        " -> " <>
-        pretty e <>
-        ")"
-      LetE b e -> "(let { " <> pretty b <> " } in " <> pretty e <> ")"
-      CastE e -> pretty e
-      TypE ty ->  pretty ty
-      CoercionE {} -> "Coercion"
-      CaseE e _ty _i alts ->
-        "(case " <> pretty e <> " of {" <>
-        mconcat (intersperse ";" (map pretty alts)) <>
-        " })"
 
 data ConId = ConId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
@@ -107,38 +81,17 @@ data TyId = TyId
 data Typ = TyConApp TyId [Typ] | OpaqueType ByteString
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-instance Pretty Typ where
-  pretty =
-    \case
-      (OpaqueType ty) -> "Type[" <> L.byteString ty <> "]"
-      (TyConApp _i tys) ->
-        "TyConApp(" <> "TODO"{-pretty i-} <> ")[" <>
-        mconcat (intersperse ", " (map pretty tys)) <>
-        "]"
-
 data Alt = Alt
   { altCon :: AltCon
   , altVars :: [VarId]
   , altExp :: Exp
   } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-instance Pretty Alt where
-  pretty (Alt con ids e) =
-    pretty con <> "(" <> mconcat (intersperse " " (map (const "TODO"{-pretty-}) ids)) <> ") -> " <>
-    pretty e
-
 data AltCon
   = DataAlt DataCon
   | LitAlt Lit
   | DEFAULT
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
-instance Pretty AltCon where
-  pretty =
-    \case
-      DataAlt (DataCon _i strictness) -> "TODO"{-pretty i-} <> "[" <> fromString (show strictness) <> "]"
-      LitAlt l -> pretty l
-      DEFAULT -> "_"
 
 newtype Unique = Unique Int
  deriving (Generic, Data, Typeable, Eq, Show, Ord)
@@ -162,22 +115,6 @@ data Lit
   | Label
   | Integer Integer
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
-instance Pretty Lit where
-  pretty = \case
-              Char c -> render c
-              Str c -> render c
-              NullAddr -> "nullAddr#"
-              Int c -> render c
-              Int64 c -> render c
-              Word c -> render c
-              Word64 c -> render c
-              Float c -> render c
-              Double c -> render c
-              Label -> "Label"
-              Integer c -> render c
-    where render :: Show a => a -> L.Builder
-          render = L.byteString . S8.pack . show
 
 data ExportedId =
   ExportedId
