@@ -40,6 +40,7 @@
 module Main  where
 
 -- <prana>
+import           Data.Int
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Map as M
@@ -860,7 +861,7 @@ doPrana dflags' = do
                             , contextCore = Nothing
                             , contextDynFlags = dflags'
                             }
-                binds = map (toBind context) bs
+                binds = concatMap (toBinds context) bs
             liftIO
               (L.writeFile
                  (moduleToFilePath m)
@@ -956,7 +957,7 @@ decodeIds s0
                { localIdPackage = pkg
                , localIdModule = md
                , localIdName = name
-               , localIdUnique = readInt s'''
+               , localIdUnique = Unique (readInt64 s''')
                } :
              acc)
             (S.drop 8 s''')
@@ -976,7 +977,7 @@ encodeLocalIds =
     (\(LocalId pkg md name uniq) ->
        encodeShortByteString pkg <> encodeShortByteString md <>
        encodeShortByteString name <>
-       L.int64LE (fromIntegral uniq))
+       L.int64LE (unUnique uniq))
 
 {-# INLINE readByteString #-}
 -- | Read a ByteString from the encoding.
@@ -1029,40 +1030,41 @@ readWord64 s =
 
 data Context =
   Context { contextModule :: GHC.Module
-          , contextExportedIds :: M.Map ExportedId Int
-          , contextLocalIds :: M.Map LocalId Int
+          , contextExportedIds :: M.Map ExportedId Int64
+          , contextLocalIds :: M.Map LocalId Int64
           , contextCore :: Maybe (CoreSyn.Expr GHC.Var)
           , contextDynFlags :: GHC.DynFlags
           }
 
-toBind :: Context -> CoreSyn.Bind GHC.Var -> Main.Bind
-toBind m =
+toBinds :: Context -> CoreSyn.Bind GHC.Var -> [Main.Bind]
+toBinds m =
   \case
     CoreSyn.NonRec v e ->
-      Main.NonRec
-        (toVarId m v)
-        (either
-           (\eee ->
-              error
-                (eee ++
-                 ", core was: " ++
-                 L8.unpack (L.toLazyByteString (showExpr True e))))
-           id
-           (toExp m {contextCore = Just e} e))
+      [ Bind
+          (toVarId m v)
+          (either
+             (\eee ->
+                error
+                  (eee ++
+                   ", core was: " ++
+                   L8.unpack (L.toLazyByteString (showExpr True e))))
+             id
+             (toExp m {contextCore = Just e} e))
+      ]
     CoreSyn.Rec bs ->
-      Main.Rec
-        (map
-           (\(v, e) ->
-              ( toVarId m v
-              , either
-                  (\eee ->
-                     error
-                       (eee ++
-                        ", core was: " ++
-                        L8.unpack (L.toLazyByteString (showExpr True e))))
-                  id
-                  (toExp m {contextCore = Just e} e)))
-           bs)
+      map
+        (\(v, e) ->
+           Bind
+             (toVarId m v)
+             (either
+                (\eee ->
+                   error
+                     (eee ++
+                      ", core was: " ++
+                      L8.unpack (L.toLazyByteString (showExpr True e))))
+                id
+                (toExp m {contextCore = Just e} e)))
+        bs
 
 toExp :: Context -> CoreSyn.Expr GHC.Var -> Either String Main.Exp
 toExp m =
@@ -1076,7 +1078,7 @@ toExp m =
          then toExp m body
          else Main.LamE <$> pure (toVarId m var) <*> toExp m body
     CoreSyn.Let bind expr ->
-      Main.LetE <$> pure (toBind m bind) <*> toExp m expr
+      Main.LetE <$> pure (toBinds m bind) <*> toExp m expr
     CoreSyn.Case expr var typ alts ->
       Main.CaseE <$> toExp m expr <*> pure (toVarId m var) <*>
       pure (toTyp m typ) <*>
@@ -1107,7 +1109,7 @@ toLit =
     GHC.MachStr i           -> Str i
     GHC.MachNullAddr        -> NullAddr
     GHC.MachInt i           -> Int i
-    GHC.MachInt64 i         -> Int64 i
+    GHC.MachInt64 i         -> Int64Lit i
     GHC.MachWord i          -> Word i
     GHC.MachWord64 i        -> Word64 i
     GHC.MachFloat (i)  -> Float i
@@ -1236,7 +1238,7 @@ toLocalId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.LocalId
 toLocalId m thing =
   if GHC.isInternalName name
     then error "toLocalId: internal name given"
-    else Main.LocalId package module' name' (GHC.getKey (GHC.getUnique name))
+    else Main.LocalId package module' name' (Main.Unique (fromIntegral (GHC.getKey (GHC.getUnique name))))
   where
     package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
     module' =
@@ -1541,24 +1543,26 @@ mkQ :: ( Typeable a , Typeable b) => r -> (b -> r) -> a -> r
 encodeBind :: Main.Bind -> L.Builder
 encodeBind =
   \case
-    Main.NonRec var expr -> tag 0 <> encodeId var <> encodeExpr expr
-    Main.Rec pairs       -> tag 1 <> encodeArray (map (\(v, e) -> encodeId v <> encodeExpr e) pairs)
+    Main.Bind var expr -> encodeId var <> encodeExpr expr
 
 encodeExpr :: Main.Exp -> L.Builder
 encodeExpr =
   \case
-    Main.VarE i                  -> tag 0 <> encodeId i
-    Main.LitE i                  -> tag 1 <> encodeLit i
-    Main.AppE f x                -> tag 2 <> encodeExpr f <> encodeExpr x
-    Main.LamE var body           -> tag 3 <> encodeId var <> encodeExpr body
-    Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
-    Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <> encodeArray (map encodeAlt alts)
-    Main.ConE i                  -> tag 10 <> encodeConId i
-    Main.PrimOpE i               -> tag 11 <> encodePrimId i
-    Main.WiredInE i              -> tag 12 <> encodeWiredIn i
-    Main.MethodE i               -> tag 13 <> encodeMethodId i
-    Main.DictE i                 -> tag 14 <> encodeDictId i
-    Main.FFIE i                  -> tag 15 <> encodeFFIId i
+    Main.VarE i -> tag 0 <> encodeId i
+    Main.LitE i -> tag 1 <> encodeLit i
+    Main.AppE f x -> tag 2 <> encodeExpr f <> encodeExpr x
+    Main.LamE var body -> tag 3 <> encodeId var <> encodeExpr body
+    Main.LetE binds expr ->
+      tag 4 <> encodeArray (map encodeBind binds) <> encodeExpr expr
+    Main.CaseE expr var typ alts ->
+      tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <>
+      encodeArray (map encodeAlt alts)
+    Main.ConE i -> tag 10 <> encodeConId i
+    Main.PrimOpE i -> tag 11 <> encodePrimId i
+    Main.WiredInE i -> tag 12 <> encodeWiredIn i
+    Main.MethodE i -> tag 13 <> encodeMethodId i
+    Main.DictE i -> tag 14 <> encodeDictId i
+    Main.FFIE i -> tag 15 <> encodeFFIId i
 
 encodeLit :: Main.Lit -> L.Builder
 encodeLit =
@@ -1567,7 +1571,7 @@ encodeLit =
     Str i           -> tag 1 <> encodeByteString i
     NullAddr        -> tag 2
     Int i           -> tag 3 <> encodeInteger i
-    Int64 i         -> tag 4 <> encodeInteger i
+    Int64Lit i         -> tag 4 <> encodeInteger i
     Word i          -> tag 5 <> encodeInteger i
     Word64 i        -> tag 6 <> encodeInteger i
     Float (i :% j)  -> tag 7 <> encodeInteger i <> encodeInteger j
@@ -1608,8 +1612,8 @@ encodeType =
     TyConApp i es -> tag 1 <> encodeTyId i <> encodeArray (map encodeType es)
 
 encodeId :: VarId -> L.Builder
-encodeId (LocalIndex x) = L.int64LE (fromIntegral x)
-encodeId (ExportedIndex x) = L.int64LE (fromIntegral x)
+encodeId (LocalIndex x) = tag 0 <> L.int64LE x
+encodeId (ExportedIndex x) = tag 1 <> L.int64LE x
 
 encodeConId :: ConId -> L.Builder
 encodeConId _ = mempty
@@ -1650,7 +1654,7 @@ encodeStrictness =
     NonStrict -> L.word8 1
 
 encodeUnique :: Unique -> L.Builder
-encodeUnique (Unique x) = L.int64LE (fromIntegral x)
+encodeUnique (Unique x) = L.int64LE x
 
 encodeByteString :: ByteString -> L.Builder
 encodeByteString x =

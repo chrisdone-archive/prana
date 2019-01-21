@@ -58,7 +58,7 @@ RUN cd; cd ghc_build/ghc-8.0 && make -j5
 
 COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
 COPY src/Prana/Types.hs /root/Types.hs
-RUN tail -n +17 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
+RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
 RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1 -O0"
 RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
 ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
@@ -114,3 +114,9 @@ RUN ghc -hide-all-packages -package Cabal Setup.hs -XNoImplicitPrelude
 RUN ./Setup configure -finteger-gmp --package-db $PREFIX/package.conf.d --prefix $PREFIX --ghc-options=-O0 && \
     ./Setup build -v && \
     ./Setup install
+
+################################################################################
+# Output libraries
+
+WORKDIR /root/ghc_build/ghc-8.0/libraries/
+RUN find . -name '*.prana' | xargs tar czf libraries.tar.gz

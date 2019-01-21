@@ -3,9 +3,11 @@
 
 module Main where
 
-import qualified Data.ByteString.Lazy as L
 import           Data.Binary.Get
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
+import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Builder as L
 import           Data.Function
 import           Data.List
@@ -27,7 +29,28 @@ main = do
         "List all local names"
         listLocals
         (strOption (long "path"))
+      addCommand
+        "dump-module"
+        "Parse and dump a module"
+        dumpModule
+        (strOption (long "path"))
   runCmd
+
+dumpModule :: FilePath -> IO ()
+dumpModule path = do
+  bytes <- L.readFile path
+  case runGetOrFail (decodeArray decodeBind) bytes of
+    Left (_, pos, e) ->
+      error
+        ("Decoding error! " ++
+         e ++
+         " at index " ++
+         show pos ++
+         "\n\nFile:\n\n" ++
+         show (L.unpack bytes) ++
+         "\n\nAt index:\n\n" ++
+         show (drop (fromIntegral pos - 1) (L.unpack bytes)))
+    Right (_, _, binds) -> mapM_ print binds
 
 listExporteds :: FilePath -> IO ()
 listExporteds path = do
@@ -70,7 +93,7 @@ listLocals path = do
                        ("    " <> localIdName n <> " " <>
                         L.toStrict
                           (L.toLazyByteString
-                             (L.int64HexFixed (fromIntegral (localIdUnique n))))))
+                             (L.int64HexFixed (unUnique (localIdUnique n))))))
                   ids)
              modules
            S8.putStrLn "")

@@ -8,17 +8,15 @@
 module Prana.Types where
 
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Lazy.Builder as L
 import           Data.Data
+import           Data.Int
 import           GHC.Generics
 
-class Pretty a where
-  pretty :: a -> L.Builder
-
-data Bind
-  = NonRec VarId
-           Exp
-  | Rec [(VarId, Exp)]
+data Bind =
+  Bind
+    { bindVar :: !VarId
+    , bindExp :: Exp
+    }
   deriving (Generic, Data, Typeable, Show, Ord, Eq)
 
 data Exp
@@ -28,7 +26,7 @@ data Exp
   = AppE Exp Exp -- ^ Apply a function to an argument.
   | LamE VarId Exp -- ^ A lambda.
   | CaseE Exp VarId Typ [Alt] -- ^ A case analysis.
-  | LetE Bind Exp -- ^ Let binding of variables.
+  | LetE [Bind] Exp -- ^ Let binding of variables.
   --
   -- Constants
   --
@@ -66,7 +64,7 @@ data FFIId = FFIId
 data DictId = DictId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data VarId = LocalIndex !Int | ExportedIndex !Int
+data VarId = LocalIndex !Int64 | ExportedIndex !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Cat
@@ -93,7 +91,7 @@ data AltCon
   | DEFAULT
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-newtype Unique = Unique Int
+newtype Unique = Unique {unUnique :: Int64}
  deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Strictness = Strict | NonStrict
@@ -107,7 +105,7 @@ data Lit
   | Str ByteString
   | NullAddr
   | Int Integer
-  | Int64 Integer
+  | Int64Lit Integer
   | Word Integer
   | Word64 Integer
   | Float Rational
@@ -128,5 +126,5 @@ data LocalId =
     { localIdPackage :: {-# UNPACK  #-}!ByteString
     , localIdModule  :: {-# UNPACK  #-}!ByteString
     , localIdName    :: {-# UNPACK  #-}!ByteString
-    , localIdUnique  :: {-# UNPACK  #-}!Int
+    , localIdUnique  :: {-# UNPACK  #-}!Unique
     } deriving (Show, Ord, Eq)

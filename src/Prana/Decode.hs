@@ -7,6 +7,8 @@ module Prana.Decode where
 import           Data.Binary.Get
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
+import           Data.Int
+import           Debug.Trace
 import           GHC.Real
 import           Prana.Types
 
@@ -18,55 +20,51 @@ decodeExportedId =
 decodeLocalId :: Get LocalId
 decodeLocalId =
   LocalId <$> decodeShortByteString <*> decodeShortByteString <*>
-  decodeShortByteString <*> decodeInt
+  decodeShortByteString <*> fmap Unique decodeInt64
 
-decodeMethodIndex :: Get (Id, Int)
-decodeMethodIndex = label "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
+-- decodeMethodIndex :: Get (Id, Int)
+-- decodeMethodIndex = label' "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
 
-decodeEnums :: Get (Id, [Id])
-decodeEnums = do
-  tyId <- label "decodeEnums type" decodeId
-  cons <- label "decodeEnums cons" (decodeArray decodeId)
-  pure (tyId, cons)
+-- decodeEnums :: Get (Id, [Id])
+-- decodeEnums = do
+--   tyId <- label' "decodeEnums type" decodeId
+--   cons <- label' "decodeEnums cons" (decodeArray decodeId)
+--   pure (tyId, cons)
 
 decodeBind :: Get Bind
-decodeBind =
-  label "decodeBind" $ do
-    tag <- getWord8
-    case tag of
-      0 -> NonRec <$> decodeId <*> decodeExpr
-      1 -> Rec <$> decodeArray ((,) <$> decodeId <*> decodeExpr)
-      _ -> fail ("decodeBind: unknown tag " ++ show tag)
+decodeBind = label' "decodeBind" $ Bind <$> decodeId <*> decodeExpr
 
 decodeExpr :: Get Exp
 decodeExpr =
-  label "decodeExpr" $ do
+  label' "decodeExpr" $ do
     tag <- getWord8
     case tag of
       0 -> VarE <$> decodeId
       1 -> LitE <$> decodeLit
       2 -> AppE <$> decodeExpr <*> decodeExpr
-      3 -> LamE <$> decodeBool <*> decodeId <*> decodeExpr
-      4 -> LetE <$> decodeBind <*> decodeExpr
+      3 -> LamE <$> decodeId <*> decodeExpr
+      4 -> LetE <$> decodeArray decodeBind <*> decodeExpr
       5 ->
         CaseE <$> decodeExpr <*> decodeId <*> decodeType <*>
         decodeArray decodeAlt
-      6 -> CastE <$> decodeExpr
-      7 -> TickE <$> decodeExpr
-      8 -> TypE <$> decodeType
-      9 -> pure CoercionE
+      10 -> ConE <$> decodeConId
+      11 -> PrimOpE <$> decodePrimId
+      12 -> WiredInE <$> decodeWiredInId
+      13 -> MethodE <$> decodeMethodId
+      14 -> DictE <$> decodeDictId
+      15 -> FFIE <$> decodeFFIId
       _ -> fail ("decodeExpr: unknown tag " ++ show tag)
 
 decodeLit :: Get Lit
 decodeLit =
-  label "decodeLit" $ do
+  label' "decodeLit" $ do
     tag <- getWord8
     case tag of
       0 -> Char <$> decodeChar
       1 -> Str <$> decodeByteString
       2 -> pure NullAddr
       3 -> Int <$> decodeInteger
-      4 -> Int64 <$> decodeInteger
+      4 -> Int64Lit <$> decodeInteger
       5 -> Word <$> decodeInteger
       6 -> Word64 <$> decodeInteger
       7 -> Float <$> ((:%) <$> decodeInteger <*> decodeInteger)
@@ -77,7 +75,7 @@ decodeLit =
 
 decodeAltCon :: Get AltCon
 decodeAltCon =
-  label "decodeAltCon" $ do
+  label' "decodeAltCon" $ do
     tag <- getWord8
     case tag of
       0 -> DataAlt <$> decodeDataCon
@@ -86,14 +84,14 @@ decodeAltCon =
       _ -> fail ("decodeAltCon: unknown tag " ++ show tag)
 
 decodeInteger :: Get Integer
-decodeInteger = label "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
+decodeInteger = label' "decodeInteger" $ fmap (read . S8.unpack) decodeByteString
 
-decodeInt :: Get Int
-decodeInt = label "decodeInteger" $ fmap fromIntegral getInt64le
+decodeInt64 :: Get Int64
+decodeInt64 = label' "decodeInt" $ getInt64le
 
 decodeBool :: Get Bool
 decodeBool =
-  label "decodeBool" $
+  label' "decodeBool" $
   fmap
     (\case
        1 -> True
@@ -102,7 +100,7 @@ decodeBool =
 
 decodeCat :: Get Cat
 decodeCat =
-  label "decodeCat" $
+  label' "decodeCat" $
   fmap
     (\case
        1 -> DataCat
@@ -112,25 +110,50 @@ decodeCat =
 
 decodeAlt :: Get Alt
 decodeAlt =
-  label "decodeAlt" $
+  label' "decodeAlt" $
   Alt <$> decodeAltCon <*> decodeArray decodeId <*> decodeExpr
 
 decodeType :: Get Typ
 decodeType =
-  label "decodeType" $ do
+  label' "decodeType" $ do
     tag <- getWord8
     case tag of
       0 -> OpaqueType <$> decodeByteString
-      _ -> TyConApp <$> decodeId <*> decodeArray decodeType
+      _ -> TyConApp <$> decodeTyId <*> decodeArray decodeType
 
-decodeId :: Get Id
-decodeId = label "decodeId" $ Id <$> decodeByteString <*> decodeUnique <*> decodeCat
+decodeTyId :: Get TyId
+decodeTyId = pure TyId
+
+decodeConId :: Get ConId
+decodeConId = pure ConId
+
+decodePrimId :: Get PrimId
+decodePrimId = pure PrimId
+
+decodeWiredInId :: Get WiredId
+decodeWiredInId = pure WiredId
+
+decodeMethodId :: Get MethodId
+decodeMethodId = pure MethodId
+
+decodeDictId :: Get DictId
+decodeDictId = pure DictId
+
+decodeFFIId :: Get FFIId
+decodeFFIId = pure FFIId
+
+decodeId :: Get VarId
+decodeId = label' "decodeVarId" $
+  do tag <- getWord8
+     case tag of
+       0 -> LocalIndex <$> getInt64le
+       _ -> ExportedIndex <$> getInt64le
 
 decodeUnique :: Get Unique
-decodeUnique = label "decodeUnique" $ fmap (Unique . fromIntegral) getInt64le
+decodeUnique = label' "decodeUnique" $ fmap Unique getInt64le
 
 decodeDataCon :: Get DataCon
-decodeDataCon = label "decodeDataCon" $ DataCon <$> decodeId <*> decodeArray decodeStrictness
+decodeDataCon = label' "decodeDataCon" $ DataCon <$> decodeConId <*> decodeArray decodeStrictness
 
 decodeStrictness :: Get Strictness
 decodeStrictness =
@@ -144,24 +167,34 @@ decodeStrictness =
 
 decodeByteString :: Get ByteString
 decodeByteString =
-  label "decodeByteString" $ do
+  label' "decodeByteString" $ do
     len <- getInt64le
     getByteString (fromIntegral len)
 
 decodeShortByteString :: Get ByteString
 decodeShortByteString =
-  label "decodeShortByteString" $ do
+  label' "decodeShortByteString" $ do
     len <- getInt16le
     getByteString (fromIntegral len)
 
 decodeChar :: Get Char
 decodeChar =
-  label "decodeChar" $ do
+  label' "decodeChar" $ do
     i <- getInt64le
     pure (toEnum (fromIntegral i))
 
-decodeArray :: Get a -> Get [a]
+decodeArray :: Show a => Get a -> Get [a]
 decodeArray v =
-  label "decodeArray" $ do
+  label' "decodeArray" $ do
     i <- getInt64le
-    sequence (replicate (fromIntegral i) v)
+    mapM (\j -> label' ("decodeArray[" ++ show j ++ "]") v) [0..i-1]
+
+label' :: Show b => String -> Get b -> Get b
+label' x v = if debug
+                then do
+                       o <- label x v
+                       trace (x ++ " => " ++ show o) (pure o)
+                else v
+
+debug :: Bool
+debug = False
