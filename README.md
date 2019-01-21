@@ -49,6 +49,14 @@ Challenges and thoughts:
   that can let you find a view on an `Exp` via `S.take offset (S.drop
   index bs)`.
 
+* All methods existing in their own namespace, and are indices into
+  the right slot of the dictionary. So in the database, we should
+  store methodname+slot_number.
+
+* A `DictId` is in its own namespace, should yield a dictionary as an
+  array of `Exp` methods. When a method is called, it indexes on the
+  array.
+
 * Ignoring type applications for which functions don't actually even
   accept an argument for that type. Except tagToEnum _does_ expect a
   type argument. Core is incoherent that way. We should normalize it
