@@ -1049,7 +1049,7 @@ toExp m = \case
  CoreSyn.Let bind expr          -> Main.LetE (toBind m bind) (toExp m expr)
  CoreSyn.Case expr var typ alts -> Main.CaseE (toExp m expr) (toVarId m var) (toTyp m typ) (map (toAlt m) alts)
  CoreSyn.Cast expr _coercion    -> Main.CastE (toExp m expr)
- CoreSyn.Tick _tickishVar expr  -> Main.TickE (toExp m expr)
+ CoreSyn.Tick _tickishVar expr  -> (toExp m expr)
  CoreSyn.Type typ               -> Main.TypE (toTyp m typ)
  CoreSyn.Coercion _coercion     -> Main.CoercionE
 
@@ -1517,7 +1517,7 @@ encodeExpr =
     Main.LetE bind expr          -> tag 4 <> encodeBind bind <> encodeExpr expr
     Main.CaseE expr var typ alts -> tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <> encodeArray (map encodeAlt alts)
     Main.CastE expr              -> tag 6 <> encodeExpr expr
-    Main.TickE expr              -> tag 7 <> encodeExpr expr
+    -- Main.TickE expr              -> tag 7 <> encodeExpr expr
     Main.TypE typ                -> tag 8 <> encodeType typ
     Main.CoercionE               -> tag 9
     Main.ConE i                  -> tag 10 <> encodeConId i

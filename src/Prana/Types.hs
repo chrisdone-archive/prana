@@ -47,7 +47,6 @@ data Exp
   | CoercionE
   | LetE Bind Exp
   | CastE Exp
-  | TickE Exp
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 instance Pretty Exp where
@@ -70,7 +69,6 @@ instance Pretty Exp where
       CastE e -> pretty e
       TypE ty ->  pretty ty
       CoercionE {} -> "Coercion"
-      TickE e -> pretty e
       CaseE e _ty _i alts ->
         "(case " <> pretty e <> " of {" <>
         mconcat (intersperse ";" (map pretty alts)) <>
