@@ -21,7 +21,44 @@ main = hspec spec
 
 -- | Test suite spec.
 spec :: Spec
-spec = describe "Compile and Decode" compileAndDecode
+spec = do describe "Compile and Decode" compileAndDecode
+          describe "Dependencies" dependencies
+
+-- | Test compiling and decoding.
+dependencies :: Spec
+dependencies =
+  it
+    "Compile two modules with interdependencies"
+    (do idmod <-
+          compileModules
+            [ ("Id", "module Id where id x = x")
+            , ( "On"
+              , "module On where\n\
+                \const x _ = id x")
+            ]
+        shouldBe
+          idmod
+          [ ( "Id"
+            , [ Bind
+                  { bindVar = ExportedIndex 6609
+                  , bindExp = LamE (LocalIndex 57218) (VarE (LocalIndex 57218))
+                  }
+              ])
+          , ( "On"
+            , [ Bind
+                  { bindVar = ExportedIndex 6611
+                  , bindExp =
+                      LamE
+                        (LocalIndex 57221)
+                        (LamE
+                           (LocalIndex 57222)
+                           (AppE
+                              (VarE (ExportedIndex 3432))
+                              (VarE (LocalIndex 57221))))
+                  }
+              ])
+          ])
+
 
 -- | Test compiling and decoding.
 compileAndDecode :: Spec
