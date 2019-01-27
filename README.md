@@ -18,6 +18,11 @@ How it works:
   expression or top-level binding desired.
 * Prana itself is written in GHC Haskell, so it can re-use GHC's own
   runtime to implement primitive operations.
+* However, Prana does _not_ use the `ghc` library (only the runtime);
+  it works from a pristine AST and is written in plain Haskell. Aside
+  from isolation and ease of programming, this also permits
+  e.g. JS/PureScript interpreters of the AST (for subsets of primops)
+  in the browser, and pedagogical substitution steppers.
 
 ## Implementation challenges
 
