@@ -21,8 +21,9 @@ main = hspec spec
 
 -- | Test suite spec.
 spec :: Spec
-spec = do describe "Compile and Decode" compileAndDecode
-          describe "Dependencies" dependencies
+spec = do
+  describe "Compile and Decode" compileAndDecode
+  describe "Dependencies" dependencies
 
 -- | Test compiling and decoding.
 dependencies :: Spec
@@ -34,7 +35,8 @@ dependencies =
             [ ("Id", "module Id where id x = x")
             , ( "On"
               , "module On where\n\
-                \const x _ = id x")
+                \import Id\n\
+                \const x _ = Id.id x")
             ]
         shouldBe
           idmod
@@ -53,12 +55,11 @@ dependencies =
                         (LamE
                            (LocalIndex 57222)
                            (AppE
-                              (VarE (ExportedIndex 3432))
+                              (VarE (ExportedIndex 6609))
                               (VarE (LocalIndex 57221))))
                   }
               ])
           ])
-
 
 -- | Test compiling and decoding.
 compileAndDecode :: Spec
