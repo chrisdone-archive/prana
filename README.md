@@ -41,8 +41,9 @@ Challenges and thoughts:
   this demonstrates the LocalId vs ExportedId difference.
 
 * Implement LET and LAMBDA using an environment, rather than
-  beta-substitution. Beta-substitution requires reconstructing a fresh
-  tree, which is not efficient.
+  beta-substitution (as in the
+  [old interpreter](https://github.com/chrisdone/prana/blob/4926074322df23568866061f2c036915f06fa122/src/Prana/Interpret.hs)). Beta-substitution
+  requires reconstructing a fresh tree, which is not efficient.
 
 * Once names really are unique, we don't need to do lookups on
   strings, we can instead normalize the numbers to allow O(1) lookup
