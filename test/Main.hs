@@ -43,15 +43,6 @@ compileAndDecode =
                   { bindVar = ExportedIndex 6609
                   , bindExp = LamE (LocalIndex 57218) (VarE (LocalIndex 57218))
                   }
-              , Bind
-                  { bindVar = ExportedIndex 6610
-                  , bindExp =
-                      AppE
-                        (AppE
-                           (ConE ConId)
-                           (AppE (ConE ConId) (LitE (Str "prana-test"))))
-                        (AppE (ConE ConId) (LitE (Str "Id")))
-                  }
               ])
           , ( "On"
             , [ Bind
@@ -74,15 +65,6 @@ compileAndDecode =
                                     (AppE
                                        (VarE (LocalIndex 57223))
                                        (VarE (LocalIndex 57225)))))))
-                  }
-              , Bind
-                  { bindVar = ExportedIndex 6612
-                  , bindExp =
-                      AppE
-                        (AppE
-                           (ConE ConId)
-                           (AppE (ConE ConId) (LitE (Str "prana-test"))))
-                        (AppE (ConE ConId) (LitE (Str "On")))
                   }
               ])
           ])
@@ -118,7 +100,7 @@ compileModules modules =
                        show (L.unpack bytes) ++
                        "\n\nAt index:\n\n" ++
                        show (drop (fromIntegral pos - 1) (L.unpack bytes)))
-                  Right (_, _, binds) -> pure (moduleName, binds))
+                  Right (_, _, binds) -> pure (moduleName, dropModuleHeader binds))
              modules
          ExitFailure {} -> error (unlines ["Compile failed:", out, err]))
 
@@ -141,3 +123,12 @@ compileFile pwd fps = do
      ] ++
      fps)
     ""
+
+-- | Drop the module header that's not of use to us in the test-suite.
+dropModuleHeader :: [Bind] -> [Bind]
+dropModuleHeader = filter (not . header)
+  where
+    header (Bind { bindVar = ExportedIndex _
+                 , bindExp = AppE (AppE (ConE ConId) (AppE (ConE ConId) (LitE (Str "prana-test")))) (AppE (ConE ConId) (LitE (Str _)))
+                 }) = True
+    header _ = False
