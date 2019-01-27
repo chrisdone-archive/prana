@@ -33,6 +33,10 @@ Challenges and thoughts:
   therefore its value has to be looked up from a dynamic environment
   of bound things via let/lambdas.
 
+* Test suite is up and running
+  [here](https://github.com/chrisdone/prana/blob/22f8bdfa9dff860e306d6bca8f6dbdaffc864d76/test/Main.hs#L27),
+  this demonstrates the LocalId vs ExportedId difference.
+
 * Implement LET and LAMBDA using an environment, rather than
   beta-substitution. Beta-substitution requires reconstructing a fresh
   tree, which is not efficient.
