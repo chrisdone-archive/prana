@@ -9,7 +9,10 @@ constructed from pra meaning movement and an meaning constant.
 
 ## Implementation challenges
 
-The current implementation is bad and just a feeler.
+The interpreter isn't written yet (I wrote a prototype
+[here](https://github.com/chrisdone/prana/blob/4926074322df23568866061f2c036915f06fa122/src/Prana/Interpret.hs)
+and deleted it), I'm still working on producing a pristine Core output
+from GHC for Prana to consume and interpret efficiently.
 
 Challenges and thoughts:
 
@@ -99,12 +102,6 @@ How it works:
   expression or top-level binding desired.
 * Prana itself is written in GHC Haskell, so it can re-use GHC's own
   runtime to implement primitive operations.
-
-## Example output
-
-`fib 2` output:
-
-https://gist.github.com/chrisdone/999ef8fa071268511d061ded1884f0f5
 
 ## File sizes of compiled byte-code
 
