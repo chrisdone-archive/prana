@@ -72,7 +72,6 @@ compileFile ty pwd fps = do
          , "-fbyte-code"
          , "-this-unit-id"
          , "prana-test"
-         , "-v0"
          ] ++
          fps)
         ""
@@ -91,13 +90,7 @@ compileFile ty pwd fps = do
              [ "rm /root/prana/names.txt"
              , "touch /root/prana/names.txt"
              , unwords
-                 ([ "ghc"
-                  , "-O0"
-                  , "-fbyte-code"
-                  , "-this-unit-id"
-                  , "prana-test"
-                   -- , "-v0"
-                  ] ++
+                 (["ghc", "-O0", "-fbyte-code", "-this-unit-id", "prana-test"] ++
                   fps)
              ]
          ])

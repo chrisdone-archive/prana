@@ -19,7 +19,7 @@ type GlobalEnv = Vector Exp
 data WHNF
   = LamW !LocalEnv !Int64 !Exp
   | LitW !Lit
-  | ConW !(Vector Thunk)
+  | ConW !ConId !(Vector Thunk)
   deriving (Show, Eq)
 
 data Thunk =
@@ -56,12 +56,12 @@ eval global local =
       case result of
         LamW env param body -> eval global (HM.insert param arg env) body
         LitW lit -> error ("eval.AppE.LitW: expected function: " ++ show lit)
-        ConW args -> pure (ConW (args <> V.singleton (Thunk local arg)))
+        ConW cid args -> pure (ConW cid (args <> V.singleton (Thunk local arg)))
     LitE lit -> pure (LitW lit)
     LamE ExportedIndex {} _ ->
       error "eval.LamE.ExportedIndex: make unrepresentable."
     CaseE {} -> error "eval.CaseE: undefined"
-    ConE {} -> pure (ConW mempty)
+    ConE cid -> pure (ConW cid mempty)
     FFIE {} -> error "eval.FFIE: undefined"
     WiredInE {} -> error "eval.WiredInE: undefined"
     PrimOpE {} -> error "eval.PrimOpE: undefined"

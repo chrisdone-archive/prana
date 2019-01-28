@@ -55,6 +55,7 @@ localLambdas = do
         shouldBe
           result
           (ConW
+             ConId
              [ Thunk
                  [ (1, VarE (LocalIndex 4))
                  , (4, AppE (ConE ConId) (LitE (Int 123)))
@@ -77,6 +78,7 @@ localLambdas = do
         shouldBe
           result
           (ConW
+             ConId
              [ Thunk
                  [ (1, LamE (LocalIndex 5) (VarE (LocalIndex 5)))
                  , (2, AppE (ConE ConId) (LitE (Int 123)))
