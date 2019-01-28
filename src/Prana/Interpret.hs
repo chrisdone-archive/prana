@@ -7,6 +7,7 @@ module Prana.Interpret where
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import           Data.Int
+import           Data.List
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
 import           Prana.Types
@@ -29,6 +30,17 @@ eval :: GlobalEnv -> LocalEnv -> Exp -> IO WHNF
 eval global local =
   \case
     LamE (LocalIndex param) body -> pure (LamW local param body)
+    LetE binds body ->
+      eval
+        global
+        (foldl'
+           (\localEnv bind ->
+              case bindVar bind of
+                LocalIndex i -> HM.insert i (bindExp bind) localEnv
+                ExportedIndex {} -> error "eval.LetE.ExportedIndex: make unrepresentable.")
+           local
+           binds)
+        body
     VarE var ->
       case var of
         ExportedIndex i ->
@@ -49,7 +61,6 @@ eval global local =
     LamE ExportedIndex {} _ ->
       error "eval.LamE.ExportedIndex: make unrepresentable."
     CaseE {} -> error "eval.CaseE: undefined"
-    LetE {} -> error "eval.LetE: undefined"
     ConE {} -> pure (ConW mempty)
     FFIE {} -> error "eval.FFIE: undefined"
     WiredInE {} -> error "eval.WiredInE: undefined"

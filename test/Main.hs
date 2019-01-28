@@ -37,7 +37,7 @@ evaluation = do
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec
-localLambdas =
+localLambdas = do
   it
     "Id"
     (do idmod <-
@@ -61,6 +61,31 @@ localLambdas =
                  , (5, AppE (ConE ConId) (LitE (Int 57)))
                  ]
                  (LitE (Int 123))
+             ]))
+  it
+    "Lets"
+    (do idmod <-
+          compileModulesWith
+            Bare
+            [ ( "Let"
+              , "module Let where\n\
+                \idem f x = let v = f x; g _ = (666::Int) in g (f v)\n\
+                \it = idem (\\x -> x) (123 :: Int)")
+            ]
+        let globals = link idmod
+        result <- eval globals mempty (VarE (ExportedIndex 1))
+        shouldBe
+          result
+          (ConW
+             [ Thunk
+                 [ (1, LamE (LocalIndex 5) (VarE (LocalIndex 5)))
+                 , (2, AppE (ConE ConId) (LitE (Int 123)))
+                 , ( 4
+                   , AppE
+                       (VarE (LocalIndex 1))
+                       (AppE (VarE (LocalIndex 1)) (VarE (LocalIndex 2))))
+                 ]
+                 (LitE (Int 666))
              ]))
 
 -- | Test compiling and decoding.
