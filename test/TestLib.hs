@@ -5,9 +5,13 @@
 
 module TestLib where
 
+import           Data.Bifunctor
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
 import           Data.List
+import           Data.List
+import           Data.Vector (Vector)
+import qualified Data.Vector as V
 import           Prana.Decode
 import           Prana.Types
 import           System.Exit
@@ -47,7 +51,7 @@ compileModulesWith ty modules =
                        show (L.unpack bytes) ++
                        "\n\nAt index:\n\n" ++
                        show (drop (fromIntegral pos - 1) (L.unpack bytes)))
-                  Right (_, _, binds) -> pure (moduleName, dropModuleHeader binds))
+                  Right (_, _, binds) -> pure (moduleName, binds))
              modules
          ExitFailure {} -> error (unlines ["Compile failed:", out, err]))
 
@@ -100,10 +104,13 @@ compileFile ty pwd fps = do
         ""
 
 -- | Drop the module header that's not of use to us in the test-suite.
-dropModuleHeader :: [Bind] -> [Bind]
-dropModuleHeader = filter (not . header)
+dropModuleHeaders :: [(String, [Bind])] -> [(String, [Bind])]
+dropModuleHeaders = map (second (filter (not . header)))
   where
     header (Bind { bindVar = ExportedIndex _
                  , bindExp = AppE (AppE (ConE ConId) (AppE (ConE ConId) (LitE (Str "prana-test")))) (AppE (ConE ConId) (LitE (Str _)))
                  }) = True
     header _ = False
+
+link :: [(String, [Bind])] -> Vector Exp
+link = V.fromList . concatMap (\(_, bs) -> map bindExp bs)
