@@ -28,6 +28,7 @@ test-suite prana-test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Main.hs
+  other-modules:       TestLib
   build-depends:       base
                      , prana
                      , hspec
