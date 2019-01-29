@@ -29,11 +29,15 @@ data Thunk =
 eval :: GlobalEnv -> LocalEnv -> Exp -> IO WHNF
 eval global local =
   \case
+    LitE lit -> pure (LitW lit)
     LamE (LocalVarId param) body -> pure (LamW local param body)
     LetE binds body ->
       eval
         global
-        (foldl' (\localEnv (LocalVarId i, ex) -> HM.insert i ex localEnv) local binds)
+        (foldl'
+           (\localEnv (LocalVarId i, ex) -> HM.insert i ex localEnv)
+           local
+           binds)
         body
     VarE var ->
       case var of
@@ -51,11 +55,15 @@ eval global local =
         LamW env param body -> eval global (HM.insert param arg env) body
         LitW lit -> error ("eval.AppE.LitW: expected function: " ++ show lit)
         ConW cid args -> pure (ConW cid (args <> V.singleton (Thunk local arg)))
-    LitE lit -> pure (LitW lit)
+    -- To support pattern matching.
     CaseE {} -> error "eval.CaseE: undefined"
     ConE cid -> pure (ConW cid mempty)
-    FFIE {} -> error "eval.FFIE: undefined"
+    -- To support $ and other hacks by GHC.
     WiredInE {} -> error "eval.WiredInE: undefined"
-    PrimOpE {} -> error "eval.PrimOpE: undefined"
+    -- To support type classes (needed for numbers).
     MethodE {} -> error "eval.MethodE: undefined"
     DictE {} -> error "eval.DictE: undefined"
+    -- To support numeric operations (ints, chars, etc. ..).
+    PrimOpE {} -> error "eval.PrimOpE: undefined"
+    -- To support FFI calls (probably do this last):
+    FFIE {} -> error "eval.FFIE: undefined"
