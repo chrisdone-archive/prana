@@ -24,9 +24,9 @@ data Exp
   -- Core tree shapes
   --
   = AppE Exp Exp -- ^ Apply a function to an argument.
-  | LamE VarId Exp -- ^ A lambda.
+  | LamE LocalVarId Exp -- ^ A lambda.
   | CaseE Exp VarId Typ [Alt] -- ^ A case analysis.
-  | LetE [Bind] Exp -- ^ Let binding of variables.
+  | LetE [(LocalVarId, Exp)] Exp -- ^ Let binding of variables.
   --
   -- Constants
   --
@@ -65,6 +65,9 @@ data DictId = DictId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data VarId = LocalIndex !Int64 | ExportedIndex !Int64
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data LocalVarId = LocalVarId !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data Cat

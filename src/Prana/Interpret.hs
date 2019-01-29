@@ -29,17 +29,11 @@ data Thunk =
 eval :: GlobalEnv -> LocalEnv -> Exp -> IO WHNF
 eval global local =
   \case
-    LamE (LocalIndex param) body -> pure (LamW local param body)
+    LamE (LocalVarId param) body -> pure (LamW local param body)
     LetE binds body ->
       eval
         global
-        (foldl'
-           (\localEnv bind ->
-              case bindVar bind of
-                LocalIndex i -> HM.insert i (bindExp bind) localEnv
-                ExportedIndex {} -> error "eval.LetE.ExportedIndex: make unrepresentable.")
-           local
-           binds)
+        (foldl' (\localEnv (LocalVarId i, ex) -> HM.insert i ex localEnv) local binds)
         body
     VarE var ->
       case var of
@@ -58,8 +52,6 @@ eval global local =
         LitW lit -> error ("eval.AppE.LitW: expected function: " ++ show lit)
         ConW cid args -> pure (ConW cid (args <> V.singleton (Thunk local arg)))
     LitE lit -> pure (LitW lit)
-    LamE ExportedIndex {} _ ->
-      error "eval.LamE.ExportedIndex: make unrepresentable."
     CaseE {} -> error "eval.CaseE: undefined"
     ConE cid -> pure (ConW cid mempty)
     FFIE {} -> error "eval.FFIE: undefined"

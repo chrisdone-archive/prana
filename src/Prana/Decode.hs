@@ -34,6 +34,9 @@ decodeLocalId =
 decodeBind :: Get Bind
 decodeBind = label' "decodeBind" $ Bind <$> decodeId <*> decodeExpr
 
+decodeLocalBind :: Get (LocalVarId, Exp)
+decodeLocalBind = label' "decodeLocalBind" $ (,) <$> decodeLocalVarId <*> decodeExpr
+
 decodeExpr :: Get Exp
 decodeExpr =
   label' "decodeExpr" $ do
@@ -42,8 +45,8 @@ decodeExpr =
       0 -> VarE <$> decodeId
       1 -> LitE <$> decodeLit
       2 -> AppE <$> decodeExpr <*> decodeExpr
-      3 -> LamE <$> decodeId <*> decodeExpr
-      4 -> LetE <$> decodeArray decodeBind <*> decodeExpr
+      3 -> LamE <$> decodeLocalVarId <*> decodeExpr
+      4 -> LetE <$> decodeArray decodeLocalBind <*> decodeExpr
       5 ->
         CaseE <$> decodeExpr <*> decodeId <*> decodeType <*>
         decodeArray decodeAlt
@@ -148,6 +151,9 @@ decodeId = label' "decodeVarId" $
      case tag of
        0 -> LocalIndex <$> getInt64le
        _ -> ExportedIndex <$> getInt64le
+
+decodeLocalVarId :: Get LocalVarId
+decodeLocalVarId = LocalVarId <$> getInt64le
 
 decodeUnique :: Get Unique
 decodeUnique = label' "decodeUnique" $ fmap Unique getInt64le

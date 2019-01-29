@@ -80,7 +80,7 @@ localLambdas = do
           (ConW
              ConId
              [ Thunk
-                 [ (1, LamE (LocalIndex 5) (VarE (LocalIndex 5)))
+                 [ (1, LamE (LocalVarId 5) (VarE (LocalIndex 5)))
                  , (2, AppE (ConE ConId) (LitE (Int 123)))
                  , ( 4
                    , AppE
@@ -109,7 +109,7 @@ dependencies =
           [ ( "Id"
             , [ Bind
                   { bindVar = ExportedIndex 0
-                  , bindExp = LamE (LocalIndex 1) (VarE (LocalIndex 1))
+                  , bindExp = LamE (LocalVarId 1) (VarE (LocalIndex 1))
                   }
               ])
           , ( "On"
@@ -117,9 +117,9 @@ dependencies =
                   { bindVar = ExportedIndex 2
                   , bindExp =
                       LamE
-                        (LocalIndex 4)
+                        (LocalVarId 4)
                         (LamE
-                           (LocalIndex 5)
+                           (LocalVarId 5)
                            (AppE (VarE (ExportedIndex 0)) (VarE (LocalIndex 4))))
                   }
               ])
@@ -144,7 +144,7 @@ compileAndDecode =
           [ ( "Id"
             , [ Bind
                   { bindVar = ExportedIndex 0
-                  , bindExp = LamE (LocalIndex 1) (VarE (LocalIndex 1))
+                  , bindExp = LamE (LocalVarId 1) (VarE (LocalIndex 1))
                   }
               ])
           , ( "On"
@@ -152,13 +152,13 @@ compileAndDecode =
                   { bindVar = ExportedIndex 2
                   , bindExp =
                       LamE
-                        (LocalIndex 5)
+                        (LocalVarId 5)
                         (LamE
-                           (LocalIndex 6)
+                           (LocalVarId 6)
                            (LamE
-                              (LocalIndex 7)
+                              (LocalVarId 7)
                               (LamE
-                                 (LocalIndex 8)
+                                 (LocalVarId 8)
                                  (AppE
                                     (AppE
                                        (VarE (LocalIndex 5))

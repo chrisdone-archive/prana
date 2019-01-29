@@ -1066,6 +1066,37 @@ toBinds m =
                 (toExp m {contextCore = Just e} e)))
         bs
 
+
+toLocalBinds :: Context -> CoreSyn.Bind GHC.Var -> [(Main.LocalVarId, Main.Exp)]
+toLocalBinds m =
+  \case
+    CoreSyn.NonRec v e ->
+      [
+          (toLocalVarId m v,
+          either
+             (\eee ->
+                error
+                  (eee ++
+                   ", core was: " ++
+                   L8.unpack (L.toLazyByteString (showExpr True e))))
+             id
+             (toExp m {contextCore = Just e} e))
+      ]
+    CoreSyn.Rec bs ->
+      map
+        (\(v, e) ->
+
+             (toLocalVarId m v
+             ,either
+                 (\eee ->
+                    error
+                      (eee ++
+                       ", core was: " ++
+                       L8.unpack (L.toLazyByteString (showExpr True e))))
+                 id
+                 (toExp m {contextCore = Just e} e)))
+        bs
+
 toExp :: Context -> CoreSyn.Expr GHC.Var -> Either String Main.Exp
 toExp m =
   \case
@@ -1076,9 +1107,9 @@ toExp m =
     CoreSyn.Lam var body ->
       if GHC.isTyVar var -- Skip lambdas of types.
          then toExp m body
-         else Main.LamE <$> pure (toVarId m var) <*> toExp m body
+         else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
     CoreSyn.Let bind expr ->
-      Main.LetE <$> pure (toBinds m bind) <*> toExp m expr
+      Main.LetE <$> pure (toLocalBinds m bind) <*> toExp m expr
     CoreSyn.Case expr var typ alts ->
       Main.CaseE <$> toExp m expr <*> pure (toVarId m var) <*>
       pure (toTyp m typ) <*>
@@ -1218,6 +1249,32 @@ toVarId m var =
   where
     i0 = toExportedId (contextModule m) var
     i1 = toLocalId (contextModule m) var
+
+toLocalVarId m var =
+  case M.lookup i1 (contextLocalIds m) of
+    Just idx -> LocalVarId idx
+    Nothing ->
+      error
+        (unlines
+           [ "Not in local scope: " ++ show (toLocalId (contextModule m) var)
+           , "I have these in that module:"
+           , unlines
+               (map
+                  show
+                  (filter
+                     (\i ->
+                        localIdPackage i == localIdPackage i1 &&
+                        localIdModule i == localIdModule i1)
+                     (M.keys (contextLocalIds m))))
+           , "Expression:"
+           , maybe "" (showSDoc (contextDynFlags m) . ppr) (contextCore m)
+           , "AKA:"
+           , maybe
+               ""
+               (L8.unpack . L.toLazyByteString . showExpr False)
+               (contextCore m)
+           ])
+  where i1 = toLocalId (contextModule m) var
 
 toExportedId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.ExportedId
 toExportedId m thing =
@@ -1545,15 +1602,20 @@ encodeBind =
   \case
     Main.Bind var expr -> encodeId var <> encodeExpr expr
 
+encodeLocalBind :: (Main.LocalVarId, Main.Exp) -> L.Builder
+encodeLocalBind =
+  \case
+    (var, expr) -> encodeLocalVarId var <> encodeExpr expr
+
 encodeExpr :: Main.Exp -> L.Builder
 encodeExpr =
   \case
     Main.VarE i -> tag 0 <> encodeId i
     Main.LitE i -> tag 1 <> encodeLit i
     Main.AppE f x -> tag 2 <> encodeExpr f <> encodeExpr x
-    Main.LamE var body -> tag 3 <> encodeId var <> encodeExpr body
+    Main.LamE var body -> tag 3 <> encodeLocalVarId var <> encodeExpr body
     Main.LetE binds expr ->
-      tag 4 <> encodeArray (map encodeBind binds) <> encodeExpr expr
+      tag 4 <> encodeArray (map encodeLocalBind binds) <> encodeExpr expr
     Main.CaseE expr var typ alts ->
       tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <>
       encodeArray (map encodeAlt alts)
@@ -1614,6 +1676,9 @@ encodeType =
 encodeId :: VarId -> L.Builder
 encodeId (LocalIndex x) = tag 0 <> L.int64LE x
 encodeId (ExportedIndex x) = tag 1 <> L.int64LE x
+
+encodeLocalVarId :: LocalVarId -> L.Builder
+encodeLocalVarId (LocalVarId x) = L.int64LE x
 
 encodeConId :: ConId -> L.Builder
 encodeConId _ = mempty
