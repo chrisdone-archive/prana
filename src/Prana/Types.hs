@@ -46,7 +46,7 @@ data Exp
   | DictE DictId -- ^ A dictionary passed to a method.
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data ConId = ConId
+data ConId = ConId !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data PrimId = PrimId
@@ -130,4 +130,11 @@ data LocalId =
     , localIdModule  :: {-# UNPACK  #-}!ByteString
     , localIdName    :: {-# UNPACK  #-}!ByteString
     , localIdUnique  :: {-# UNPACK  #-}!Unique
+    } deriving (Show, Ord, Eq)
+
+data ConstrId =
+  ConstrId
+    { constrIdPackage :: {-# UNPACK  #-}!ByteString
+    , constrIdModule  :: {-# UNPACK  #-}!ByteString
+    , constrIdName    :: {-# UNPACK  #-}!ByteString
     } deriving (Show, Ord, Eq)

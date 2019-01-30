@@ -128,7 +128,7 @@ decodeTyId :: Get TyId
 decodeTyId = pure TyId
 
 decodeConId :: Get ConId
-decodeConId = pure ConId
+decodeConId = ConId <$> getInt64le
 
 decodePrimId :: Get PrimId
 decodePrimId = pure PrimId

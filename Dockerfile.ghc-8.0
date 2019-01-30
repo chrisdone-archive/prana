@@ -69,7 +69,7 @@ ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
 ENV PREFIX /root/prana
 
 RUN mkdir $PREFIX && \
-    touch $PREFIX/names.txt && \
+    touch $PREFIX/names-cache.db && \
     mkdir -p $PREFIX/package.conf.d && \
     ghc-pkg --package-db $PREFIX/package.conf.d recache && \
     ghc-pkg --package-db $PREFIX/package.conf.d list
@@ -86,7 +86,7 @@ RUN cp dist/build/genprimopcode/genprimopcode .
 WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
 
 # Clear the names database
-RUN rm $PREFIX/names.txt; touch $PREFIX/names.txt
+RUN rm $PREFIX/names-cache.db; touch $PREFIX/names-cache.db
 
 RUN cp /root/ghc_build/ghc-8.0/compiler/stage2/build/primops.txt ../../compiler/prelude/primops.txt && \
     ghc Setup.hs && \

@@ -9,7 +9,6 @@ import           Data.Bifunctor
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
 import           Data.List
-import           Data.List
 import           Data.Vector (Vector)
 import qualified Data.Vector as V
 import           Prana.Decode
@@ -87,21 +86,25 @@ compileFile ty pwd fps = do
          , "-c"
          , intercalate
              ";"
-             [ "rm /root/prana/names.txt"
-             , "touch /root/prana/names.txt"
+             [ "rm /root/prana/names-cache.db"
+             , "touch /root/prana/names-cache.db"
              , unwords
                  (["ghc", "-O0", "-fbyte-code", "-this-unit-id", "prana-test"] ++
                   fps)
              ]
          ])
         ""
+  where
+    readProcessWithExitCode n args _ = do
+      code <- System.Process.rawSystem n args
+      pure (code, "", "")
 
 -- | Drop the module header that's not of use to us in the test-suite.
 dropModuleHeaders :: [(String, [Bind])] -> [(String, [Bind])]
 dropModuleHeaders = map (second (filter (not . header)))
   where
     header (Bind { bindVar = ExportedIndex _
-                 , bindExp = AppE (AppE (ConE ConId) (AppE (ConE ConId) (LitE (Str "prana-test")))) (AppE (ConE ConId) (LitE (Str _)))
+                 , bindExp = AppE (AppE (ConE (ConId _)) (AppE (ConE (ConId _)) (LitE (Str "prana-test")))) (AppE (ConE (ConId _)) (LitE (Str _)))
                  }) = True
     header _ = False
 
