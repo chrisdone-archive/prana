@@ -1233,8 +1233,16 @@ toConId m var =
                         constrIdPackage i == constrIdPackage i0 &&
                         constrIdModule i == constrIdModule i0)
                      (M.keys (contextConIds m))))
-           , "Expression: "
-           , maybe "" (showSDoc (contextDynFlags m) . ppr) (contextCore m)
+           , "Expression:"
+           , maybe
+               ""
+               (showSDoc (contextDynFlags m) . ppr)
+               (contextCore m)
+           ,"AKA:"
+           ,maybe
+                ""
+                (L8.unpack . L.toLazyByteString . showExpr False)
+                (contextCore m)
            ])
   where
     i0 = toConstrId (contextModule m) var
@@ -1282,11 +1290,16 @@ toVarId m var =
                                exportedIdPackage i == exportedIdPackage i0 &&
                                exportedIdModule i == exportedIdModule i0)
                             (M.keys (contextExportedIds m))))
-                  , "Expression: "
+                  , "Expression:"
                   , maybe
                       ""
                       (showSDoc (contextDynFlags m) . ppr)
                       (contextCore m)
+                  ,"AKA:"
+                  ,maybe
+                       ""
+                       (L8.unpack . L.toLazyByteString . showExpr False)
+                       (contextCore m)
                   ])
     else case M.lookup i1 (contextLocalIds m) of
            Just idx -> LocalIndex idx

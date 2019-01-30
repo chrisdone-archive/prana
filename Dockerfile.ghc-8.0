@@ -54,14 +54,13 @@ RUN cd; cd ghc_build/ghc-8.0 &&  ./configure
 RUN cd; cd ghc_build/ghc-8.0 && make -j5
 
 ################################################################################
-# Patching GHC
+# Generate primopcode binary
 
-COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
-COPY src/Prana/Types.hs /root/Types.hs
-RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
-RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1 -O0"
-RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
-ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
+WORKDIR /root/ghc_build/ghc-8.0/utils/genprimopcode
+RUN echo 'import Distribution.Simple; main = defaultMain' > Setup.hs && \
+    runhaskell Setup.hs configure && \
+    runhaskell Setup.hs build
+RUN cp dist/build/genprimopcode/genprimopcode .
 
 ################################################################################
 # Setup an empty package database for prana
@@ -75,18 +74,19 @@ RUN mkdir $PREFIX && \
     ghc-pkg --package-db $PREFIX/package.conf.d list
 
 ################################################################################
+# Patching GHC
+
+COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
+COPY src/Prana/Types.hs /root/Types.hs
+RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
+RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1 -O0"
+RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
+ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
+
+################################################################################
 # Building ghc-prim
 
-WORKDIR /root/ghc_build/ghc-8.0/utils/genprimopcode
-RUN echo 'import Distribution.Simple; main = defaultMain' > Setup.hs && \
-    runhaskell Setup.hs configure && \
-    runhaskell Setup.hs build
-RUN cp dist/build/genprimopcode/genprimopcode .
-
 WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
-
-# Clear the names database
-RUN rm $PREFIX/names-cache.db; touch $PREFIX/names-cache.db
 
 RUN cp /root/ghc_build/ghc-8.0/compiler/stage2/build/primops.txt ../../compiler/prelude/primops.txt && \
     ghc Setup.hs && \
