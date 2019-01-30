@@ -14,7 +14,7 @@ import           Prana.Types
 
 type LocalEnv = HashMap Int64 Exp
 
-type GlobalEnv = Vector Exp
+type GlobalEnv = HashMap Int64 Exp
 
 data WHNF
   = LamW !LocalEnv !Int64 !Exp
@@ -42,7 +42,7 @@ eval global local =
     VarE var ->
       case var of
         ExportedIndex i ->
-          case global V.!? (fromIntegral i) of
+          case HM.lookup i global of
             Nothing -> error "eval.VarE.ExportedIndex = Nothing"
             Just e -> eval global local e
         LocalIndex i ->

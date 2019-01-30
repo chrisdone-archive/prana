@@ -54,28 +54,7 @@ RUN cd; cd ghc_build/ghc-8.0 &&  ./configure
 RUN cd; cd ghc_build/ghc-8.0 && make -j5
 
 ################################################################################
-# Patching GHC
-
-COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
-COPY src/Prana/Types.hs /root/Types.hs
-RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
-RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1 -O0"
-RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
-ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
-
-################################################################################
-# Setup an empty package database for prana
-
-ENV PREFIX /root/prana
-
-RUN mkdir $PREFIX && \
-    touch $PREFIX/names.txt && \
-    mkdir -p $PREFIX/package.conf.d && \
-    ghc-pkg --package-db $PREFIX/package.conf.d recache && \
-    ghc-pkg --package-db $PREFIX/package.conf.d list
-
-################################################################################
-# Building ghc-prim
+# Generate primopcode binary
 
 WORKDIR /root/ghc_build/ghc-8.0/utils/genprimopcode
 RUN echo 'import Distribution.Simple; main = defaultMain' > Setup.hs && \
@@ -83,14 +62,35 @@ RUN echo 'import Distribution.Simple; main = defaultMain' > Setup.hs && \
     runhaskell Setup.hs build
 RUN cp dist/build/genprimopcode/genprimopcode .
 
-WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
+################################################################################
+# Setup an empty package database for prana
 
-# Clear the names database
-RUN rm $PREFIX/names.txt; touch $PREFIX/names.txt
+ENV PREFIX /root/prana
+
+RUN mkdir $PREFIX && \
+    touch $PREFIX/names-cache.db && \
+    mkdir -p $PREFIX/package.conf.d && \
+    ghc-pkg --package-db $PREFIX/package.conf.d recache && \
+    ghc-pkg --package-db $PREFIX/package.conf.d list
+
+################################################################################
+# Patching GHC
+
+COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
+COPY src/Prana/Types.hs /root/Types.hs
+RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
+RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1"
+RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
+ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
+
+################################################################################
+# Building ghc-prim
+
+WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
 
 RUN cp /root/ghc_build/ghc-8.0/compiler/stage2/build/primops.txt ../../compiler/prelude/primops.txt && \
     ghc Setup.hs && \
-    ./Setup configure --package-db $PREFIX/package.conf.d --prefix $PREFIX && \
+    ./Setup configure --package-db $PREFIX/package.conf.d --prefix $PREFIX --ghc-options=-O0 && \
     ./Setup build && \
     ./Setup install && \
     sed -i -e 's,^exposed-modules:,exposed-modules: GHC.Prim,' $PREFIX/package.conf.d/ghc-prim-*.conf && \

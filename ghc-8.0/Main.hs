@@ -1,5 +1,6 @@
 -- <prana>
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RankNTypes #-}
@@ -41,6 +42,7 @@ module Main  where
 
 -- <prana>
 import           Data.Int
+import qualified Constants as GHC
 import qualified Data.Sequence as Seq
 import qualified Data.Set as Set
 import qualified Data.Map as M
@@ -48,6 +50,7 @@ import           GHC.Exts (lazy)
 import           GHC.Generics
 import           Digraph (flattenSCC)
 import           Data.Word
+import qualified IdInfo as GHC
 import           System.Directory (renameFile)
 import qualified Data.Int
 import           Data.Coerce (coerce)
@@ -805,10 +808,10 @@ doPrana dflags' = do
   mgraph <- GHC.getModuleGraph
   liftIO (hSetBuffering stdout NoBuffering)
   withIdDatabase
-    (\(exportedIds0, localIds0) -> do
-       (exportedIds, localIds, ms) <-
+    (\(exportedIds0, localIds0, conIds0) -> do
+       (exportedIds, localIds, conIds, ms) <-
          foldM
-           (\(exportedIds00, localIds00, modules0) modSummary -> do
+           (\(exportedIds00, localIds00, conIds00, modules0) modSummary -> do
               liftIO
                 (putStr
                    ("Recompiling " ++
@@ -821,6 +824,13 @@ doPrana dflags' = do
                   exportedIds =
                     exportedIds00 ++
                     map (toExportedId m) (filter GHC.isExportedId shallowIds)
+                  conIds =
+                    concat
+                      [ conIds00
+                      , concatMap
+                          (map (toConstrId m . GHC.dataConWorkId) . GHC.tyConDataCons)
+                          (GHC.mg_tcs guts)
+                      ]
                   localIds =
                     concat
                       [ localIds00
@@ -833,8 +843,8 @@ doPrana dflags' = do
                       ]
                   modules = modules0 ++ [(modSummary, guts)] -- Collect and generate afterwards.
               liftIO (putStrLn "done.")
-              pure (exportedIds, localIds, modules))
-           (exportedIds0, localIds0, [])
+              pure (exportedIds, localIds, conIds, modules))
+           (exportedIds0, localIds0, conIds0, [])
            -- FIXME: This is a hack to avoid the compilation of Cabal's
            -- Setup.hs main package before we've built base, ghc-prim
            -- and integer-gmp.
@@ -846,6 +856,7 @@ doPrana dflags' = do
               mgraph)
        let !exportedMap = M.fromList (zip exportedIds [0 ..])
            !localMap = M.fromList (zip localIds [0 ..])
+           !conMap = M.fromList (zip conIds [0 ..])
        mapM_
          (\(modSummary, guts) -> do
             liftIO
@@ -854,13 +865,15 @@ doPrana dflags' = do
                   moduleToFilePath (GHC.ms_mod modSummary) ++ " ... "))
             let m = GHC.ms_mod modSummary
                 bs = GHC.mg_binds guts
-                context = Context
-                            { contextModule = m
-                            , contextExportedIds = exportedMap
-                            , contextLocalIds = localMap
-                            , contextCore = Nothing
-                            , contextDynFlags = dflags'
-                            }
+                context =
+                  Context
+                    { contextModule = m
+                    , contextExportedIds = exportedMap
+                    , contextLocalIds = localMap
+                    , contextConIds = conMap
+                    , contextCore = Nothing
+                    , contextDynFlags = dflags'
+                    }
                 binds = concatMap (toBinds context) bs
             liftIO
               (L.writeFile
@@ -868,7 +881,7 @@ doPrana dflags' = do
                  (L.toLazyByteString (encodeArray (map encodeBind binds))))
             liftIO (putStrLn ("done.")))
          ms
-       pure (exportedIds, localIds))
+       pure (exportedIds, localIds, conIds))
 
 newtype OnSecond a b = OnSecond { getPair :: (a, b)}
 instance Eq b => Eq (OnSecond a b) where (==) = on (==) (snd . getPair)
@@ -896,7 +909,7 @@ shallowBindingVars =
 
 -- isFromModule m _ = maybe True (== m) . GHC.nameModule_maybe . GHC.getName
 
-withIdDatabase :: (([ExportedId], [LocalId]) -> Ghc ([ExportedId],[LocalId])) -> Ghc ()
+withIdDatabase :: (([ExportedId], [LocalId], [ConstrId]) -> Ghc ([ExportedId],[LocalId],[ConstrId])) -> Ghc ()
 withIdDatabase cont =
   GHC.gbracket
     (liftIO lock)
@@ -904,12 +917,12 @@ withIdDatabase cont =
     (\() -> do
        liftIO (putStrLn "Locked names database.")
        existing <- liftIO (S.readFile namesLocked)
-       (exported, locals) <- cont (decodeIds existing)
+       (exported, locals, cons) <- cont (decodeIds existing)
        liftIO (putStrLn "Writing names database ...")
        liftIO
          (L.writeFile
             namesReady
-            (L.toLazyByteString (encodeExportedIds exported <> encodeLocalIds locals)))
+            (L.toLazyByteString (encodeExportedIds exported <> encodeLocalIds locals <> encodeConstrIds cons)))
        liftIO (renameFile namesReady namesLocked)
        liftIO (putStrLn "Updated and unlocked names database."))
   where
@@ -923,16 +936,32 @@ withIdDatabase cont =
     unlock = renameFile namesLocked namesUnlocked
 
 namesLocked = namesUnlocked ++ ".lock"
-namesUnlocked = "/root/prana/names.txt"
+namesUnlocked = "/root/prana/names-cache.db"
 namesReady = namesLocked ++ ".new"
 
-decodeIds :: ByteString -> ([ExportedId],[LocalId])
+defaultConstrIds =
+  [ ConstrId
+      { constrIdPackage = "ghc-prim"
+      , constrIdModule = "GHC.Prim"
+      , constrIdName = "Unit#"
+      }
+  ] ++
+  [ ConstrId
+    { constrIdPackage = "ghc-prim"
+    , constrIdModule = "GHC.Prim"
+    , constrIdName = "(#" <> S.replicate i (fromIntegral (fromEnum ',')) <> "#)"
+    }
+  | i <- [1 .. GHC.mAX_TUPLE_SIZE]
+  ]
+
+decodeIds :: ByteString -> ([ExportedId],[LocalId], [ConstrId])
 decodeIds s0
-  | S.null s0 = ([], [])
+  | S.null s0 = ([], [], defaultConstrIds)
   | otherwise = decodeExported (readInt s0) [] (S.drop 8 s0)
   where
     decodeExported 0 acc s =
-      (reverse acc, decodeLocal (readInt s) [] (S.drop 8 s))
+      let (locals, cons) = decodeLocal (readInt s) [] (S.drop 8 s)
+       in (reverse acc, locals, cons)
     decodeExported n acc s =
       let (pkg, s') = readShortByteString s
           (md, s'') = readShortByteString s'
@@ -946,7 +975,7 @@ decodeIds s0
                } :
              acc)
             s'''
-    decodeLocal 0 acc _ = reverse acc
+    decodeLocal 0 acc s = (reverse acc, decodeCons (readInt s) [] (S.drop 8 s))
     decodeLocal n acc s =
       let (pkg, s') = readShortByteString s
           (md, s'') = readShortByteString s'
@@ -961,12 +990,32 @@ decodeIds s0
                } :
              acc)
             (S.drop 8 s''')
+    decodeCons 0 acc _ =
+      reverse acc
+    decodeCons n acc s =
+      let (pkg, s') = readShortByteString s
+          (md, s'') = readShortByteString s'
+          (name, s''') = readShortByteString s''
+       in decodeCons
+            (n - 1)
+            (ConstrId
+               {constrIdPackage = pkg, constrIdModule = md, constrIdName = name} :
+             acc)
+            s'''
 
 encodeExportedIds :: [ExportedId] -> L.Builder
 encodeExportedIds =
   encodeArray .
   map
     (\(ExportedId pkg md name) ->
+       encodeShortByteString pkg <> encodeShortByteString md <>
+       encodeShortByteString name)
+
+encodeConstrIds :: [ConstrId] -> L.Builder
+encodeConstrIds =
+  encodeArray .
+  map
+    (\(ConstrId pkg md name) ->
        encodeShortByteString pkg <> encodeShortByteString md <>
        encodeShortByteString name)
 
@@ -1034,6 +1083,7 @@ data Context =
           , contextLocalIds :: M.Map LocalId Int64
           , contextCore :: Maybe (CoreSyn.Expr GHC.Var)
           , contextDynFlags :: GHC.DynFlags
+          , contextConIds :: M.Map ConstrId Int64
           }
 
 toBinds :: Context -> CoreSyn.Bind GHC.Var -> [Main.Bind]
@@ -1106,8 +1156,8 @@ toExp m =
     CoreSyn.App f x -> Main.AppE <$> toExp m f <*> toExp m x
     CoreSyn.Lam var body ->
       if GHC.isTyVar var -- Skip lambdas of types.
-         then toExp m body
-         else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
+        then toExp m body
+        else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
     CoreSyn.Let bind expr ->
       Main.LetE <$> pure (toLocalBinds m bind) <*> toExp m expr
     CoreSyn.Case expr var typ alts ->
@@ -1122,6 +1172,11 @@ toExp m =
     CoreSyn.Type typ -> Left "Did not expect a type here!"
     -- Coercions should only appear in an argument position.
     CoreSyn.Coercion _coercion -> Left "Did not expect a coercion here!"
+
+isNewtype' i =
+  case GHC.isDataConId_maybe i of
+    Nothing -> False
+    Just dc -> GHC.isNewTyCon (GHC.dataConTyCon dc)
 
 toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Either String Alt
 toAlt m (con,vars,e) = Alt <$> pure (toAltCon m con) <*> pure (map (toVarId m) vars) <*> (toExp m e)
@@ -1168,31 +1223,69 @@ toDataCon m dc =
         GHC.HsUnpack mc -> Strict
 
 toConId :: GHC.NamedThing thing => Context -> thing -> Main.ConId
-toConId _ _ = Main.ConId
+toConId m var =
+  case M.lookup i0 (contextConIds m) of
+    Just idx -> ConId idx
+    Nothing ->
+      error
+        (unlines
+           [ "Not in constructor scope: " ++
+             show (toConstrId (contextModule m) var)
+           , "I have these in that module:"
+           , unlines
+               (map
+                  show
+                  (filter
+                     (\i ->
+                        constrIdPackage i == constrIdPackage i0 &&
+                        constrIdModule i == constrIdModule i0)
+                     (M.keys (contextConIds m))))
+           , "Expression:"
+           , maybe
+               ""
+               (showSDoc (contextDynFlags m) . ppr)
+               (contextCore m)
+           ,"AKA:"
+           ,maybe
+                ""
+                (L8.unpack . L.toLazyByteString . showExpr False)
+                (contextCore m)
+           ])
+  where
+    i0 = toConstrId (contextModule m) var
 
 toTyId :: GHC.NamedThing thing => Context -> thing -> Main.TyId
 toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
-toSomeIdExp m var =
-  case GHC.isDataConId_maybe var of
-    Just dataCon -> Main.ConE Main.ConId
-    Nothing ->
-      case GHC.isPrimOpId_maybe var of
-        Just primOp -> Main.PrimOpE Main.PrimId
-        Nothing ->
-          case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
-            Just wiredIn -> Main.WiredInE Main.WiredId
-            Nothing ->
-              case GHC.isClassOpId_maybe var of
-                Just cls -> Main.MethodE Main.MethodId
-                Nothing ->
-                  case GHC.isFCallId_maybe var of
-                    Just fcall -> Main.FFIE Main.FFIId
-                    Nothing ->
-                      case GHC.isDictId var of
-                        True -> Main.DictE Main.DictId
-                        False -> Main.VarE (toVarId m var)
+toSomeIdExp m (wrapperToWorker -> var) =
+  if isNewtype' var
+    then Main.LamE (LocalVarId 0) (VarE (LocalIndex 0)) -- identity.
+    else case GHC.isDataConWorkId_maybe var of
+           Just dataCon -> Main.ConE (toConId m var)
+           Nothing ->
+             case GHC.isPrimOpId_maybe var of
+               Just primOp -> Main.PrimOpE Main.PrimId
+               Nothing ->
+                 case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
+                   Just wiredIn -> Main.WiredInE Main.WiredId
+                   Nothing ->
+                     case GHC.isClassOpId_maybe var of
+                       Just cls -> Main.MethodE Main.MethodId
+                       Nothing ->
+                         case GHC.isFCallId_maybe var of
+                           Just fcall -> Main.FFIE Main.FFIId
+                           Nothing ->
+                             case GHC.isDictId var of
+                               True -> Main.DictE Main.DictId
+                               False -> Main.VarE (toVarId m var)
+
+-- | We don't support wrappers, so we convert all wrappers to workers.
+wrapperToWorker :: GHC.Id -> GHC.Id
+wrapperToWorker i =
+  case GHC.idDetails i of
+    GHC.DataConWrapId dataCon -> GHC.dataConWorkId dataCon
+    _ -> i
 
 toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
@@ -1213,11 +1306,16 @@ toVarId m var =
                                exportedIdPackage i == exportedIdPackage i0 &&
                                exportedIdModule i == exportedIdModule i0)
                             (M.keys (contextExportedIds m))))
-                  , "Expression: "
+                  , "Expression:"
                   , maybe
                       ""
                       (showSDoc (contextDynFlags m) . ppr)
                       (contextCore m)
+                  ,"AKA:"
+                  ,maybe
+                       ""
+                       (L8.unpack . L.toLazyByteString . showExpr False)
+                       (contextCore m)
                   ])
     else case M.lookup i1 (contextLocalIds m) of
            Just idx -> LocalIndex idx
@@ -1281,6 +1379,21 @@ toExportedId m thing =
   if GHC.isInternalName name
     then error "toExportedId: internal name given"
     else Main.ExportedId package module' name'
+  where
+    package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
+    module' =
+      GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName (GHC.nameModule name)))
+    name' = GHC.fs_bs (GHC.getOccFS name)
+    name = case GHC.nameModule_maybe n of
+             Nothing -> qualify m n
+             Just{} -> n
+          where n = GHC.getName thing
+
+toConstrId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.ConstrId
+toConstrId m thing =
+  if GHC.isInternalName name
+    then error "toConstrId: internal name given"
+    else Main.ConstrId package module' name'
   where
     package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
     module' =
@@ -1681,7 +1794,7 @@ encodeLocalVarId :: LocalVarId -> L.Builder
 encodeLocalVarId (LocalVarId x) = L.int64LE x
 
 encodeConId :: ConId -> L.Builder
-encodeConId _ = mempty
+encodeConId (ConId i) = L.int64LE i
 
 encodeMethodId :: MethodId -> L.Builder
 encodeMethodId _ = mempty
