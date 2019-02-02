@@ -1,5 +1,6 @@
 -- <prana>
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RankNTypes #-}
@@ -49,6 +50,7 @@ import           GHC.Exts (lazy)
 import           GHC.Generics
 import           Digraph (flattenSCC)
 import           Data.Word
+import qualified IdInfo as GHC
 import           System.Directory (renameFile)
 import qualified Data.Int
 import           Data.Coerce (coerce)
@@ -1251,7 +1253,7 @@ toTyId :: GHC.NamedThing thing => Context -> thing -> Main.TyId
 toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
-toSomeIdExp m var =
+toSomeIdExp m (wrapperToWorker -> var) =
   case GHC.isDataConWorkId_maybe var of
     Just dataCon -> Main.ConE (toConId m var)
     Nothing ->
@@ -1270,6 +1272,13 @@ toSomeIdExp m var =
                       case GHC.isDictId var of
                         True -> Main.DictE Main.DictId
                         False -> Main.VarE (toVarId m var)
+
+-- | We don't support wrappers, so we convert all wrappers to workers.
+wrapperToWorker :: GHC.Id -> GHC.Id
+wrapperToWorker i =
+  case GHC.idDetails i of
+    GHC.DataConWrapId dataCon -> GHC.dataConWorkId dataCon
+    _ -> i
 
 toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
