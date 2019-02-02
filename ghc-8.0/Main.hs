@@ -826,7 +826,7 @@ doPrana dflags' = do
                     concat
                       [ conIds00
                       , concatMap
-                          (concatMap (map (toConstrId m) . GHC.dataConWorkId) . GHC.tyConDataCons)
+                          (map (toConstrId m . GHC.dataConWorkId) . GHC.tyConDataCons)
                           (GHC.mg_tcs guts)
                       ]
                   localIds =
