@@ -826,7 +826,7 @@ doPrana dflags' = do
                     concat
                       [ conIds00
                       , concatMap
-                          (concatMap (map (toConstrId m) . GHC.dataConImplicitTyThings) . GHC.tyConDataCons)
+                          (concatMap (map (toConstrId m) . GHC.dataConWorkId) . GHC.tyConDataCons)
                           (GHC.mg_tcs guts)
                       ]
                   localIds =
@@ -1252,7 +1252,7 @@ toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
 toSomeIdExp m var =
-  case GHC.isDataConId_maybe var of
+  case GHC.isDataConWorkId_maybe var of
     Just dataCon -> Main.ConE (toConId m var)
     Nothing ->
       case GHC.isPrimOpId_maybe var of
