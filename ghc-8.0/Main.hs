@@ -1156,8 +1156,8 @@ toExp m =
     CoreSyn.App f x -> Main.AppE <$> toExp m f <*> toExp m x
     CoreSyn.Lam var body ->
       if GHC.isTyVar var -- Skip lambdas of types.
-         then toExp m body
-         else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
+        then toExp m body
+        else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
     CoreSyn.Let bind expr ->
       Main.LetE <$> pure (toLocalBinds m bind) <*> toExp m expr
     CoreSyn.Case expr var typ alts ->
@@ -1172,6 +1172,11 @@ toExp m =
     CoreSyn.Type typ -> Left "Did not expect a type here!"
     -- Coercions should only appear in an argument position.
     CoreSyn.Coercion _coercion -> Left "Did not expect a coercion here!"
+
+isNewtype' i =
+  case GHC.isDataConId_maybe i of
+    Nothing -> False
+    Just dc -> GHC.isNewTyCon (GHC.dataConTyCon dc)
 
 toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Either String Alt
 toAlt m (con,vars,e) = Alt <$> pure (toAltCon m con) <*> pure (map (toVarId m) vars) <*> (toExp m e)
@@ -1254,24 +1259,26 @@ toTyId _ _ = Main.TyId
 
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
 toSomeIdExp m (wrapperToWorker -> var) =
-  case GHC.isDataConWorkId_maybe var of
-    Just dataCon -> Main.ConE (toConId m var)
-    Nothing ->
-      case GHC.isPrimOpId_maybe var of
-        Just primOp -> Main.PrimOpE Main.PrimId
-        Nothing ->
-          case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
-            Just wiredIn -> Main.WiredInE Main.WiredId
-            Nothing ->
-              case GHC.isClassOpId_maybe var of
-                Just cls -> Main.MethodE Main.MethodId
-                Nothing ->
-                  case GHC.isFCallId_maybe var of
-                    Just fcall -> Main.FFIE Main.FFIId
-                    Nothing ->
-                      case GHC.isDictId var of
-                        True -> Main.DictE Main.DictId
-                        False -> Main.VarE (toVarId m var)
+  if isNewtype' var
+    then Main.LamE (LocalVarId 0) (VarE (LocalIndex 0)) -- identity.
+    else case GHC.isDataConWorkId_maybe var of
+           Just dataCon -> Main.ConE (toConId m var)
+           Nothing ->
+             case GHC.isPrimOpId_maybe var of
+               Just primOp -> Main.PrimOpE Main.PrimId
+               Nothing ->
+                 case GHC.wiredInNameTyThing_maybe (GHC.getName var) of
+                   Just wiredIn -> Main.WiredInE Main.WiredId
+                   Nothing ->
+                     case GHC.isClassOpId_maybe var of
+                       Just cls -> Main.MethodE Main.MethodId
+                       Nothing ->
+                         case GHC.isFCallId_maybe var of
+                           Just fcall -> Main.FFIE Main.FFIId
+                           Nothing ->
+                             case GHC.isDictId var of
+                               True -> Main.DictE Main.DictId
+                               False -> Main.VarE (toVarId m var)
 
 -- | We don't support wrappers, so we convert all wrappers to workers.
 wrapperToWorker :: GHC.Id -> GHC.Id
