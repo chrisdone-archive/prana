@@ -945,6 +945,16 @@ defaultConstrIds =
       , constrIdModule = "GHC.Prim"
       , constrIdName = "Unit#"
       }
+  , ConstrId
+      { constrIdPackage = "ghc-prim"
+      , constrIdModule = "GHC.Types"
+      , constrIdName = "Module"
+      }
+  , ConstrId
+      { constrIdPackage = "ghc-prim"
+      , constrIdModule = "GHC.Types"
+      , constrIdName = "TrNameS"
+      }
   ] ++
   [ ConstrId
     { constrIdPackage = "ghc-prim"
