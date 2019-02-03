@@ -70,12 +70,6 @@ data VarId = LocalIndex !Int64 | ExportedIndex !Int64
 data LocalVarId = LocalVarId !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data Cat
-  = ValCat
-  | DataCat
-  | ClassCat
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
 data TyId = TyId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
