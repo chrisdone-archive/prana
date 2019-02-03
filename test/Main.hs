@@ -34,6 +34,29 @@ evaluation = do
        (do result <- eval mempty mempty (LitE (Int 123))
            shouldBe result (LitW (Int 123))))
   describe "Lambdas with local envs" localLambdas
+  it
+    "Church"
+    (do idmod <-
+          compileModulesWith
+            Normal
+            [ ( "Church"
+              , "module Church where\n\
+                \data Nat = Succ Nat | Zero deriving Show\n\
+                \it =  (Succ (Succ (Succ Zero)))\n\
+                \")
+            ]
+        let global = link idmod
+        result <- eval global mempty (VarE (ExportedIndex 6610))
+        shouldBe
+          result
+          (ConW
+             (ConId 816)
+             [ Thunk
+                 []
+                 (AppE
+                    (ConE (ConId 816))
+                    (AppE (ConE (ConId 816)) (ConE (ConId 817))))
+             ]))
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec
