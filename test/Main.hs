@@ -42,7 +42,7 @@ localLambdas = do
     "Id"
     (do idmod <-
           compileModulesWith
-            Bare
+            Normal
             [ ("Id", "module Id where id x = x")
             , ( "On"
               , "module On where\n\
@@ -67,7 +67,7 @@ localLambdas = do
     "Lets"
     (do idmod <-
           compileModulesWith
-            Bare
+            Normal
             [ ( "Let"
               , "module Let where\n\
                 \idem f x = let v = f x; g _ = (666::Int) in g (f v)\n\
@@ -97,7 +97,7 @@ dependencies =
     "Compile two modules with interdependencies"
     (do idmod <-
           compileModulesWith
-            Bare
+            Normal
             [ ("Id", "module Id where id x = x")
             , ( "On"
               , "module On where\n\
@@ -106,24 +106,7 @@ dependencies =
             ]
         shouldBe
           (dropModuleHeaders idmod)
-          [ ( "Id"
-            , [ Bind
-                  { bindVar = ExportedIndex 0
-                  , bindExp = LamE (LocalVarId 1) (VarE (LocalIndex 1))
-                  }
-              ])
-          , ( "On"
-            , [ Bind
-                  { bindVar = ExportedIndex 2
-                  , bindExp =
-                      LamE
-                        (LocalVarId 4)
-                        (LamE
-                           (LocalVarId 5)
-                           (AppE (VarE (ExportedIndex 0)) (VarE (LocalIndex 4))))
-                  }
-              ])
-          ])
+          [("Id",[Bind {bindVar = ExportedIndex 6609, bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))}]),("On",[Bind {bindVar = ExportedIndex 6611, bindExp = LamE (LocalVarId 57221) (LamE (LocalVarId 57222) (AppE (VarE (ExportedIndex 6609)) (VarE (LocalIndex 57221))))}])])
 
 -- | Test compiling and decoding.
 compileAndDecode :: Spec
@@ -132,7 +115,7 @@ compileAndDecode =
     "Compile id"
     (do idmod <-
           compileModulesWith
-            Bare
+            Normal
             [ ("Id", "module Id where id x = x")
             , ( "On"
               , "module On where\n\
@@ -141,33 +124,4 @@ compileAndDecode =
             ]
         shouldBe
           (dropModuleHeaders idmod)
-          [ ( "Id"
-            , [ Bind
-                  { bindVar = ExportedIndex 0
-                  , bindExp = LamE (LocalVarId 1) (VarE (LocalIndex 1))
-                  }
-              ])
-          , ( "On"
-            , [ Bind
-                  { bindVar = ExportedIndex 2
-                  , bindExp =
-                      LamE
-                        (LocalVarId 5)
-                        (LamE
-                           (LocalVarId 6)
-                           (LamE
-                              (LocalVarId 7)
-                              (LamE
-                                 (LocalVarId 8)
-                                 (AppE
-                                    (AppE
-                                       (VarE (LocalIndex 5))
-                                       (AppE
-                                          (VarE (LocalIndex 6))
-                                          (VarE (LocalIndex 7))))
-                                    (AppE
-                                       (VarE (LocalIndex 6))
-                                       (VarE (LocalIndex 8)))))))
-                  }
-              ])
-          ])
+          [("Id",[Bind {bindVar = ExportedIndex 6609, bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))}]),("On",[Bind {bindVar = ExportedIndex 6611, bindExp = LamE (LocalVarId 57222) (LamE (LocalVarId 57223) (LamE (LocalVarId 57224) (LamE (LocalVarId 57225) (AppE (AppE (VarE (LocalIndex 57222)) (AppE (VarE (LocalIndex 57223)) (VarE (LocalIndex 57224)))) (AppE (VarE (LocalIndex 57223)) (VarE (LocalIndex 57225)))))))}])])
