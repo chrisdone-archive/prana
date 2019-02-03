@@ -101,16 +101,6 @@ decodeBool =
        _ -> False)
     getWord8
 
-decodeCat :: Get Cat
-decodeCat =
-  label' "decodeCat" $
-  fmap
-    (\case
-       1 -> DataCat
-       2 -> ClassCat
-       _ -> ValCat)
-    getWord8
-
 decodeAlt :: Get Alt
 decodeAlt =
   label' "decodeAlt" $
