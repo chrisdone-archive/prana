@@ -50,16 +50,16 @@ localLambdas = do
                 \const x _ = Id.id x\n\
                 \it = On.const (123 :: Int) (57 :: Int)")
             ]
-        let globals = link idmod
-        result <- eval globals mempty (VarE (ExportedIndex 3))
+        let global = link idmod
+        result <- eval global mempty (VarE (ExportedIndex 6612))
         shouldBe
           result
           (ConW
-             (ConId 6666666)
+             (ConId 233)
              [ Thunk
-                 [ (1, VarE (LocalIndex 4))
-                 , (4, AppE (ConE (ConId 6666666)) (LitE (Int 123)))
-                 , (5, AppE (ConE (ConId 6666666)) (LitE (Int 57)))
+                 [ (57218, VarE (LocalIndex 57221))
+                 , (57221, AppE (ConE (ConId 233)) (LitE (Int 123)))
+                 , (57222, AppE (ConE (ConId 233)) (LitE (Int 57)))
                  ]
                  (LitE (Int 123))
              ]))
@@ -73,19 +73,21 @@ localLambdas = do
                 \idem f x = let v = f x; g _ = (666::Int) in g (f v)\n\
                 \it = idem (\\x -> x) (123 :: Int)")
             ]
-        let globals = link idmod
-        result <- eval globals mempty (VarE (ExportedIndex 1))
+        let global = link idmod
+        result <- eval global mempty (VarE (ExportedIndex 6610))
         shouldBe
           result
           (ConW
-             (ConId 6666666)
+             (ConId 233)
              [ Thunk
-                 [ (1, LamE (LocalVarId 5) (VarE (LocalIndex 5)))
-                 , (2, AppE (ConE (ConId 6666666)) (LitE (Int 123)))
-                 , ( 4
+                 [ (57218, LamE (LocalVarId 57222) (VarE (LocalIndex 57222)))
+                 , (57219, AppE (ConE (ConId 233)) (LitE (Int 123)))
+                 , ( 57221
                    , AppE
-                       (VarE (LocalIndex 1))
-                       (AppE (VarE (LocalIndex 1)) (VarE (LocalIndex 2))))
+                       (VarE (LocalIndex 57218))
+                       (AppE
+                          (VarE (LocalIndex 57218))
+                          (VarE (LocalIndex 57219))))
                  ]
                  (LitE (Int 666))
              ]))

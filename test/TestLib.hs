@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -8,16 +9,17 @@ module TestLib where
 import           Data.Bifunctor
 import           Data.Binary.Get
 import qualified Data.ByteString.Lazy as L
-import           Data.List
-import           Data.Vector (Vector)
-import qualified Data.Vector as V
+import           Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
+import           Data.Int
+import           Data.Maybe
 import           Prana.Decode
 import           Prana.Types
 import           System.Exit
 import           System.IO.Temp
 import           System.Process
 
-data CompileType = Normal | Bare
+data CompileType = Normal
 
 -- | Compile a single module.
 compileModule :: CompileType -> String -> String -> IO [Bind]
@@ -59,43 +61,25 @@ compileFile :: CompileType -> FilePath -> [FilePath] -> IO (ExitCode, String, St
 compileFile ty pwd fps = do
   case ty of
     Normal ->
-      readProcessWithExitCode
-        "docker"
-        ([ "run"
-         , "-v" ++ pwd ++ ":" ++ pwd
-         , "-w" ++ pwd
-         , "--rm"
-         , "ghc-compile"
-         , "ghc"
-         , "-O0"
-         , "-fbyte-code"
-         , "-this-unit-id"
-         , "prana-test"
-         ] ++
-         fps)
-        ""
-    Bare ->
-      readProcessWithExitCode
-        "docker"
-        ([ "run"
-         , "-v" ++ pwd ++ ":" ++ pwd
-         , "-w" ++ pwd
-         , "--rm"
-         , "ghc-compile"
-         , "sh"
-         , "-c"
-         , intercalate
-             ";"
-             [ "rm /root/prana/names-cache.db"
-             , "touch /root/prana/names-cache.db"
-             , unwords
-                 (["ghc", "-O0", "-fbyte-code", "-this-unit-id", "prana-test"] ++
-                  fps)
-             ]
-         ])
-        ""
+      (if False
+          then readIt
+          else readProcessWithExitCode)
+          "docker"
+          ([ "run"
+           , "-v" ++ pwd ++ ":" ++ pwd
+           , "-w" ++ pwd
+           , "--rm"
+           , "ghc-compile"
+           , "ghc"
+           , "-O0"
+           , "-fbyte-code"
+           , "-this-unit-id"
+           , "prana-test"
+           ] ++
+           fps)
+          ""
   where
-    readProcessWithExitCode n args _ = do
+    readIt n args _ = do
       code <- System.Process.rawSystem n args
       pure (code, "", "")
 
@@ -108,5 +92,15 @@ dropModuleHeaders = map (second (filter (not . header)))
                  }) = True
     header _ = False
 
-link :: [(String, [Bind])] -> Vector Exp
-link = V.fromList . concatMap (\(_, bs) -> map bindExp bs)
+link :: [(String, [Bind])] -> HashMap Int64 Exp
+link mods = globals
+  where
+    bs = concatMap snd mods
+    globals =
+      HM.fromList
+        (mapMaybe
+           (\b ->
+              case bindVar b of
+                ExportedIndex i -> Just (i, bindExp b)
+                _ -> Nothing)
+           bs)
