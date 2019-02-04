@@ -10,6 +10,7 @@
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE FlexibleContexts  #-}
@@ -955,53 +956,23 @@ defaultConstrIds =
   ]
 
 decodeIds :: ByteString -> ([ExportedId],[LocalId], [ConstrId])
-decodeIds s0
-  | S.null s0 = ([], [], defaultConstrIds)
-  | otherwise = decodeExported (readInt s0) [] (S.drop 8 s0)
+decodeIds s0 =
+  if S.null s0
+    then ([], [], defaultConstrIds)
+    else fst (runDecode go s0)
   where
-    decodeExported 0 acc s =
-      let (locals, cons) = decodeLocal (readInt s) [] (S.drop 8 s)
-       in (reverse acc, locals, cons)
-    decodeExported n acc s =
-      let (pkg, s') = readShortByteString s
-          (md, s'') = readShortByteString s'
-          (name, s''') = readShortByteString s''
-       in decodeExported
-            (n - 1)
-            (ExportedId
-               { exportedIdPackage = pkg
-               , exportedIdModule = md
-               , exportedIdName = name
-               } :
-             acc)
-            s'''
-    decodeLocal 0 acc s = (reverse acc, decodeCons (readInt s) [] (S.drop 8 s))
-    decodeLocal n acc s =
-      let (pkg, s') = readShortByteString s
-          (md, s'') = readShortByteString s'
-          (name, s''') = readShortByteString s''
-       in decodeLocal
-            (n - 1)
-            (LocalId
-               { localIdPackage = pkg
-               , localIdModule = md
-               , localIdName = name
-               , localIdUnique = Unique (readInt64 s''')
-               } :
-             acc)
-            (S.drop 8 s''')
-    decodeCons 0 acc _ =
-      reverse acc
-    decodeCons n acc s =
-      let (pkg, s') = readShortByteString s
-          (md, s'') = readShortByteString s'
-          (name, s''') = readShortByteString s''
-       in decodeCons
-            (n - 1)
-            (ConstrId
-               {constrIdPackage = pkg, constrIdModule = md, constrIdName = name} :
-             acc)
-            s'''
+    go =
+      (,,) <$> decodeArray exported <*> decodeArray local <*> decodeArray constr
+    exported =
+      ExportedId <$> decodeShortByteString <*> decodeShortByteString <*>
+      decodeShortByteString
+    local =
+      LocalId <$> decodeShortByteString <*> decodeShortByteString <*>
+      decodeShortByteString <*>
+      fmap Unique (decodeInt64)
+    constr =
+      ConstrId <$> decodeShortByteString <*> decodeShortByteString <*>
+      decodeShortByteString
 
 encodeExportedIds :: [ExportedId] -> L.Builder
 encodeExportedIds =
@@ -1027,55 +998,6 @@ encodeLocalIds =
        encodeShortByteString pkg <> encodeShortByteString md <>
        encodeShortByteString name <>
        L.int64LE (unUnique uniq))
-
-{-# INLINE readByteString #-}
--- | Read a ByteString from the encoding.
-readByteString :: ByteString -> (ByteString, ByteString)
-readByteString bs = (str, leftover)
-  where str = S.unsafeTake (readInt bs) (S.unsafeDrop 8 bs)
-        leftover = S.unsafeDrop (readInt bs + 8) bs
-
--- | Read a ByteString from the encoding.
-readShortByteString :: ByteString -> (ByteString, ByteString)
-readShortByteString bs = (str, leftover)
-  where str = S.unsafeTake (fromIntegral (readInt16 bs)) (S.unsafeDrop 2 bs)
-        leftover = S.unsafeDrop (fromIntegral (readInt16 bs + 2)) bs
-
-{-# INLINE readInt16 #-}
-readInt16 :: ByteString -> Data.Int.Int16
-readInt16 = fromIntegral . readWord16le
-
-{-# INLINE readInt #-}
-readInt :: ByteString -> Int
-readInt = fromIntegral . readInt64
-
-{-# INLINE readInt64 #-}
-readInt64 :: ByteString -> Data.Int.Int64
-readInt64 = fromIntegral . readWord64
-
-readWord16le :: ByteString -> Word16
-readWord16le = \s ->
-              (fromIntegral (s `S.unsafeIndex` 1) `unsafeShiftL` 8) .|.
-              (fromIntegral (s `S.unsafeIndex` 0) )
-
-{-# INLINE readWord64 #-}
-readWord64 :: ByteString -> Word64
-readWord64 s =
-  x7 `unsafeShiftL` 56 .|. x6 `unsafeShiftL` 48 .|. x5 `unsafeShiftL` 40 .|.
-  x4 `unsafeShiftL` 32 .|.
-  x3 `unsafeShiftL` 24 .|.
-  x2 `unsafeShiftL` 16 .|.
-  x1 `unsafeShiftL` 8 .|.
-  x0
-  where
-    x0 = fromIntegral (S.unsafeIndex s 0) :: Word64
-    x1 = fromIntegral (S.unsafeIndex s 1) :: Word64
-    x2 = fromIntegral (S.unsafeIndex s 2) :: Word64
-    x3 = fromIntegral (S.unsafeIndex s 3) :: Word64
-    x4 = fromIntegral (S.unsafeIndex s 4) :: Word64
-    x5 = fromIntegral (S.unsafeIndex s 5) :: Word64
-    x6 = fromIntegral (S.unsafeIndex s 6) :: Word64
-    x7 = fromIntegral (S.unsafeIndex s 7) :: Word64
 
 data Context =
   Context { contextModule :: GHC.Module
@@ -1428,30 +1350,6 @@ qualify m name =
     m
     (GHC.nameOccName name)
     (GHC.nameSrcSpan name)
-
-qualifiedNameByteString :: GHC.Name -> (ByteString,Cat)
-qualifiedNameByteString n =
-  case GHC.nameModule_maybe n of
-    Nothing -> (sort' <> ":" <> ident, ValCat)
-      where sort' =
-              if GHC.isInternalName n
-                then "internal"
-                else if GHC.isSystemName n
-                       then "system"
-                       else "unknown"
-    Just mo ->
-      ( package <> ":" <> module' <> "." <> ident
-      , if S.isPrefixOf "C:" ident
-          then ClassCat
-          else if S8.all isUpper (S.take 1 ident)
-                 then DataCat
-                 else if S8.all (\c -> c=='(' || c==')' || c==',') ident
-                         then DataCat
-                         else ValCat)
-      where package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId mo))
-            module' = GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName mo))
-  where
-    ident = GHC.fs_bs (GHC.getOccFS n)
 
 compile ::
      GHC.GhcMonad m
@@ -1814,14 +1712,6 @@ encodeWiredIn _ = mempty
 encodeTyId :: TyId -> L.Builder
 encodeTyId _ = mempty
 
-encodeCat :: Cat -> L.Builder
-encodeCat =
-  L.word8 .
-  (\case
-     ValCat -> 0
-     DataCat -> 1
-     ClassCat -> 2)
-
 encodeDataCon :: DataCon -> L.Builder
 encodeDataCon (DataCon e ss) = encodeConId e <> encodeArray (map encodeStrictness ss)
 
@@ -1959,3 +1849,91 @@ showType _ = "Type"
 par :: Bool -> L.Builder -> L.Builder
 par True x = "(" <> x <> ")"
 par _    x = x
+
+--------------------------------------------------------------------------------
+-- Binary decoding
+
+newtype Decode a =
+  Decode
+    { runDecode :: ByteString -> (a, ByteString)
+    }
+  deriving (Functor)
+instance Applicative Decode where
+  (<*>) = ap
+  pure = return
+  {-# INLINE (<*>) #-}
+instance Monad Decode where
+  {-# INLINE return #-}
+  return v = Decode (\s -> (v,s))
+  {-# INLINE (>>=) #-}
+  Decode g >>= f =
+    Decode (\bs -> let (!v, !s) = g bs
+                       Decode !k = f v
+                   in k s)
+
+{-# INLINE decodeArray #-}
+decodeArray :: Decode a -> Decode [a]
+decodeArray d = do
+  len <- decodeInt
+  mapM (const d) [1 .. len]
+
+{-# INLINE decodeWord64 #-}
+decodeWord64 :: Decode Word64
+decodeWord64 = Decode (\bs -> (readWord64 bs, S.unsafeDrop 8 bs))
+
+{-# INLINE decodeInt64 #-}
+decodeInt64 :: Decode Int64
+decodeInt64 = fmap fromIntegral decodeWord64
+
+{-# INLINE decodeInt #-}
+decodeInt :: Decode Int
+decodeInt = fmap fromIntegral decodeInt64
+
+{-# INLINE decodeWord16 #-}
+decodeWord16 :: Decode Word16
+decodeWord16 = Decode (\bs -> (readWord16le bs, S.unsafeDrop 2 bs))
+
+{-# INLINE decodeByteString #-}
+decodeByteString :: Decode ByteString
+decodeByteString = do
+  len <- decodeInt
+  str <- decodeBytes (fromIntegral len)
+  pure str
+
+{-# INLINE decodeShortByteString #-}
+decodeShortByteString :: Decode ByteString
+decodeShortByteString = do
+  len <- decodeWord16
+  str <- decodeBytes (fromIntegral len)
+  pure str
+
+{-# INLINE decodeBytes #-}
+decodeBytes :: Int -> Decode ByteString
+decodeBytes i = Decode (\bs -> (S.unsafeTake i bs, S.unsafeDrop i bs))
+
+--------------------------------------------------------------------------------
+-- Low-evel readers
+
+readWord16le :: ByteString -> Word16
+readWord16le = \s ->
+              (fromIntegral (s `S.unsafeIndex` 1) `unsafeShiftL` 8) .|.
+              (fromIntegral (s `S.unsafeIndex` 0) )
+
+{-# INLINE readWord64 #-}
+readWord64 :: ByteString -> Word64
+readWord64 s =
+  x7 `unsafeShiftL` 56 .|. x6 `unsafeShiftL` 48 .|. x5 `unsafeShiftL` 40 .|.
+  x4 `unsafeShiftL` 32 .|.
+  x3 `unsafeShiftL` 24 .|.
+  x2 `unsafeShiftL` 16 .|.
+  x1 `unsafeShiftL` 8 .|.
+  x0
+  where
+    x0 = fromIntegral (S.unsafeIndex s 0) :: Word64
+    x1 = fromIntegral (S.unsafeIndex s 1) :: Word64
+    x2 = fromIntegral (S.unsafeIndex s 2) :: Word64
+    x3 = fromIntegral (S.unsafeIndex s 3) :: Word64
+    x4 = fromIntegral (S.unsafeIndex s 4) :: Word64
+    x5 = fromIntegral (S.unsafeIndex s 5) :: Word64
+    x6 = fromIntegral (S.unsafeIndex s 6) :: Word64
+    x7 = fromIntegral (S.unsafeIndex s 7) :: Word64
