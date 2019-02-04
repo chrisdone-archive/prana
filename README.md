@@ -35,8 +35,8 @@ challenge is removing garbage and assumptions from the AST that GHC
 makes.
 
 [Cases in the interpreter](https://github.com/chrisdone/prana/blob/master/src/Prana/Interpret.hs#L29)
-will be fleshed out once the names in the AST (methods, dicts,
-primops) have been resolved.
+will be fleshed out once the names in the AST ([methods, dicts,
+primops](https://github.com/chrisdone/prana/blob/master/src/Prana/Types.hs#L54-L67)) have been resolved.
 
 Challenges and thoughts:
 
