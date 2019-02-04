@@ -28,9 +28,11 @@ How it works:
 
 The interpreter is in very early stages (view the
 [test suite here](https://github.com/chrisdone/prana/blob/master/test/Main.hs)),
-I'm still working on producing a **pristine Core output** from GHC for
-Prana to consume and interpret efficiently. The main challenge is
-removing garbage and assumptions from the AST that GHC makes.
+I'm still working on producing
+[a **pristine Core output**](https://github.com/chrisdone/prana/blob/master/src/Prana/Types.hs#L24)
+from GHC for Prana to consume and interpret efficiently. The main
+challenge is removing garbage and assumptions from the AST that GHC
+makes.
 
 [Cases in the interpreter](https://github.com/chrisdone/prana/blob/master/src/Prana/Interpret.hs#L29)
 will be fleshed out once the names in the AST (methods, dicts,
