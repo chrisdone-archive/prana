@@ -27,16 +27,16 @@ How it works:
 ## Implementation challenges
 
 The interpreter is in very early stages (view the
-[test suite here](https://github.com/chrisdone/prana/blob/master/test/Main.hs)),
+[test suite here](https://github.com/chrisdone/prana/blob/a992d0e4db2bd39edcd5b7d6a1d8ecdd6091a2ea/test/Main.hs)),
 I'm still working on producing
-[a **pristine Core output**](https://github.com/chrisdone/prana/blob/master/src/Prana/Types.hs#L24)
+[a **pristine Core output**](https://github.com/chrisdone/prana/blob/a992d0e4db2bd39edcd5b7d6a1d8ecdd6091a2ea/src/Prana/Types.hs#L24)
 from GHC for Prana to consume and interpret efficiently. The main
 challenge is removing garbage and assumptions from the AST that GHC
 makes.
 
-[Cases in the interpreter](https://github.com/chrisdone/prana/blob/master/src/Prana/Interpret.hs#L29)
+[Cases in the interpreter](https://github.com/chrisdone/prana/blob/a992d0e4db2bd39edcd5b7d6a1d8ecdd6091a2ea/src/Prana/Interpret.hs#L29)
 will be fleshed out once the names in the AST ([methods, dicts,
-primops](https://github.com/chrisdone/prana/blob/master/src/Prana/Types.hs#L54-L67)) have been resolved.
+primops](https://github.com/chrisdone/prana/blob/a992d0e4db2bd39edcd5b7d6a1d8ecdd6091a2ea/src/Prana/Types.hs#L54-L67)) have been resolved.
 
 Challenges and thoughts:
 
