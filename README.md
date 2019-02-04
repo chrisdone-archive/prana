@@ -26,10 +26,15 @@ How it works:
 
 ## Implementation challenges
 
-The interpreter isn't written yet (I wrote a prototype
-[here](https://github.com/chrisdone/prana/blob/4926074322df23568866061f2c036915f06fa122/src/Prana/Interpret.hs)
-and deleted it), I'm still working on producing a pristine Core output
-from GHC for Prana to consume and interpret efficiently.
+The interpreter is in very early stages (view the
+[test suite here](https://github.com/chrisdone/prana/blob/master/test/Main.hs)),
+I'm still working on producing a **pristine Core output** from GHC for
+Prana to consume and interpret efficiently. The main challenge is
+removing garbage and assumptions from the AST that GHC makes.
+
+[Cases in the interpreter](https://github.com/chrisdone/prana/blob/master/src/Prana/Interpret.hs#L29)
+will be fleshed out once the names in the AST (methods, dicts,
+primops) have been resolved.
 
 Challenges and thoughts:
 
@@ -39,7 +44,7 @@ Challenges and thoughts:
   integer. Then have a separate mapping from Int to ByteString with a
   human-friendly description of the binding.~~
 
-  **Done.** There is now a `names.txt` file that contains a binary
+  **Done.** There is now a `names-cache.db` file that contains a binary
   encoded list of exported names and a list of local names. Their
   index in the list determines what will be put into the
   AST.
@@ -57,22 +62,28 @@ Challenges and thoughts:
   [here](https://github.com/chrisdone/prana/blob/22f8bdfa9dff860e306d6bca8f6dbdaffc864d76/test/Main.hs#L27),
   this demonstrates the LocalId vs ExportedId difference.
 
-* Implement LET and LAMBDA using an environment, rather than
+* ~~Implement LET and LAMBDA using an environment, rather than
   beta-substitution (as in the
   [old interpreter](https://github.com/chrisdone/prana/blob/4926074322df23568866061f2c036915f06fa122/src/Prana/Interpret.hs)). Beta-substitution
-  requires reconstructing a fresh tree, which is not efficient.
+  requires reconstructing a fresh tree, which is not efficient.~~
 
-* Once names really are unique, we don't need to do lookups on
+  Implemented.
+
+* ~~Once names really are unique, we don't need to do lookups on
   strings, we can instead normalize the numbers to allow O(1) lookup
   in a vector (`Vector Exp`) for globals. For locals, I think we can
   just use a vector (`Vector (Int,Exp)`) and do O(n) lookup; on a
   small enough vector it'll fit in cache and O(n) Int64 comparisons
-  over 10 elements is fast.
+  over 10 elements is fast.~~
 
-  In practice I think the data structure for globals will be:
+  ~~In practice I think the data structure for globals will be:
   `Unboxed.Vector (Int, Int)` where they map to (index, offset) that
   that can let you find a view on an `Exp` via `S.take offset (S.drop
-  index bs)`.
+  index bs)`.~~
+
+  Implemented. The current interpreter uses a HashMap Int64 Exp, but
+  this is for test suite convenient to not have to load the whole of
+  base in.
 
 * All methods existing in their own namespace, and are indices into
   the right slot of the dictionary. So in the database, we should
@@ -82,10 +93,10 @@ Challenges and thoughts:
   array of `Exp` methods. When a method is called, it indexes on the
   array.
 
-* Ignoring type applications for which functions don't actually even
+* ~~Ignoring type applications for which functions don't actually even
   accept an argument for that type. Except tagToEnum _does_ expect a
   type argument. Core is incoherent that way. We should normalize it
-  before writing byte-code to disk.
+  before writing byte-code to disk.~~
 
 * Instead of decoding the AST with the `binary` package, use a
   PatternSynonym (as demonstrated in `Prana.View`) to simply walk the
