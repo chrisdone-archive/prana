@@ -1,6 +1,7 @@
 -- <prana>
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RankNTypes #-}
@@ -809,10 +810,10 @@ doPrana dflags' = do
   mgraph <- GHC.getModuleGraph
   liftIO (hSetBuffering stdout NoBuffering)
   withIdDatabase
-    (\(exportedIds0, localIds0, conIds0) -> do
-       (exportedIds, localIds, conIds, ms) <-
+    (\db0 -> do
+       (db, ms) <-
          foldM
-           (\(exportedIds00, localIds00, conIds00, modules0) modSummary -> do
+           (\(db00, modules0) modSummary -> do
               liftIO
                 (putStr
                    ("Recompiling " ++
@@ -823,18 +824,19 @@ doPrana dflags' = do
                   shallowIds = concatMap shallowBindingVars bs
                   deepIds = deepBindingVars m bs
                   exportedIds =
-                    exportedIds00 ++
+                    dbExportedIds db00 ++
                     map (toExportedId m) (filter GHC.isExportedId shallowIds)
                   conIds =
                     concat
-                      [ conIds00
+                      [ dbConstrIds db00
                       , concatMap
-                          (map (toConstrId m . GHC.dataConWorkId) . GHC.tyConDataCons)
+                          (map (toConstrId m . GHC.dataConWorkId) .
+                           GHC.tyConDataCons)
                           (GHC.mg_tcs guts)
                       ]
                   localIds =
                     concat
-                      [ localIds00
+                      [ dbLocalIds db00
                       , map
                           (toLocalId m)
                           (filter (not . GHC.isExportedId) deepIds)
@@ -844,20 +846,19 @@ doPrana dflags' = do
                       ]
                   modules = modules0 ++ [(modSummary, guts)] -- Collect and generate afterwards.
               liftIO (putStrLn "done.")
-              pure (exportedIds, localIds, conIds, modules))
-           (exportedIds0, localIds0, conIds0, [])
-           -- FIXME: This is a hack to avoid the compilation of Cabal's
-           -- Setup.hs main package before we've built base, ghc-prim
-           -- and integer-gmp.
-           (filter
+              pure (Db {dbExportedIds = exportedIds, dbLocalIds = localIds, dbConstrIds = conIds}, modules))
+           (db0, [])
+           (filter -- FIXME: This is a hack to avoid the compilation of Cabal's
+                   -- Setup.hs main package before we've built base, ghc-prim
+                   -- and integer-gmp.
               (\modSummary ->
                  GHC.unpackFS
                    (GHC.unitIdFS (GHC.moduleUnitId (GHC.ms_mod modSummary))) /=
                  "main")
               mgraph)
-       let !exportedMap = M.fromList (zip exportedIds [0 ..])
-           !localMap = M.fromList (zip localIds [0 ..])
-           !conMap = M.fromList (zip conIds [0 ..])
+       let !exportedMap = M.fromList (zip (dbExportedIds db) [0 ..])
+           !localMap = M.fromList (zip (dbLocalIds db) [0 ..])
+           !conMap = M.fromList (zip (dbConstrIds db) [0 ..])
        mapM_
          (\(modSummary, guts) -> do
             liftIO
@@ -882,7 +883,7 @@ doPrana dflags' = do
                  (L.toLazyByteString (encodeArray (map encodeBind binds))))
             liftIO (putStrLn ("done.")))
          ms
-       pure (exportedIds, localIds, conIds))
+       pure db)
 
 newtype OnSecond a b = OnSecond { getPair :: (a, b)}
 instance Eq b => Eq (OnSecond a b) where (==) = on (==) (snd . getPair)
@@ -910,7 +911,14 @@ shallowBindingVars =
 
 -- isFromModule m _ = maybe True (== m) . GHC.nameModule_maybe . GHC.getName
 
-withIdDatabase :: (([ExportedId], [LocalId], [ConstrId]) -> Ghc ([ExportedId],[LocalId],[ConstrId])) -> Ghc ()
+data Db =
+  Db
+    { dbExportedIds :: ![ExportedId]
+    , dbLocalIds :: ![LocalId]
+    , dbConstrIds :: ![ConstrId]
+    }
+
+withIdDatabase :: (Db -> Ghc Db) -> Ghc ()
 withIdDatabase cont =
   GHC.gbracket
     (liftIO lock)
@@ -918,12 +926,12 @@ withIdDatabase cont =
     (\() -> do
        liftIO (putStrLn "Locked names database.")
        existing <- liftIO (S.readFile namesLocked)
-       (exported, locals, cons) <- cont (decodeIds existing)
+       db <- cont (decodeIds existing)
        liftIO (putStrLn "Writing names database ...")
        liftIO
          (L.writeFile
             namesReady
-            (L.toLazyByteString (encodeExportedIds exported <> encodeLocalIds locals <> encodeConstrIds cons)))
+            (L.toLazyByteString (encodeDb db)))
        liftIO (renameFile namesReady namesLocked)
        liftIO (putStrLn "Updated and unlocked names database."))
   where
@@ -955,14 +963,21 @@ defaultConstrIds =
   | i <- [1 .. GHC.mAX_TUPLE_SIZE]
   ]
 
-decodeIds :: ByteString -> ([ExportedId],[LocalId], [ConstrId])
+encodeDb Db {..} =
+  mconcat
+    [ encodeExportedIds dbExportedIds
+    , encodeLocalIds dbLocalIds
+    , encodeConstrIds dbConstrIds
+    ]
+
+decodeIds :: ByteString -> Db
 decodeIds s0 =
   if S.null s0
-    then ([], [], defaultConstrIds)
+    then (Db [] [] defaultConstrIds)
     else fst (runDecode go s0)
   where
     go =
-      (,,) <$> decodeArray exported <*> decodeArray local <*> decodeArray constr
+      Db <$> decodeArray exported <*> decodeArray local <*> decodeArray constr
     exported =
       ExportedId <$> decodeShortByteString <*> decodeShortByteString <*>
       decodeShortByteString
