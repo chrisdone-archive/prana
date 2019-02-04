@@ -78,7 +78,9 @@ RUN mkdir $PREFIX && \
 
 COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
 COPY src/Prana/Types.hs /root/Types.hs
-RUN tail -n +14 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
+COPY src/Data/BinaryDecode.hs /root/BinaryDecode.hs
+RUN tail -n +16 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
+RUN tail -n +20 /root/BinaryDecode.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
 RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1"
 RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
 ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
