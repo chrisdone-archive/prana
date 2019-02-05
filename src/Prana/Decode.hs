@@ -54,7 +54,7 @@ decodeExpr =
       11 -> PrimOpE <$> decodePrimId
       12 -> WiredInE <$> decodeWiredInId
       13 -> MethodE <$> decodeMethodId
-      14 -> DictE <$> decodeDictId
+      -- 14 -> DictE <$> decodeDictId
       15 -> FFIE <$> decodeFFIId
       _ -> fail ("decodeExpr: unknown tag " ++ show tag)
 

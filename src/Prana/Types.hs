@@ -45,7 +45,6 @@ data Exp
   -- Type-class infrastructure
   --
   | MethodE MethodId -- ^ A generic method call.
-  | DictE DictId -- ^ A dictionary passed to a method.
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data ConId = ConId !Int64

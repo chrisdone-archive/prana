@@ -62,7 +62,6 @@ eval global local =
     WiredInE {} -> error "eval.WiredInE: undefined"
     -- To support type classes (needed for numbers).
     MethodE {} -> error "eval.MethodE: undefined"
-    DictE {} -> error "eval.DictE: undefined"
     -- To support numeric operations (ints, chars, etc. ..).
     PrimOpE {} -> error "eval.PrimOpE: undefined"
     -- To support FFI calls (probably do this last):

@@ -1085,30 +1085,63 @@ toLocalBinds m =
         bs
 
 toExp :: Context -> CoreSyn.Expr GHC.Var -> Either String Main.Exp
-toExp m =
-  \case
-    CoreSyn.App f (CoreSyn.Type _) -> toExp m f
-    -- ^ v Skip over type and coerce applications.
-    CoreSyn.App f (CoreSyn.Coercion _) -> toExp m f
-    CoreSyn.App f x -> Main.AppE <$> toExp m f <*> toExp m x
-    CoreSyn.Lam var body ->
-      if GHC.isTyVar var -- Skip lambdas of types.
-        then toExp m body
-        else Main.LamE <$> pure (toLocalVarId m var) <*> toExp m body
-    CoreSyn.Let bind expr ->
-      Main.LetE <$> pure (toLocalBinds m bind) <*> toExp m expr
-    CoreSyn.Case expr var typ alts ->
-      Main.CaseE <$> toExp m expr <*> pure (toVarId m var) <*>
-      pure (toTyp m typ) <*>
-      (mapM (toAlt m) alts)
-    CoreSyn.Var i -> pure (toSomeIdExp m i)
-    CoreSyn.Lit i -> pure (Main.LitE (toLit i))
-    CoreSyn.Cast expr _coercion -> toExp m expr
-    CoreSyn.Tick _tickishVar expr -> toExp m expr
-    -- Types should only appear in argument position.
-    CoreSyn.Type typ -> Left "Did not expect a type here!"
-    -- Coercions should only appear in an argument position.
-    CoreSyn.Coercion _coercion -> Left "Did not expect a coercion here!"
+toExp m = go . cleanup
+  where
+    go =
+      \case
+        CoreSyn.App f x -> Main.AppE <$> go f <*> go x
+        CoreSyn.Lam var body ->
+          Main.LamE <$> pure (toLocalVarId m var) <*> go body
+        CoreSyn.Let bind expr ->
+          Main.LetE <$> pure (toLocalBinds m bind) <*> go expr
+        CoreSyn.Case expr var typ alts ->
+          Main.CaseE <$> go expr <*> pure (toVarId m var) <*> pure (toTyp m typ) <*>
+          (mapM (toAlt m) alts)
+        CoreSyn.Var i -> pure (toSomeIdExp m i)
+        CoreSyn.Lit i -> pure (Main.LitE (toLit i))
+        e ->
+          error
+            (unlines
+               [ "Unexpected case:"
+               , showSDoc (contextDynFlags m) (ppr e)
+               , "Expression:"
+               , maybe "" (showSDoc (contextDynFlags m) . ppr) (contextCore m)
+               , "AKA:"
+               , maybe
+                   ""
+                   (L8.unpack . L.toLazyByteString . showExpr False)
+                   (contextCore m)
+               ])
+
+cleanup :: CoreSyn.Expr GHC.Var -> CoreSyn.Expr GHC.Var
+cleanup = go
+  where
+    go =
+      \case
+        CoreSyn.App f (CoreSyn.Type _) -> go f -- Strip types.
+        CoreSyn.App f (CoreSyn.Coercion _) -> go f -- strip coercions.
+        CoreSyn.Lam var e
+          | GHC.isTyVar var -> go e -- Strip lambdas with types.
+          | otherwise -> CoreSyn.Lam var (go e)
+        CoreSyn.App f x -> CoreSyn.App (go f) (go x)
+        CoreSyn.Let bind expr ->
+          CoreSyn.Let
+            (case bind of
+               CoreSyn.NonRec var e -> CoreSyn.NonRec var (go e)
+               CoreSyn.Rec es -> CoreSyn.Rec (map (\(v, e) -> (v, go e)) es))
+            (go expr)
+        CoreSyn.Case expr var typ alts ->
+          CoreSyn.Case
+            (go expr)
+            var
+            typ
+            (map (\(con, v, e) -> (con, v, go e)) alts)
+        CoreSyn.Var i -> CoreSyn.Var i
+        CoreSyn.Lit i -> CoreSyn.Lit i
+        CoreSyn.Cast expr _ -> go expr
+        CoreSyn.Tick _ expr -> go expr
+        CoreSyn.Type {} -> error "Type is supposed to be stripped out."
+        CoreSyn.Coercion {} -> error "Coercion is supposed to be stripped out."
 
 isNewtype' i =
   case GHC.isDataConId_maybe i of
@@ -1212,10 +1245,11 @@ toSomeIdExp m (wrapperToWorker -> var) =
                        Nothing ->
                          case GHC.isFCallId_maybe var of
                            Just fcall -> Main.FFIE Main.FFIId
-                           Nothing ->
-                             case GHC.isDictId var of
-                               True -> Main.DictE Main.DictId
-                               False -> Main.VarE (toVarId m var)
+                           Nothing
+                             -- case GHC.isDictId var of
+                             --   True -> Main.DictE Main.DictId
+                             --   False ->
+                            -> Main.VarE (toVarId m var)
 
 -- | We don't support wrappers, so we convert all wrappers to workers.
 wrapperToWorker :: GHC.Id -> GHC.Id
@@ -1649,7 +1683,7 @@ encodeExpr =
     Main.PrimOpE i -> tag 11 <> encodePrimId i
     Main.WiredInE i -> tag 12 <> encodeWiredIn i
     Main.MethodE i -> tag 13 <> encodeMethodId i
-    Main.DictE i -> tag 14 <> encodeDictId i
+    -- Main.DictE i -> tag 14 <> encodeDictId i
     Main.FFIE i -> tag 15 <> encodeFFIId i
 
 encodeLit :: Main.Lit -> L.Builder
