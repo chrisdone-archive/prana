@@ -44,10 +44,13 @@ data Exp
   --
   -- Type-class infrastructure
   --
-  | MethodE MethodId -- ^ A generic method call.
+  | MethodE MethId -- ^ A generic method call.
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data ConId = ConId !Int64
+newtype ConId = ConId Int64
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+newtype MethId = MethId Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data PrimId = PrimId
@@ -56,16 +59,13 @@ data PrimId = PrimId
 data WiredId = WiredId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data MethodId = MethodId
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
 data FFIId = FFIId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data VarId = LocalIndex !Int64 | ExportedIndex !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data LocalVarId = LocalVarId !Int64
+newtype LocalVarId = LocalVarId Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 data TyId = TyId
@@ -108,6 +108,13 @@ data Lit
   | Label
   | Integer Integer
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+data MethodId =
+  MethodId
+    { methodIdPackage :: {-# UNPACK  #-}!ByteString
+    , methodIdModule  :: {-# UNPACK  #-}!ByteString
+    , methodIdName    :: {-# UNPACK  #-}!ByteString
+    } deriving (Show, Ord, Eq)
 
 data ExportedId =
   ExportedId

@@ -844,9 +844,24 @@ doPrana dflags' = do
                           (toLocalId m)
                           (filter (not . GHC.isExportedId) shallowIds)
                       ]
+                  methods =
+                    concat
+                      [ dbMethods db00
+                      -- , concatMap
+                      --     (map (toConstrId m . GHC.dataConWorkId) .
+                      --      GHC.tyConDataCons)
+                      --     (GHC.mg_tcs guts)
+                      ]
                   modules = modules0 ++ [(modSummary, guts)] -- Collect and generate afterwards.
               liftIO (putStrLn "done.")
-              pure (Db {dbExportedIds = exportedIds, dbLocalIds = localIds, dbConstrIds = conIds}, modules))
+              pure
+                ( Db
+                    { dbExportedIds = exportedIds
+                    , dbLocalIds = localIds
+                    , dbConstrIds = conIds
+                    , dbMethods = []
+                    }
+                , modules))
            (db0, [])
            (filter -- FIXME: This is a hack to avoid the compilation of Cabal's
                    -- Setup.hs main package before we've built base, ghc-prim
@@ -859,6 +874,7 @@ doPrana dflags' = do
        let !exportedMap = M.fromList (zip (dbExportedIds db) [0 ..])
            !localMap = M.fromList (zip (dbLocalIds db) [0 ..])
            !conMap = M.fromList (zip (dbConstrIds db) [0 ..])
+           !methodMap = M.fromList (zip (map fst (dbMethods db)) [0 ..])
        mapM_
          (\(modSummary, guts) -> do
             liftIO
@@ -875,6 +891,7 @@ doPrana dflags' = do
                     , contextConIds = conMap
                     , contextCore = Nothing
                     , contextDynFlags = dflags'
+                    , contextMethodIds = methodMap
                     }
                 binds = concatMap (toBinds context) bs
             liftIO
@@ -916,6 +933,7 @@ data Db =
     { dbExportedIds :: ![ExportedId]
     , dbLocalIds :: ![LocalId]
     , dbConstrIds :: ![ConstrId]
+    , dbMethods :: ![(MethodId, Int64)]
     }
 
 withIdDatabase :: (Db -> Ghc Db) -> Ghc ()
@@ -968,16 +986,21 @@ encodeDb Db {..} =
     [ encodeExportedIds dbExportedIds
     , encodeLocalIds dbLocalIds
     , encodeConstrIds dbConstrIds
+    , encodeMethodIds dbMethods
     ]
 
 decodeIds :: ByteString -> Db
 decodeIds s0 =
   if S.null s0
-    then (Db [] [] defaultConstrIds)
+    then (Db [] [] defaultConstrIds mempty)
     else fst (runDecode go s0)
   where
     go =
-      Db <$> decodeArray exported <*> decodeArray local <*> decodeArray constr
+      Db <$> decodeArray exported <*> decodeArray local <*> decodeArray constr <*> decodeArray method
+    method =
+      (,) <$> (MethodId <$> decodeShortByteString <*> decodeShortByteString <*>
+               decodeShortByteString)
+          <*> decodeInt64
     exported =
       ExportedId <$> decodeShortByteString <*> decodeShortByteString <*>
       decodeShortByteString
@@ -996,6 +1019,14 @@ encodeExportedIds =
     (\(ExportedId pkg md name) ->
        encodeShortByteString pkg <> encodeShortByteString md <>
        encodeShortByteString name)
+
+encodeMethodIds :: [(MethodId, Int64)] -> L.Builder
+encodeMethodIds =
+  encodeArray .
+  map
+    (\(MethodId pkg md name, i) ->
+       encodeShortByteString pkg <> encodeShortByteString md <>
+       encodeShortByteString name <> L.int64LE i)
 
 encodeConstrIds :: [ConstrId] -> L.Builder
 encodeConstrIds =
@@ -1021,6 +1052,7 @@ data Context =
           , contextCore :: Maybe (CoreSyn.Expr GHC.Var)
           , contextDynFlags :: GHC.DynFlags
           , contextConIds :: M.Map ConstrId Int64
+          , contextMethodIds :: M.Map MethodId Int64
           }
 
 toBinds :: Context -> CoreSyn.Bind GHC.Var -> [Main.Bind]
@@ -1241,11 +1273,41 @@ toSomeIdExp m (wrapperToWorker -> var) =
                    Just wiredIn -> Main.WiredInE Main.WiredId
                    Nothing ->
                      case GHC.isClassOpId_maybe var of
-                       Just cls -> Main.MethodE Main.MethodId
+                       Just cls -> Main.MethodE (toMethId m var)
                        Nothing ->
                          case GHC.isFCallId_maybe var of
                            Just fcall -> Main.FFIE Main.FFIId
                            Nothing -> Main.VarE (toVarId m var)
+
+toMethId m var =
+  case M.lookup i0 (contextMethodIds m) of
+    Just idx -> MethId idx
+    Nothing ->
+      error
+        (unlines
+           [ "Not in method scope: " ++
+             show (toExportedId (contextModule m) var)
+           , "I have these in that module:"
+           , unlines
+               (map
+                  show
+                  (filter
+                     (\i ->
+                        methodIdPackage i == methodIdPackage i0 &&
+                        methodIdModule i == methodIdModule i0)
+                     (M.keys (contextMethodIds m))))
+           , "Expression:"
+           , maybe
+               ""
+               (showSDoc (contextDynFlags m) . ppr)
+               (contextCore m)
+           ,"AKA:"
+           ,maybe
+                ""
+                (L8.unpack . L.toLazyByteString . showExpr False)
+                (contextCore m)
+           ])
+  where i0 = toMethodId (contextModule m) var
 
 -- | We don't support wrappers, so we convert all wrappers to workers.
 wrapperToWorker :: GHC.Id -> GHC.Id
@@ -1346,6 +1408,21 @@ toExportedId m thing =
   if GHC.isInternalName name
     then error "toExportedId: internal name given"
     else Main.ExportedId package module' name'
+  where
+    package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
+    module' =
+      GHC.fs_bs (GHC.moduleNameFS (GHC.moduleName (GHC.nameModule name)))
+    name' = GHC.fs_bs (GHC.getOccFS name)
+    name = case GHC.nameModule_maybe n of
+             Nothing -> qualify m n
+             Just{} -> n
+          where n = GHC.getName thing
+
+toMethodId :: GHC.NamedThing thing => GHC.Module -> thing -> Main.MethodId
+toMethodId m thing =
+  if GHC.isInternalName name
+    then error "toMethodId: internal name given"
+    else Main.MethodId package module' name'
   where
     package = GHC.fs_bs (GHC.unitIdFS (GHC.moduleUnitId (GHC.nameModule name)))
     module' =
@@ -1738,8 +1815,8 @@ encodeLocalVarId (LocalVarId x) = L.int64LE x
 encodeConId :: ConId -> L.Builder
 encodeConId (ConId i) = L.int64LE i
 
-encodeMethodId :: MethodId -> L.Builder
-encodeMethodId _ = mempty
+encodeMethodId :: MethId -> L.Builder
+encodeMethodId (MethId i) = L.int64LE i
 
 encodeFFIId :: FFIId -> L.Builder
 encodeFFIId _ = mempty
