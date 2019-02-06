@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy as L
 import           Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HM
 import           Data.Int
+import           Data.List
 import           Data.Maybe
 import           Prana.Decode
 import           Prana.Types
@@ -62,22 +63,24 @@ compileFile ty pwd fps = do
   case ty of
     Normal ->
       (if False
-          then readIt
-          else readProcessWithExitCode)
-          "docker"
-          ([ "run"
-           , "-v" ++ pwd ++ ":" ++ pwd
-           , "-w" ++ pwd
-           , "--rm"
-           , "ghc-compile"
-           , "ghc"
-           , "-O0"
-           , "-fbyte-code"
-           , "-this-unit-id"
-           , "prana-test"
-           ] ++
-           fps)
-          ""
+         then readIt
+         else readProcessWithExitCode)
+        "docker"
+        ([ "run"
+         , "-v" ++ pwd ++ ":" ++ pwd
+         , "-w" ++ pwd
+         , "--rm"
+         , "ghc-compile"
+         , "sh"
+         , "-c"
+         , intercalate
+             "&&"
+             [unwords
+                (["ghc", "-O0", "-fbyte-code", "-this-unit-id", "prana-test"] ++
+                 fps)
+             ,"cp /root/prana/names-cache.db " ++ pwd]
+         ])
+        ""
   where
     readIt n args _ = do
       code <- System.Process.rawSystem n args
