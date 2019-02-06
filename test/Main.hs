@@ -58,7 +58,7 @@ evaluation = do
                     (AppE (ConE (ConId 816)) (ConE (ConId 817))))
              ]))
   it
-    "Type classes"
+    "Type classes [1 method]"
     (do (idmod, methods) <-
           compileModulesWith
             Normal
@@ -74,6 +74,26 @@ evaluation = do
         let (global, local) = link idmod
         result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
         shouldBe result (ConW (ConId 817) []))
+  it
+    "Type classes [2 method]"
+    (do (idmod, methods) <-
+          compileModulesWith
+            Normal
+            [ ( "Classes"
+              , "module Classes where\n\
+                \data Nat = Succ Nat | Zero\n\
+                \data C = S | Z | L | R\n\
+                \class ToC a where\n\
+                \  toC :: a -> C\n\
+                \  fromC :: C -> a\n\
+                \instance ToC Nat where\n\
+                \  toC _ = S\n\
+                \  fromC _ = Zero\n\
+                \it = fromC S :: Nat")
+            ]
+        let (global, local) = link idmod
+        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
+        shouldBe result (ConW (ConId 822) []))
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec

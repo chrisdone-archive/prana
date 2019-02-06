@@ -55,9 +55,18 @@ eval methods global local =
     AppE (MethodE (MethId i)) dict ->
       case HM.lookup i methods of
         Nothing -> error "AppE.MethodE.MethId = Nothing"
-        Just idx -> case idx of
-                      0 -> eval methods global local dict
-                      _ -> error "AppE.MethodE: >1 method class."
+        Just idx ->
+          case idx of
+            0 -> eval methods global local dict
+            _ -> do
+              whnf <- eval methods global local dict
+              case whnf of
+                ConW _cid args ->
+                  case args V.!? (fromIntegral idx - 1) of
+                    Nothing ->
+                      error "AppE.Method: Couldn't find method in dictionary!"
+                    Just (Thunk locals' e) -> eval methods global locals' e
+                _ -> error "AppE.Method: Expected class dictionary!"
     AppE func arg -> do
       result <- eval methods global local func
       case result of
