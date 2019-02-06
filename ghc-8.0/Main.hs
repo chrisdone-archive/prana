@@ -847,10 +847,15 @@ doPrana dflags' = do
                   methods =
                     concat
                       [ dbMethods db00
-                      -- , concatMap
-                      --     (map (toConstrId m . GHC.dataConWorkId) .
-                      --      GHC.tyConDataCons)
-                      --     (GHC.mg_tcs guts)
+                      , concatMap
+                          (\tycon ->
+                             case GHC.tyConClass_maybe tycon of
+                               Nothing -> []
+                               Just cls ->
+                                 case GHC.classAllSelIds cls of
+                                   [method] -> [(toMethodId m method, 0)]
+                                   methods -> zip (map (toMethodId m) methods) [1 ..])
+                          (GHC.mg_tcs guts)
                       ]
                   modules = modules0 ++ [(modSummary, guts)] -- Collect and generate afterwards.
               liftIO (putStrLn "done.")
@@ -859,7 +864,7 @@ doPrana dflags' = do
                     { dbExportedIds = exportedIds
                     , dbLocalIds = localIds
                     , dbConstrIds = conIds
-                    , dbMethods = []
+                    , dbMethods = methods
                     }
                 , modules))
            (db0, [])

@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 
--- |
+-- | TODO: replace the use of the binary package with Data.BinaryDecode in this proj.
 
 module Prana.Decode where
 
@@ -53,7 +53,7 @@ decodeExpr =
       10 -> ConE <$> decodeConId
       11 -> PrimOpE <$> decodePrimId
       12 -> WiredInE <$> decodeWiredInId
-      13 -> MethodE <$> decodeMethodId
+      13 -> MethodE <$> decodeMethId
       15 -> FFIE <$> decodeFFIId
       _ -> fail ("decodeExpr: unknown tag " ++ show tag)
 
@@ -119,14 +119,14 @@ decodeTyId = pure TyId
 decodeConId :: Get ConId
 decodeConId = ConId <$> getInt64le
 
+decodeMethId :: Get MethId
+decodeMethId = MethId <$> getInt64le
+
 decodePrimId :: Get PrimId
 decodePrimId = pure PrimId
 
 decodeWiredInId :: Get WiredId
 decodeWiredInId = pure WiredId
-
-decodeMethodId :: Get MethodId
-decodeMethodId = pure MethodId
 
 decodeFFIId :: Get FFIId
 decodeFFIId = pure FFIId
