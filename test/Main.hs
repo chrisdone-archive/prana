@@ -47,16 +47,7 @@ evaluation = do
             ]
         let (global, local) = link idmod
         result <- eval mempty global local (VarE (ExportedIndex 6610))
-        shouldBe
-          result
-          (ConW
-             (ConId 816)
-             [ Thunk
-                 []
-                 (AppE
-                    (ConE (ConId 816))
-                    (AppE (ConE (ConId 816)) (ConE (ConId 817))))
-             ]))
+        shouldBe (ignoreEnv result) (ConW (ConId 816) []))
   it
     "Type classes [1 method]"
     (do (idmod, methods) <-
@@ -72,7 +63,8 @@ evaluation = do
                 \it = toC Zero")
             ]
         let (global, local) = link idmod
-        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
+        result <-
+          eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
         shouldBe result (ConW (ConId 817) []))
   it
     "Type classes [2 method, one parent class]"
@@ -94,8 +86,13 @@ evaluation = do
                 \it = fromC S :: Nat")
             ]
         let (global, local) = link idmod
-        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6611))
+        result <-
+          eval (linkMethods methods) global local (VarE (ExportedIndex 6611))
         shouldBe result (ConW (ConId 823) []))
+
+ignoreEnv :: WHNF -> WHNF
+ignoreEnv (ConW ci _) = ConW ci []
+ignoreEnv w = w
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec
