@@ -62,9 +62,6 @@ data MethodId = MethodId
 data FFIId = FFIId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data DictId = DictId
-  deriving (Generic, Data, Typeable, Eq, Show, Ord)
-
 data VarId = LocalIndex !Int64 | ExportedIndex !Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 

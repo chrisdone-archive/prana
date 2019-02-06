@@ -1245,11 +1245,7 @@ toSomeIdExp m (wrapperToWorker -> var) =
                        Nothing ->
                          case GHC.isFCallId_maybe var of
                            Just fcall -> Main.FFIE Main.FFIId
-                           Nothing
-                             -- case GHC.isDictId var of
-                             --   True -> Main.DictE Main.DictId
-                             --   False ->
-                            -> Main.VarE (toVarId m var)
+                           Nothing -> Main.VarE (toVarId m var)
 
 -- | We don't support wrappers, so we convert all wrappers to workers.
 wrapperToWorker :: GHC.Id -> GHC.Id
@@ -1683,7 +1679,6 @@ encodeExpr =
     Main.PrimOpE i -> tag 11 <> encodePrimId i
     Main.WiredInE i -> tag 12 <> encodeWiredIn i
     Main.MethodE i -> tag 13 <> encodeMethodId i
-    -- Main.DictE i -> tag 14 <> encodeDictId i
     Main.FFIE i -> tag 15 <> encodeFFIId i
 
 encodeLit :: Main.Lit -> L.Builder
@@ -1745,9 +1740,6 @@ encodeConId (ConId i) = L.int64LE i
 
 encodeMethodId :: MethodId -> L.Builder
 encodeMethodId _ = mempty
-
-encodeDictId :: DictId -> L.Builder
-encodeDictId _ = mempty
 
 encodeFFIId :: FFIId -> L.Builder
 encodeFFIId _ = mempty

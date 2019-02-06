@@ -54,7 +54,6 @@ decodeExpr =
       11 -> PrimOpE <$> decodePrimId
       12 -> WiredInE <$> decodeWiredInId
       13 -> MethodE <$> decodeMethodId
-      -- 14 -> DictE <$> decodeDictId
       15 -> FFIE <$> decodeFFIId
       _ -> fail ("decodeExpr: unknown tag " ++ show tag)
 
@@ -128,9 +127,6 @@ decodeWiredInId = pure WiredId
 
 decodeMethodId :: Get MethodId
 decodeMethodId = pure MethodId
-
-decodeDictId :: Get DictId
-decodeDictId = pure DictId
 
 decodeFFIId :: Get FFIId
 decodeFFIId = pure FFIId
