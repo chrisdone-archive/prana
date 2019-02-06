@@ -87,13 +87,11 @@ Challenges and thoughts:
   this is for test suite convenient to not have to load the whole of
   base in.
 
-* All methods existing in their own namespace, and are indices into
+* ~~All methods existing in their own namespace, and are indices into
   the right slot of the dictionary. So in the database, we should
-  store methodname+slot_number.
+  store methodname+slot_number.~~
 
-* A `DictId` is in its own namespace, should yield a dictionary as an
-  array of `Exp` methods. When a method is called, it indexes on the
-  array.
+  Class methods are implemented and in the test suite.
 
 * ~~Ignoring type applications for which functions don't actually even
   accept an argument for that type. Except tagToEnum _does_ expect a
