@@ -75,7 +75,7 @@ evaluation = do
         result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
         shouldBe result (ConW (ConId 817) []))
   it
-    "Type classes [2 method]"
+    "Type classes [2 method, one parent class]"
     (do (idmod, methods) <-
           compileModulesWith
             Normal
@@ -83,17 +83,19 @@ evaluation = do
               , "module Classes where\n\
                 \data Nat = Succ Nat | Zero\n\
                 \data C = S | Z | L | R\n\
-                \class ToC a where\n\
+                \class Parent a => ToC a where\n\
                 \  toC :: a -> C\n\
                 \  fromC :: C -> a\n\
+                \class Parent a where parent :: a -> a\n\
+                \instance Parent Nat where parent x = x\n\
                 \instance ToC Nat where\n\
                 \  toC _ = S\n\
-                \  fromC _ = Zero\n\
+                \  fromC _ = parent Zero\n\
                 \it = fromC S :: Nat")
             ]
         let (global, local) = link idmod
-        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
-        shouldBe result (ConW (ConId 822) []))
+        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6611))
+        shouldBe result (ConW (ConId 823) []))
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec
