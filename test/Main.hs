@@ -36,7 +36,7 @@ evaluation = do
   describe "Lambdas with local envs" localLambdas
   it
     "Church"
-    (do idmod <-
+    (do (idmod, _) <-
           compileModulesWith
             Normal
             [ ( "Church"
@@ -63,7 +63,7 @@ localLambdas :: Spec
 localLambdas = do
   it
     "Id"
-    (do idmod <-
+    (do (idmod, _) <-
           compileModulesWith
             Normal
             [ ("Id", "module Id where id x = x")
@@ -88,7 +88,7 @@ localLambdas = do
              ]))
   it
     "Lets"
-    (do idmod <-
+    (do (idmod, _) <-
           compileModulesWith
             Normal
             [ ( "Let"
@@ -120,7 +120,7 @@ dependencies :: Spec
 dependencies =
   it
     "Compile two modules with interdependencies"
-    (do idmod <-
+    (do (idmod, _) <-
           compileModulesWith
             Normal
             [ ("Id", "module Id where id x = x")
@@ -138,7 +138,7 @@ compileAndDecode :: Spec
 compileAndDecode =
   it
     "Compile id"
-    (do idmod <-
+    (do (idmod, _) <-
           compileModulesWith
             Normal
             [ ("Id", "module Id where id x = x")

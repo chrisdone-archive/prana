@@ -17,13 +17,24 @@ decodeExportedId =
   ExportedId <$> decodeShortByteString <*> decodeShortByteString <*>
   decodeShortByteString
 
+decodeConstrId :: Get ConstrId
+decodeConstrId =
+  ConstrId <$> decodeShortByteString <*> decodeShortByteString <*>
+  decodeShortByteString
+
 decodeLocalId :: Get LocalId
 decodeLocalId =
   LocalId <$> decodeShortByteString <*> decodeShortByteString <*>
   decodeShortByteString <*> fmap Unique decodeInt64
 
--- decodeMethodIndex :: Get (Id, Int)
--- decodeMethodIndex = label' "decodeMethodIndex" ((,) <$> decodeId <*> decodeInt)
+decodeMethodId :: Get (MethodId, Int64)
+decodeMethodId =
+  label'
+    "decodeMethodIndex"
+    ((,) <$>
+     (MethodId <$> decodeShortByteString <*> decodeShortByteString <*>
+      decodeShortByteString) <*>
+     decodeInt64)
 
 -- decodeEnums :: Get (Id, [Id])
 -- decodeEnums = do

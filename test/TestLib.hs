@@ -23,12 +23,12 @@ import           System.Process
 data CompileType = Normal
 
 -- | Compile a single module.
-compileModule :: CompileType -> String -> String -> IO [Bind]
+compileModule :: CompileType -> String -> String -> IO ([Bind], [(MethodId, Int64)])
 compileModule ty name contents =
-  fmap (snd . head) (compileModulesWith ty [(name, contents)])
+  fmap (first (snd . head)) (compileModulesWith ty [(name, contents)])
 
 -- | Compile the given sources as a set of modules.
-compileModulesWith :: CompileType -> [(String,String)] -> IO [(String, [Bind])]
+compileModulesWith :: CompileType -> [(String,String)] -> IO ([(String, [Bind])], [(MethodId, Int64)])
 compileModulesWith ty modules =
   withSystemTempDirectory
     "prana-compile"
@@ -37,24 +37,42 @@ compileModulesWith ty modules =
        mapM_ (\(fp, src) -> writeFile (dir ++ "/" ++ fp) src) fps
        (code, out, err) <- compileFile ty dir (map fst fps)
        case code of
-         ExitSuccess ->
-           mapM
-             (\(moduleName, _) -> do
-                bytes <-
-                  L.readFile (dir ++ "/prana-test_" ++ moduleName ++ ".prana")
-                case runGetOrFail (decodeArray decodeBind) bytes of
-                  Left (_, pos, e) ->
-                    error
-                      ("Decoding error! " ++
-                       e ++
-                       " at index " ++
-                       show pos ++
-                       "\n\nFile:\n\n" ++
-                       show (L.unpack bytes) ++
-                       "\n\nAt index:\n\n" ++
-                       show (drop (fromIntegral pos - 1) (L.unpack bytes)))
-                  Right (_, _, binds) -> pure (moduleName, binds))
-             modules
+         ExitSuccess -> do
+           mods <-
+             mapM
+               (\(moduleName, _) -> do
+                  bytes <-
+                    L.readFile (dir ++ "/prana-test_" ++ moduleName ++ ".prana")
+                  case runGetOrFail (decodeArray decodeBind) bytes of
+                    Left (_, pos, e) ->
+                      error
+                        ("Decoding error! " ++
+                         e ++
+                         " at index " ++
+                         show pos ++
+                         "\n\nFile:\n\n" ++
+                         show (L.unpack bytes) ++
+                         "\n\nAt index:\n\n" ++
+                         show (drop (fromIntegral pos - 1) (L.unpack bytes)))
+                    Right (_, _, binds) -> pure (moduleName, binds))
+               modules
+           bytes <- L.readFile (dir <> "/names-cache.db")
+           case runGetOrFail
+                  (decodeArray decodeExportedId *> decodeArray decodeLocalId *>
+                   decodeArray decodeConstrId *>
+                   decodeArray decodeMethodId)
+                  bytes of
+             Left (_, pos, e) ->
+               error
+                 ("Decoding error! " ++
+                  e ++
+                  " at index " ++
+                  show pos ++
+                  "\n\nFile:\n\n" ++
+                  show (L.unpack bytes) ++
+                  "\n\nAt index:\n\n" ++
+                  show (drop (fromIntegral pos - 1) (L.unpack bytes)))
+             Right (_, _, methIds) -> pure (mods, methIds)
          ExitFailure {} -> error (unlines ["Compile failed:", out, err]))
 
 -- | Run a compile with docker in the given dir on the given file.
