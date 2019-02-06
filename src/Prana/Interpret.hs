@@ -16,6 +16,8 @@ type LocalEnv = HashMap Int64 Exp
 
 type GlobalEnv = HashMap Int64 Exp
 
+type MethodEnv = HashMap Int64 Int64
+
 data WHNF
   = LamW !LocalEnv !Int64 !Exp
   | LitW !Lit
@@ -26,13 +28,14 @@ data Thunk =
   Thunk !LocalEnv !Exp
   deriving (Show, Eq)
 
-eval :: GlobalEnv -> LocalEnv -> Exp -> IO WHNF
-eval global local =
+eval :: MethodEnv -> GlobalEnv -> LocalEnv -> Exp -> IO WHNF
+eval methods global local =
   \case
     LitE lit -> pure (LitW lit)
     LamE (LocalVarId param) body -> pure (LamW local param body)
     LetE binds body ->
       eval
+        methods
         global
         (foldl'
            (\localEnv (LocalVarId i, ex) -> HM.insert i ex localEnv)
@@ -44,15 +47,22 @@ eval global local =
         ExportedIndex i ->
           case HM.lookup i global of
             Nothing -> error "eval.VarE.ExportedIndex = Nothing"
-            Just e -> eval global local e
+            Just e -> eval methods global local e
         LocalIndex i ->
           case HM.lookup i local of
             Nothing -> error "eval.VarE.LocalIndex = Nothing"
-            Just e -> eval global local e
+            Just e -> eval methods global local e
+    AppE (MethodE (MethId i)) dict ->
+      case HM.lookup i methods of
+        Nothing -> error "AppE.MethodE.MethId = Nothing"
+        Just idx -> case idx of
+                      0 -> eval methods global local dict
+                      _ -> error "AppE.MethodE: >1 method class."
     AppE func arg -> do
-      result <- eval global local func
+      result <- eval methods global local func
       case result of
-        LamW env param body -> eval global (HM.insert param arg env) body
+        LamW env param body ->
+          eval methods global (HM.insert param arg env) body
         LitW lit -> error ("eval.AppE.LitW: expected function: " ++ show lit)
         ConW cid args -> pure (ConW cid (args <> V.singleton (Thunk local arg)))
     -- To support pattern matching.
@@ -61,7 +71,8 @@ eval global local =
     -- To support $ and other hacks by GHC.
     WiredInE {} -> error "eval.WiredInE: undefined"
     -- To support type classes (needed for numbers).
-    MethodE {} -> error "eval.MethodE: undefined"
+    MethodE {} ->
+      error "eval.MethodE: should not be evaluated directly, but has been!"
     -- To support numeric operations (ints, chars, etc. ..).
     PrimOpE {} -> error "eval.PrimOpE: undefined"
     -- To support FFI calls (probably do this last):

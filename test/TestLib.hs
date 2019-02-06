@@ -113,8 +113,8 @@ dropModuleHeaders = map (second (filter (not . header)))
                  }) = True
     header _ = False
 
-link :: [(String, [Bind])] -> HashMap Int64 Exp
-link mods = globals
+link :: [(String, [Bind])] -> (HashMap Int64 Exp, HashMap Int64 Exp)
+link mods = (globals, locals)
   where
     bs = concatMap snd mods
     globals =
@@ -125,3 +125,14 @@ link mods = globals
                 ExportedIndex i -> Just (i, bindExp b)
                 _ -> Nothing)
            bs)
+    locals =
+      HM.fromList
+        (mapMaybe
+           (\b ->
+              case bindVar b of
+                LocalIndex i -> Just (i, bindExp b)
+                _ -> Nothing)
+           bs)
+
+linkMethods :: [(MethodId, Int64)] -> HashMap Int64 Int64
+linkMethods = HM.fromList . zipWith (\i (_, x) -> (i,x)) [0..]

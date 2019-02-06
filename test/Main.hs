@@ -31,7 +31,7 @@ evaluation = do
     "Literals"
     (it
        "Ints"
-       (do result <- eval mempty mempty (LitE (Int 123))
+       (do result <- eval mempty mempty mempty (LitE (Int 123))
            shouldBe result (LitW (Int 123))))
   describe "Lambdas with local envs" localLambdas
   it
@@ -45,8 +45,8 @@ evaluation = do
                 \it =  (Succ (Succ (Succ Zero)))\n\
                 \")
             ]
-        let global = link idmod
-        result <- eval global mempty (VarE (ExportedIndex 6610))
+        let (global, local) = link idmod
+        result <- eval mempty global local (VarE (ExportedIndex 6610))
         shouldBe
           result
           (ConW
@@ -57,6 +57,23 @@ evaluation = do
                     (ConE (ConId 816))
                     (AppE (ConE (ConId 816)) (ConE (ConId 817))))
              ]))
+  it
+    "Type classes"
+    (do (idmod, methods) <-
+          compileModulesWith
+            Normal
+            [ ( "Classes"
+              , "module Classes where\n\
+                \data Nat = Succ Nat | Zero\n\
+                \data C = S | Z | L | R\n\
+                \class ToC a where toC :: a -> C\n\
+                \instance ToC Nat where \
+                \  toC _ = S\n\
+                \it = toC Zero")
+            ]
+        let (global, local) = link idmod
+        result <- eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
+        shouldBe result (ConW (ConId 817) []))
 
 -- | Lambda evaluation with local evaluation.
 localLambdas :: Spec
@@ -73,8 +90,8 @@ localLambdas = do
                 \const x _ = Id.id x\n\
                 \it = On.const (123 :: Int) (57 :: Int)")
             ]
-        let global = link idmod
-        result <- eval global mempty (VarE (ExportedIndex 6612))
+        let (global, local) = link idmod
+        result <- eval mempty global local (VarE (ExportedIndex 6612))
         shouldBe
           result
           (ConW
@@ -96,8 +113,8 @@ localLambdas = do
                 \idem f x = let v = f x; g _ = (666::Int) in g (f v)\n\
                 \it = idem (\\x -> x) (123 :: Int)")
             ]
-        let global = link idmod
-        result <- eval global mempty (VarE (ExportedIndex 6610))
+        let (global, local) = link idmod
+        result <- eval mempty global local (VarE (ExportedIndex 6610))
         shouldBe
           result
           (ConW
