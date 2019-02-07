@@ -44,11 +44,11 @@ eval methods global local =
         body
     VarE var ->
       case var of
-        ExportedIndex i ->
+        ExportedIndex (GlobalVarId i) ->
           case HM.lookup i global of
             Nothing -> error "eval.VarE.ExportedIndex = Nothing"
             Just e -> eval methods global local e
-        LocalIndex i ->
+        LocalIndex (LocalVarId i) ->
           case HM.lookup i local of
             Nothing -> error "eval.VarE.LocalIndex = Nothing"
             Just e -> eval methods global local e

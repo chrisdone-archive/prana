@@ -1132,7 +1132,7 @@ toExp m = go . cleanup
         CoreSyn.Let bind expr ->
           Main.LetE <$> pure (toLocalBinds m bind) <*> go expr
         CoreSyn.Case expr var typ alts ->
-          Main.CaseE <$> go expr <*> pure (toVarId m var) <*> pure (toTyp m typ) <*>
+          Main.CaseE <$> go expr <*> pure (toLocalVarId m var) <*> pure (toTyp m typ) <*>
           (mapM (toAlt m) alts)
         CoreSyn.Var i -> pure (toSomeIdExp m i)
         CoreSyn.Lit i -> pure (Main.LitE (toLit i))
@@ -1186,7 +1186,7 @@ isNewtype' i =
     Just dc -> GHC.isNewTyCon (GHC.dataConTyCon dc)
 
 toAlt :: Context -> (CoreSyn.AltCon, [GHC.Var], CoreSyn.Expr GHC.Var) -> Either String Alt
-toAlt m (con,vars,e) = Alt <$> pure (toAltCon m con) <*> pure (map (toVarId m) vars) <*> (toExp m e)
+toAlt m (con,vars,e) = Alt <$> pure (toAltCon m con) <*> pure (map (toLocalVarId m) vars) <*> (toExp m e)
 
 toAltCon :: Context -> CoreSyn.AltCon -> Main.AltCon
 toAltCon m =
@@ -1267,7 +1267,7 @@ toTyId _ _ = Main.TyId
 toSomeIdExp :: Context -> GHC.Var -> Main.Exp
 toSomeIdExp m (wrapperToWorker -> var) =
   if isNewtype' var
-    then Main.LamE (LocalVarId 0) (VarE (LocalIndex 0)) -- identity.
+    then Main.LamE (LocalVarId 0) (VarE (LocalIndex (LocalVarId 0))) -- identity.
     else case GHC.isDataConWorkId_maybe var of
            Just dataCon -> Main.ConE (toConId m var)
            Nothing ->
@@ -1325,7 +1325,7 @@ toVarId :: Context -> GHC.Var -> Main.VarId
 toVarId m var =
   if GHC.isExportedId var
     then case M.lookup i0 (contextExportedIds m) of
-           Just idx -> ExportedIndex idx
+           Just idx -> ExportedIndex (GlobalVarId idx)
            Nothing ->
              error
                (unlines
@@ -1352,7 +1352,7 @@ toVarId m var =
                        (contextCore m)
                   ])
     else case M.lookup i1 (contextLocalIds m) of
-           Just idx -> LocalIndex idx
+           Just idx -> LocalIndex (LocalVarId idx)
            Nothing ->
              error
                (unlines
@@ -1755,7 +1755,7 @@ encodeExpr =
     Main.LetE binds expr ->
       tag 4 <> encodeArray (map encodeLocalBind binds) <> encodeExpr expr
     Main.CaseE expr var typ alts ->
-      tag 5 <> encodeExpr expr <> encodeId var <> encodeType typ <>
+      tag 5 <> encodeExpr expr <> encodeLocalVarId var <> encodeType typ <>
       encodeArray (map encodeAlt alts)
     Main.ConE i -> tag 10 <> encodeConId i
     Main.PrimOpE i -> tag 11 <> encodePrimId i
@@ -1799,7 +1799,7 @@ encodeAltCon =
 
 encodeAlt :: Alt -> L.Builder
 encodeAlt (Alt altCon' vars expr) =
-  encodeAltCon altCon' <> encodeArray (map encodeId vars) <> encodeExpr expr
+  encodeAltCon altCon' <> encodeArray (map encodeLocalVarId vars) <> encodeExpr expr
 
 tag :: Word8 -> L.Builder
 tag = L.word8
@@ -1811,11 +1811,14 @@ encodeType =
     TyConApp i es -> tag 1 <> encodeTyId i <> encodeArray (map encodeType es)
 
 encodeId :: VarId -> L.Builder
-encodeId (LocalIndex x) = tag 0 <> L.int64LE x
-encodeId (ExportedIndex x) = tag 1 <> L.int64LE x
+encodeId (LocalIndex x) = tag 0 <> encodeLocalVarId x
+encodeId (ExportedIndex (GlobalVarId x)) = tag 1 <> L.int64LE x
 
 encodeLocalVarId :: LocalVarId -> L.Builder
 encodeLocalVarId (LocalVarId x) = L.int64LE x
+
+encodeGlobalVarId :: GlobalVarId -> L.Builder
+encodeGlobalVarId (GlobalVarId x) = L.int64LE x
 
 encodeConId :: ConId -> L.Builder
 encodeConId (ConId i) = L.int64LE i
