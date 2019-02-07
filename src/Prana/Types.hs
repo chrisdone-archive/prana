@@ -27,7 +27,7 @@ data Exp
   --
   = AppE Exp Exp -- ^ Apply a function to an argument.
   | LamE LocalVarId Exp -- ^ A lambda.
-  | CaseE Exp VarId Typ [Alt] -- ^ A case analysis.
+  | CaseE Exp LocalVarId Typ [Alt] -- ^ A case analysis.
   | LetE [(LocalVarId, Exp)] Exp -- ^ Let binding of variables.
   --
   -- Constants
@@ -62,7 +62,10 @@ data WiredId = WiredId
 data FFIId = FFIId
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
-data VarId = LocalIndex !Int64 | ExportedIndex !Int64
+data VarId = LocalIndex !LocalVarId | ExportedIndex !GlobalVarId
+  deriving (Generic, Data, Typeable, Eq, Show, Ord)
+
+newtype GlobalVarId = GlobalVarId Int64
   deriving (Generic, Data, Typeable, Eq, Show, Ord)
 
 newtype LocalVarId = LocalVarId Int64
@@ -76,7 +79,7 @@ data Typ = TyConApp TyId [Typ] | OpaqueType ByteString
 
 data Alt = Alt
   { altCon :: AltCon
-  , altVars :: [VarId]
+  , altVars :: [LocalVarId]
   , altExp :: Exp
   } deriving (Generic, Data, Typeable, Eq, Show, Ord)
 

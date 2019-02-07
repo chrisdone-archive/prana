@@ -59,7 +59,7 @@ decodeExpr =
       3 -> LamE <$> decodeLocalVarId <*> decodeExpr
       4 -> LetE <$> decodeArray decodeLocalBind <*> decodeExpr
       5 ->
-        CaseE <$> decodeExpr <*> decodeId <*> decodeType <*>
+        CaseE <$> decodeExpr <*> decodeLocalVarId <*> decodeType <*>
         decodeArray decodeAlt
       10 -> ConE <$> decodeConId
       11 -> PrimOpE <$> decodePrimId
@@ -114,7 +114,7 @@ decodeBool =
 decodeAlt :: Get Alt
 decodeAlt =
   label' "decodeAlt" $
-  Alt <$> decodeAltCon <*> decodeArray decodeId <*> decodeExpr
+  Alt <$> decodeAltCon <*> decodeArray decodeLocalVarId <*> decodeExpr
 
 decodeType :: Get Typ
 decodeType =
@@ -146,11 +146,14 @@ decodeId :: Get VarId
 decodeId = label' "decodeVarId" $
   do tag <- getWord8
      case tag of
-       0 -> LocalIndex <$> getInt64le
-       _ -> ExportedIndex <$> getInt64le
+       0 -> LocalIndex <$> decodeLocalVarId
+       _ -> ExportedIndex <$> decodeGlobalVarId
 
 decodeLocalVarId :: Get LocalVarId
 decodeLocalVarId = LocalVarId <$> getInt64le
+
+decodeGlobalVarId :: Get GlobalVarId
+decodeGlobalVarId  = GlobalVarId <$> getInt64le
 
 decodeUnique :: Get Unique
 decodeUnique = label' "decodeUnique" $ fmap Unique getInt64le

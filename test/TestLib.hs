@@ -1,6 +1,8 @@
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults -fno-warn-orphans #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
 
@@ -19,6 +21,9 @@ import           Prana.Types
 import           System.Exit
 import           System.IO.Temp
 import           System.Process
+
+deriving instance Num LocalVarId
+deriving instance Num GlobalVarId
 
 data CompileType = Normal
 
@@ -122,7 +127,7 @@ link mods = (globals, locals)
         (mapMaybe
            (\b ->
               case bindVar b of
-                ExportedIndex i -> Just (i, bindExp b)
+                ExportedIndex (GlobalVarId i) -> Just (i, bindExp b)
                 _ -> Nothing)
            bs)
     locals =
@@ -130,7 +135,7 @@ link mods = (globals, locals)
         (mapMaybe
            (\b ->
               case bindVar b of
-                LocalIndex i -> Just (i, bindExp b)
+                LocalIndex (LocalVarId i) -> Just (i, bindExp b)
                 _ -> Nothing)
            bs)
 
