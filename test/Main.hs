@@ -46,7 +46,8 @@ evaluation = do
                 \")
             ]
         let (global, local) = link idmod
-        result <- eval mempty global local (VarE (ExportedIndex 6610))
+        result <- eval mempty global ( let locals = fmap (ClosureBox locals) local
+                                       in locals) (VarE (ExportedIndex 6610))
         shouldBe (ignoreEnv result) (ConW (ConId 816) []))
   it
     "Type classes [1 method]"
@@ -64,7 +65,8 @@ evaluation = do
             ]
         let (global, local) = link idmod
         result <-
-          eval (linkMethods methods) global local (VarE (ExportedIndex 6610))
+          eval (linkMethods methods) global ( let locals = fmap (ClosureBox locals) local
+                                              in locals) (VarE (ExportedIndex 6610))
         shouldBe result (ConW (ConId 817) []))
   it
     "Type classes [2 method, one parent class]"
@@ -87,7 +89,8 @@ evaluation = do
             ]
         let (global, local) = link idmod
         result <-
-          eval (linkMethods methods) global local (VarE (ExportedIndex 6611))
+          eval (linkMethods methods) global ( let locals = fmap (ClosureBox locals) local
+                                              in locals) (VarE (ExportedIndex 6611))
         shouldBe result (ConW (ConId 823) []))
 
 ignoreEnv :: WHNF -> WHNF
@@ -110,18 +113,10 @@ localLambdas = do
                 \it = On.const (123 :: Int) (57 :: Int)")
             ]
         let (global, local) = link idmod
-        result <- eval mempty global local (VarE (ExportedIndex 6612))
-        shouldBe
-          result
-          (ConW
-             (ConId 233)
-             [ Thunk
-                 [ (57218, VarE (LocalIndex 57221))
-                 , (57221, AppE (ConE (ConId 233)) (LitE (Int 123)))
-                 , (57222, AppE (ConE (ConId 233)) (LitE (Int 57)))
-                 ]
-                 (LitE (Int 123))
-             ]))
+        result <-
+          eval mempty global ( let locals = fmap (ClosureBox locals) local
+                               in locals) (VarE (ExportedIndex 6612))
+        shouldBe result (ConW (ConId 233) [ClosureBox [] (LitE (Int 123))]))
   it
     "Lets"
     (do (idmod, _) <-
@@ -133,20 +128,33 @@ localLambdas = do
                 \it = idem (\\x -> x) (123 :: Int)")
             ]
         let (global, local) = link idmod
-        result <- eval mempty global local (VarE (ExportedIndex 6610))
+        result <-
+          eval mempty global (let locals = fmap (ClosureBox locals) local
+                              in locals) (VarE (ExportedIndex 6610))
         shouldBe
           result
           (ConW
              (ConId 233)
-             [ Thunk
-                 [ (57218, LamE (LocalVarId 57222) (VarE (LocalIndex 57222)))
-                 , (57219, AppE (ConE (ConId 233)) (LitE (Int 123)))
+             [ ClosureBox
+                 [ ( 57218
+                   , ClosureBox
+                       []
+                       (LamE (LocalVarId 57222) (VarE (LocalIndex 57222))))
+                 , (57219, ClosureBox [] (AppE (ConE (ConId 233)) (LitE (Int 123))))
                  , ( 57221
-                   , AppE
-                       (VarE (LocalIndex 57218))
+                   , ClosureBox
+                       [ ( 57218
+                         , ClosureBox
+                             []
+                             (LamE (LocalVarId 57222) (VarE (LocalIndex 57222))))
+                       , ( 57219
+                         , ClosureBox [] (AppE (ConE (ConId 233)) (LitE (Int 123))))
+                       ]
                        (AppE
                           (VarE (LocalIndex 57218))
-                          (VarE (LocalIndex 57219))))
+                          (AppE
+                             (VarE (LocalIndex 57218))
+                             (VarE (LocalIndex 57219)))))
                  ]
                  (LitE (Int 666))
              ]))
