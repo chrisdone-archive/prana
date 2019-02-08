@@ -175,7 +175,26 @@ dependencies =
             ]
         shouldBe
           (dropModuleHeaders idmod)
-          [("Id",[Bind {bindVar = ExportedIndex 6609, bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))}]),("On",[Bind {bindVar = ExportedIndex 6611, bindExp = LamE (LocalVarId 57221) (LamE (LocalVarId 57222) (AppE (VarE (ExportedIndex 6609)) (VarE (LocalIndex 57221))))}])])
+          [ ( "Id"
+            , [ Bind
+                  { bindVar = ExportedIndex 6609
+                  , bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))
+                  }
+              ])
+          , ( "On"
+            , [ Bind
+                  { bindVar = ExportedIndex 6611
+                  , bindExp =
+                      LamE
+                        (LocalVarId 57221)
+                        (LamE
+                           (LocalVarId 57222)
+                           (AppE
+                              (VarE (ExportedIndex 6609))
+                              (VarE (LocalIndex 57221))))
+                  }
+              ])
+          ])
 
 -- | Test compiling and decoding.
 compileAndDecode :: Spec
@@ -193,4 +212,33 @@ compileAndDecode =
             ]
         shouldBe
           (dropModuleHeaders idmod)
-          [("Id",[Bind {bindVar = ExportedIndex 6609, bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))}]),("On",[Bind {bindVar = ExportedIndex 6611, bindExp = LamE (LocalVarId 57222) (LamE (LocalVarId 57223) (LamE (LocalVarId 57224) (LamE (LocalVarId 57225) (AppE (AppE (VarE (LocalIndex 57222)) (AppE (VarE (LocalIndex 57223)) (VarE (LocalIndex 57224)))) (AppE (VarE (LocalIndex 57223)) (VarE (LocalIndex 57225)))))))}])])
+          [ ( "Id"
+            , [ Bind
+                  { bindVar = ExportedIndex 6609
+                  , bindExp = LamE (LocalVarId 57218) (VarE (LocalIndex 57218))
+                  }
+              ])
+          , ( "On"
+            , [ Bind
+                  { bindVar = ExportedIndex 6611
+                  , bindExp =
+                      LamE
+                        (LocalVarId 57222)
+                        (LamE
+                           (LocalVarId 57223)
+                           (LamE
+                              (LocalVarId 57224)
+                              (LamE
+                                 (LocalVarId 57225)
+                                 (AppE
+                                    (AppE
+                                       (VarE (LocalIndex 57222))
+                                       (AppE
+                                          (VarE (LocalIndex 57223))
+                                          (VarE (LocalIndex 57224))))
+                                    (AppE
+                                       (VarE (LocalIndex 57223))
+                                       (VarE (LocalIndex 57225)))))))
+                  }
+              ])
+          ])
