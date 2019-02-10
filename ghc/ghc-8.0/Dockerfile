@@ -76,49 +76,6 @@ RUN mkdir $PREFIX && \
 ################################################################################
 # Patching GHC
 
-COPY ghc-8.0/Main.hs /root/ghc_build/ghc-8.0/ghc/Main.hs
-COPY src/Prana/Types.hs /root/Types.hs
-COPY src/Data/BinaryDecode.hs /root/BinaryDecode.hs
-RUN tail -n +16 /root/Types.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
-RUN tail -n +20 /root/BinaryDecode.hs >> /root/ghc_build/ghc-8.0/ghc/Main.hs
-RUN cd; cd ghc_build/ghc-8.0 && make inplace/bin/ghc-stage2 -j5 GhcStage1HcOpts="-package-id containers-0.5.7.1"
+RUN cd; cd ghc_build/ghc-8.0 && make  V=0 inplace/bin/ghc-stage2 -j4
 RUN mv /root/ghc_build/ghc-8.0/inplace/bin/ghc-stage2 /root/ghc_build/ghc-8.0/inplace/bin/ghc
 ENV PATH="/root/ghc_build/ghc-8.0/inplace/bin:${PATH}"
-
-################################################################################
-# Building ghc-prim
-
-WORKDIR /root/ghc_build/ghc-8.0/libraries/ghc-prim
-
-RUN cp /root/ghc_build/ghc-8.0/compiler/stage2/build/primops.txt ../../compiler/prelude/primops.txt && \
-    ghc Setup.hs && \
-    ./Setup configure --package-db $PREFIX/package.conf.d --prefix $PREFIX --ghc-options=-O0 && \
-    ./Setup build && \
-    ./Setup install && \
-    sed -i -e 's,^exposed-modules:,exposed-modules: GHC.Prim,' $PREFIX/package.conf.d/ghc-prim-*.conf && \
-    ghc-pkg --package-db $PREFIX/package.conf.d recache
-
-################################################################################
-# Building integer-gmp
-
-WORKDIR /root/ghc_build/ghc-8.0/libraries/integer-gmp
-RUN ghc Setup.hs
-RUN ./Setup configure --package-db $PREFIX/package.conf.d --prefix $PREFIX  --ghc-options=-O0 && \
-    ./Setup build -v && \
-    ./Setup install
-
-################################################################################
-# Building base
-
-WORKDIR /root/ghc_build/ghc-8.0/libraries/base/
-RUN echo 'import Distribution.Simple; main = defaultMainWithHooks autoconfUserHooks' > Setup.hs
-RUN ghc -hide-all-packages -package Cabal Setup.hs -XNoImplicitPrelude
-RUN ./Setup configure -finteger-gmp --package-db $PREFIX/package.conf.d --prefix $PREFIX --ghc-options=-O0 && \
-    ./Setup build -v && \
-    ./Setup install
-
-################################################################################
-# Output libraries
-
-WORKDIR /root/ghc_build/ghc-8.0/libraries/
-RUN find . -name '*.prana' | xargs tar czf libraries.tar.gz
