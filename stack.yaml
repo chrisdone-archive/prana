@@ -1,0 +1,4 @@
+resolver: lts-12.12
+packages:
+- prana-types
+- prana-ghc
