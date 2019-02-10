@@ -40,7 +40,7 @@ RUN cd; \
 RUN cd; \
     cd ghc_build/ghc-8.6; \
     cd mk; \
-    sed -e 's/^#BuildFlavour = quick$/BuildFlavour = devel2/' \
+    sed -e 's/^#BuildFlavour = quick$/BuildFlavour = quickest/' \
         build.mk.sample > build.mk; \
     cd ..; \
     ./boot; \
