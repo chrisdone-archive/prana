@@ -1,3 +1,0 @@
--- |
-
-module Prana.Ghc where
