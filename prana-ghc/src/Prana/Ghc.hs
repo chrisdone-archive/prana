@@ -7,11 +7,12 @@ module Prana.Ghc
   ( fromGenStgTopBinding
   ) where
 
+import qualified CoreSyn
 import           Data.Functor.Identity
+import           Data.Maybe
 import qualified DataCon
 import           Prana.Types
 import qualified StgSyn
-import qualified CoreSyn
 import qualified Var
 
 --------------------------------------------------------------------------------
@@ -106,7 +107,15 @@ fromStgGenExpr =
     StgSyn.StgLam {} -> error "Lambda should not exist at this point."
 
 fromAltTriples :: [StgSyn.GenStgAlt Var.Id Var.Id] -> Convert (Maybe Expr, [DataAlt])
-fromAltTriples = undefined
+fromAltTriples alts = do
+  let mdef =
+        listToMaybe
+          (mapMaybe
+             (\case
+                (CoreSyn.DEFAULT, [], e) -> pure e
+                _ -> Nothing)
+             alts)
+  undefined
 
 fromPrimAltTriples :: [StgSyn.GenStgAlt Var.Id Var.Id] -> Convert (Maybe Expr, [LitAlt])
 fromPrimAltTriples = undefined
