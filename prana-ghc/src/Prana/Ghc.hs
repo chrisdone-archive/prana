@@ -112,13 +112,42 @@ fromAltTriples alts = do
         listToMaybe
           (mapMaybe
              (\case
-                (CoreSyn.DEFAULT, [], e) -> pure e
+                (CoreSyn.DEFAULT, [], e) -> Just e
                 _ -> Nothing)
              alts)
-  undefined
+      adtAlts =
+        mapMaybe
+          (\case
+             (CoreSyn.DataAlt dc, bs, e) -> pure (dc, bs, e)
+             _ -> Nothing)
+          alts
+  (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
+    mapM
+      (\(dc, bs, e) ->
+         DataAlt <$> fromDataCon dc <*> mapM getLocalVarId bs <*> fromStgGenExpr e)
+      adtAlts
 
 fromPrimAltTriples :: [StgSyn.GenStgAlt Var.Id Var.Id] -> Convert (Maybe Expr, [LitAlt])
-fromPrimAltTriples = undefined
+fromPrimAltTriples alts = do
+  let mdef =
+        listToMaybe
+          (mapMaybe
+             (\case
+                (CoreSyn.DEFAULT, [], e) -> Just e
+                _ -> Nothing)
+             alts)
+      adtAlts =
+        mapMaybe
+          (\case
+             (CoreSyn.LitAlt dc, bs, e) -> pure (dc, bs, e)
+             _ -> Nothing)
+          alts
+  (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
+    mapM
+      (\(dc, bs, e) ->
+         LitAlt <$> pure (const Lit dc) <*> mapM getLocalVarId bs <*>
+         fromStgGenExpr e)
+      adtAlts
 
 fromId :: Var.Id -> Convert SomeVarId
 fromId = undefined
