@@ -41,61 +41,61 @@ fromGenStgTopBinding =
     StgSyn.StgTopLifted genStdBinding ->
       case genStdBinding of
         StgSyn.StgNonRec bindr rhs ->
-          GlobalNonRec <$> getGlobalVarId bindr <*> fromGenStgRhs rhs
+          GlobalNonRec <$> lookupGlobalVarId bindr <*> fromGenStgRhs rhs
         StgSyn.StgRec pairs ->
           GlobalRec <$>
           traverse
-            (\(bindr, rhs) -> (,) <$> getGlobalVarId bindr <*> fromGenStgRhs rhs)
+            (\(bindr, rhs) -> (,) <$> lookupGlobalVarId bindr <*> fromGenStgRhs rhs)
             pairs
     StgSyn.StgTopStringLit bindr byteString ->
-      GlobalStringLit <$> getGlobalVarId bindr <*> pure byteString
+      GlobalStringLit <$> lookupGlobalVarId bindr <*> pure byteString
 
 fromGenStgBinding :: StgSyn.GenStgBinding Var.Id Var.Id -> Convert LocalBinding
 fromGenStgBinding =
   \case
     StgSyn.StgNonRec bindr rhs ->
-      LocalNonRec <$> getLocalVarId bindr <*> fromGenStgRhs rhs
+      LocalNonRec <$> lookupLocalVarId bindr <*> fromGenStgRhs rhs
     StgSyn.StgRec pairs ->
       LocalRec <$>
       traverse
-        (\(bindr, rhs) -> (,) <$> getLocalVarId bindr <*> fromGenStgRhs rhs)
+        (\(bindr, rhs) -> (,) <$> lookupLocalVarId bindr <*> fromGenStgRhs rhs)
         pairs
 
 fromGenStgRhs :: StgSyn.GenStgRhs Var.Id Var.Id -> Convert Rhs
 fromGenStgRhs =
   \case
     StgSyn.StgRhsClosure _costCentreStack _binderInfo freeVariables updateFlag parameters expr ->
-      RhsClosure <$> traverse getLocalVarId freeVariables <*>
+      RhsClosure <$> traverse lookupLocalVarId freeVariables <*>
       pure
         (case updateFlag of
            StgSyn.ReEntrant -> ReEntrant
            StgSyn.Updatable -> Updatable
            StgSyn.SingleEntry -> SingleEntry) <*>
-      traverse getLocalVarId parameters <*>
+      traverse lookupLocalVarId parameters <*>
       fromStgGenExpr expr
     StgSyn.StgRhsCon _costCentreStack dataCon arguments ->
-      RhsCon <$> getDataConId dataCon <*> traverse fromStgGenArg arguments
+      RhsCon <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments
 
 fromStgGenArg :: StgSyn.GenStgArg Var.Id -> Convert Arg
 fromStgGenArg =
   \case
-    StgSyn.StgVarArg occ -> VarArg <$> getSomeVarId occ
+    StgSyn.StgVarArg occ -> VarArg <$> lookupSomeVarId occ
     StgSyn.StgLitArg _literal -> pure (LitArg Lit)
 
 fromStgGenExpr :: StgSyn.GenStgExpr Var.Id Var.Id -> Convert Expr
 fromStgGenExpr =
   \case
     StgSyn.StgApp occ arguments ->
-      AppExpr <$> getSomeVarId occ <*> traverse fromStgGenArg arguments
+      AppExpr <$> lookupSomeVarId occ <*> traverse fromStgGenArg arguments
     StgSyn.StgLit literal -> LitExpr <$> pure (const Lit literal)
     StgSyn.StgConApp dataCon arguments types ->
-      ConAppExpr <$> getDataConId dataCon <*> traverse fromStgGenArg arguments <*>
+      ConAppExpr <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
       OpAppExpr <$> pure (const Op stgOp) <*> traverse fromStgGenArg arguments <*>
       pure (const Type typ)
     StgSyn.StgCase expr bndr altType alts ->
-      CaseExpr <$> fromStgGenExpr expr <*> getLocalVarId bndr <*>
+      CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
       case altType of
         StgSyn.PolyAlt
           | [(CoreSyn.DEFAULT, [], rhs)] <- alts ->
@@ -135,7 +135,7 @@ fromAltTriples alts = do
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
     traverse
       (\(dc, bs, e) ->
-         DataAlt <$> getDataConId dc <*> traverse getLocalVarId bs <*>
+         DataAlt <$> lookupDataConId dc <*> traverse lookupLocalVarId bs <*>
          fromStgGenExpr e)
       adtAlts
 
@@ -157,21 +157,21 @@ fromPrimAltTriples alts = do
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
     traverse
       (\(dc, bs, e) ->
-         LitAlt <$> pure (const Lit dc) <*> traverse getLocalVarId bs <*>
+         LitAlt <$> pure (const Lit dc) <*> traverse lookupLocalVarId bs <*>
          fromStgGenExpr e)
       adtAlts
 
 --------------------------------------------------------------------------------
 -- Bindings and names
 
-getDataConId :: DataCon.DataCon -> Convert DataConId
-getDataConId = error "getDataConId"
+lookupDataConId :: DataCon.DataCon -> Convert DataConId
+lookupDataConId = error "lookupDataConId"
 
-getSomeVarId :: Var.Id -> Convert SomeVarId
-getSomeVarId = error "getSomeVarId"
+lookupSomeVarId :: Var.Id -> Convert SomeVarId
+lookupSomeVarId = error "lookupSomeVarId"
 
-getGlobalVarId :: Var.Id -> Convert GlobalVarId
-getGlobalVarId = error "getGlobalVarId"
+lookupGlobalVarId :: Var.Id -> Convert GlobalVarId
+lookupGlobalVarId = error "lookupGlobalVarId"
 
-getLocalVarId :: Var.Id -> Convert LocalVarId
-getLocalVarId = error "getLocalVarId"
+lookupLocalVarId :: Var.Id -> Convert LocalVarId
+lookupLocalVarId = error "lookupLocalVarId"
