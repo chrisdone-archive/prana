@@ -26,16 +26,21 @@ data LocalBinding
 data Expr
   = AppExpr !SomeVarId ![Arg]
   | ConAppExpr !DataCon ![Arg] ![Type]
+  | OpAppExpr !Op ![Arg] !Type
   | CaseExpr !Expr !LocalVarId !Alts
   | LetExpr !LocalBinding !Expr
-  | Unknown
+  | LitExpr !Lit
   deriving (Show, Eq, Generic)
 
 data Alts
   = PolymorphicAlt !Expr
+    -- ^ Polymorphic value, we force it.
   | DataAlts !TyCon ![DataAlt] !(Maybe Expr)
-  | MultiValAlts !Int !TyCon ![DataAlt] !(Maybe Expr)
+    -- ^ For regular ADT types.
+  | MultiValAlts !Int ![DataAlt] !(Maybe Expr)
+    -- ^ For unboxed sums and unboxed tuples.
   | PrimAlts !PrimRep ![LitAlt] !(Maybe Expr)
+    -- ^ Primitive value.
   deriving (Show, Eq, Generic)
 
 data DataAlt =
