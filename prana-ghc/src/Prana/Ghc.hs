@@ -8,8 +8,8 @@ module Prana.Ghc
   ) where
 
 import qualified CoreSyn
-import           Data.Functor.Identity
 import           Data.Maybe
+import           Data.Validation
 import qualified DataCon
 import           Prana.Types
 import qualified StgSyn
@@ -18,8 +18,14 @@ import qualified Var
 --------------------------------------------------------------------------------
 -- Convert monad
 
-newtype Convert a = Convert (Identity a)
-  deriving (Functor, Monad, Applicative)
+data ConvertError
+  = UnexpectedPolymorphicCaseAlts
+  | UnexpectedLambda
+  deriving (Show, Eq)
+
+newtype Convert a =
+  Convert (Validation [ConvertError] a)
+  deriving (Functor, Applicative)
 
 --------------------------------------------------------------------------------
 -- Conversion functions
@@ -33,7 +39,7 @@ fromGenStgTopBinding =
           GlobalNonRec <$> getGlobalVarId bindr <*> fromGenStgRhs rhs
         StgSyn.StgRec pairs ->
           GlobalRec <$>
-          mapM
+          traverse
             (\(bindr, rhs) -> (,) <$> getGlobalVarId bindr <*> fromGenStgRhs rhs)
             pairs
     StgSyn.StgTopStringLit bindr byteString ->
@@ -46,7 +52,7 @@ fromGenStgBinding =
       LocalNonRec <$> getLocalVarId bindr <*> fromGenStgRhs rhs
     StgSyn.StgRec pairs ->
       LocalRec <$>
-      mapM
+      traverse
         (\(bindr, rhs) -> (,) <$> getLocalVarId bindr <*> fromGenStgRhs rhs)
         pairs
 
@@ -54,16 +60,16 @@ fromGenStgRhs :: StgSyn.GenStgRhs Var.Id Var.Id -> Convert Rhs
 fromGenStgRhs =
   \case
     StgSyn.StgRhsClosure _costCentreStack _binderInfo freeVariables updateFlag parameters expr ->
-      RhsClosure <$> mapM getLocalVarId freeVariables <*>
+      RhsClosure <$> traverse getLocalVarId freeVariables <*>
       pure
         (case updateFlag of
            StgSyn.ReEntrant -> ReEntrant
            StgSyn.Updatable -> Updatable
            StgSyn.SingleEntry -> SingleEntry) <*>
-      mapM getLocalVarId parameters <*>
+      traverse getLocalVarId parameters <*>
       fromStgGenExpr expr
     StgSyn.StgRhsCon _costCentreStack _dataCon arguments ->
-      RhsCon <$> pure DataCon <*> mapM fromStgGenArg arguments
+      RhsCon <$> pure DataCon <*> traverse fromStgGenArg arguments
 
 fromStgGenArg :: StgSyn.GenStgArg Var.Id -> Convert Arg
 fromStgGenArg =
@@ -75,13 +81,13 @@ fromStgGenExpr :: StgSyn.GenStgExpr Var.Id Var.Id -> Convert Expr
 fromStgGenExpr =
   \case
     StgSyn.StgApp occ arguments ->
-      AppExpr <$> fromId occ <*> mapM fromStgGenArg arguments
+      AppExpr <$> fromId occ <*> traverse fromStgGenArg arguments
     StgSyn.StgLit literal -> LitExpr <$> pure (const Lit literal)
     StgSyn.StgConApp dataCon arguments types ->
-      ConAppExpr <$> fromDataCon dataCon <*> mapM fromStgGenArg arguments <*>
+      ConAppExpr <$> fromDataCon dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
-      OpAppExpr <$> pure (const Op stgOp) <*> mapM fromStgGenArg arguments <*>
+      OpAppExpr <$> pure (const Op stgOp) <*> traverse fromStgGenArg arguments <*>
       pure (const Type typ)
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> getLocalVarId bndr <*>
@@ -89,22 +95,22 @@ fromStgGenExpr =
         StgSyn.PolyAlt
           | [(CoreSyn.DEFAULT, [], rhs)] <- alts ->
             PolymorphicAlt <$> fromStgGenExpr rhs
-          | otherwise -> error "Unexpected polymorphic case alts."
-        StgSyn.MultiValAlt count -> do
-          (mdef, dataAlts) <- fromAltTriples alts
-          pure (MultiValAlts count dataAlts mdef)
+          | otherwise -> Convert (Failure [UnexpectedPolymorphicCaseAlts])
+        StgSyn.MultiValAlt count ->
+          (\(mdef, dataAlts) -> MultiValAlts count dataAlts mdef) <$>
+          fromAltTriples alts
         StgSyn.AlgAlt tyCon -> do
-          (mdef, dataAlts) <- fromAltTriples alts
-          pure (DataAlts (const TyCon tyCon) dataAlts mdef)
+          (\(mdef, dataAlts) -> DataAlts (const TyCon tyCon) dataAlts mdef) <$>
+            fromAltTriples alts
         StgSyn.PrimAlt primRep -> do
-          (mdef, primAlts) <- fromPrimAltTriples alts
-          pure (PrimAlts (const PrimRep primRep) primAlts mdef)
+          (\(mdef, primAlts) -> PrimAlts (const PrimRep primRep) primAlts mdef) <$>
+            fromPrimAltTriples alts
     StgSyn.StgLet binding expr ->
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgLetNoEscape binding expr ->
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
-    StgSyn.StgLam {} -> error "Lambda should not exist at this point."
+    StgSyn.StgLam {} -> Convert (Failure [UnexpectedLambda])
 
 fromAltTriples :: [StgSyn.GenStgAlt Var.Id Var.Id] -> Convert (Maybe Expr, [DataAlt])
 fromAltTriples alts = do
@@ -122,9 +128,10 @@ fromAltTriples alts = do
              _ -> Nothing)
           alts
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
-    mapM
+    traverse
       (\(dc, bs, e) ->
-         DataAlt <$> fromDataCon dc <*> mapM getLocalVarId bs <*> fromStgGenExpr e)
+         DataAlt <$> fromDataCon dc <*> traverse getLocalVarId bs <*>
+         fromStgGenExpr e)
       adtAlts
 
 fromPrimAltTriples :: [StgSyn.GenStgAlt Var.Id Var.Id] -> Convert (Maybe Expr, [LitAlt])
@@ -143,9 +150,9 @@ fromPrimAltTriples alts = do
              _ -> Nothing)
           alts
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
-    mapM
+    traverse
       (\(dc, bs, e) ->
-         LitAlt <$> pure (const Lit dc) <*> mapM getLocalVarId bs <*>
+         LitAlt <$> pure (const Lit dc) <*> traverse getLocalVarId bs <*>
          fromStgGenExpr e)
       adtAlts
 
