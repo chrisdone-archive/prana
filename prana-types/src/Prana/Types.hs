@@ -58,7 +58,7 @@ data Rhs
   = RhsClosure
       ![LocalVarId] -- Free variables.
       !UpdateFlag
-      ![LocalVarId] -- Arguments.
+      ![LocalVarId] -- Parameters.
       !Expr
   | RhsCon !DataCon ![Arg]
   deriving (Show, Eq, Generic)
