@@ -25,7 +25,7 @@ data LocalBinding
 
 data Expr
   = AppExpr !SomeVarId ![Arg]
-  | ConAppExpr !DataCon ![Arg] ![Type]
+  | ConAppExpr !DataConId ![Arg] ![Type]
   | OpAppExpr !Op ![Arg] !Type
   | CaseExpr !Expr !LocalVarId !Alts
   | LetExpr !LocalBinding !Expr
@@ -45,7 +45,7 @@ data Alts
 
 data DataAlt =
   DataAlt
-    { dataAltCon :: !DataCon
+    { dataAltCon :: !DataConId
     , dataAltBinders :: ![LocalVarId]
     , dataAltExpr :: !Expr
     }
@@ -65,7 +65,7 @@ data Rhs
       !UpdateFlag
       ![LocalVarId] -- Parameters.
       !Expr
-  | RhsCon !DataCon ![Arg]
+  | RhsCon !DataConId ![Arg]
   deriving (Show, Eq, Generic)
 
 newtype GlobalVarId = GlobalVarId Int64
@@ -83,8 +83,8 @@ data Op =
   Op
   deriving (Show, Eq, Generic)
 
-data DataCon =
-  DataCon
+data DataConId =
+  DataConId
   deriving (Show, Eq, Generic)
 
 data UpdateFlag

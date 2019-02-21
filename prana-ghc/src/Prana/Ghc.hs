@@ -73,8 +73,8 @@ fromGenStgRhs =
            StgSyn.SingleEntry -> SingleEntry) <*>
       traverse getLocalVarId parameters <*>
       fromStgGenExpr expr
-    StgSyn.StgRhsCon _costCentreStack _dataCon arguments ->
-      RhsCon <$> pure DataCon <*> traverse fromStgGenArg arguments
+    StgSyn.StgRhsCon _costCentreStack dataCon arguments ->
+      RhsCon <$> getDataConId dataCon <*> traverse fromStgGenArg arguments
 
 fromStgGenArg :: StgSyn.GenStgArg Var.Id -> Convert Arg
 fromStgGenArg =
@@ -86,10 +86,10 @@ fromStgGenExpr :: StgSyn.GenStgExpr Var.Id Var.Id -> Convert Expr
 fromStgGenExpr =
   \case
     StgSyn.StgApp occ arguments ->
-      AppExpr <$> fromId occ <*> traverse fromStgGenArg arguments
+      AppExpr <$> getSomeVarId occ <*> traverse fromStgGenArg arguments
     StgSyn.StgLit literal -> LitExpr <$> pure (const Lit literal)
     StgSyn.StgConApp dataCon arguments types ->
-      ConAppExpr <$> fromDataCon dataCon <*> traverse fromStgGenArg arguments <*>
+      ConAppExpr <$> getDataConId dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
       OpAppExpr <$> pure (const Op stgOp) <*> traverse fromStgGenArg arguments <*>
@@ -135,7 +135,7 @@ fromAltTriples alts = do
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
     traverse
       (\(dc, bs, e) ->
-         DataAlt <$> fromDataCon dc <*> traverse getLocalVarId bs <*>
+         DataAlt <$> getDataConId dc <*> traverse getLocalVarId bs <*>
          fromStgGenExpr e)
       adtAlts
 
@@ -161,14 +161,11 @@ fromPrimAltTriples alts = do
          fromStgGenExpr e)
       adtAlts
 
-fromId :: Var.Id -> Convert SomeVarId
-fromId = undefined
-
-fromDataCon :: DataCon.DataCon -> Convert DataCon
-fromDataCon = undefined
-
 --------------------------------------------------------------------------------
 -- Bindings and names
+
+getDataConId :: DataCon.DataCon -> Convert DataConId
+getDataConId = error "getDataConId"
 
 getSomeVarId :: Var.Id -> Convert SomeVarId
 getSomeVarId = error "getSomeVarId"
