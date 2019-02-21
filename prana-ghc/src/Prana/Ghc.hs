@@ -5,6 +5,9 @@
 
 module Prana.Ghc
   ( fromGenStgTopBinding
+  , runConvert
+  , Convert
+  , ConvertError(..)
   ) where
 
 import qualified CoreSyn
@@ -24,7 +27,9 @@ data ConvertError
   deriving (Show, Eq)
 
 newtype Convert a =
-  Convert (Validation [ConvertError] a)
+  Convert
+    { runConvert :: Validation [ConvertError] a
+    }
   deriving (Functor, Applicative)
 
 --------------------------------------------------------------------------------
