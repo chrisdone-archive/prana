@@ -182,16 +182,39 @@ lookupSomeVarId varId =
     then fmap SomeGlobalVarId (lookupGlobalVarId varId)
     else fmap SomeLocalVarId (lookupLocalVarId varId)
 
--- TODO: use toGlobalId
+-- TODO: use toGlobalNormalized
 lookupGlobalVarId :: Var.Id -> Convert GlobalVarId
 lookupGlobalVarId = error "lookupGlobalVarId"
 
--- TODO: use toLocalId
+-- TODO: use toLocalNormalized
 lookupLocalVarId :: Var.Id -> Convert LocalVarId
 lookupLocalVarId = error "lookupLocalVarId"
 
 --------------------------------------------------------------------------------
 -- Names database
+
+data GlobalNormalized =
+  GlobalNormalized
+    { globalNormalizedPackage :: {-# UNPACK #-}!ByteString
+    , globalNormalizedModule :: {-# UNPACK #-}!ByteString
+    , globalNormalizedName :: {-# UNPACK #-}!ByteString
+    }
+  deriving (Show, Ord, Eq)
+
+data LocalNormalized =
+  LocalNormalized
+    { localNormalizedPackage :: {-# UNPACK #-}!ByteString
+    , localNormalizedModule :: {-# UNPACK #-}!ByteString
+    , localNormalizedName :: {-# UNPACK #-}!ByteString
+    , localNormalizedUnique :: {-# UNPACK #-}!Unique
+    }
+  deriving (Show, Ord, Eq)
+
+newtype ConstrNormalized =
+  ConstrNormalized
+    { unConstrNormalized :: GlobalNormalized
+    }
+  deriving (Show, Ord, Eq)
 
 newtype Unique =
   Unique
@@ -199,45 +222,18 @@ newtype Unique =
     }
   deriving (Eq, Show, Ord)
 
-data SomeId
-  = SomeGlobalId !GlobalId
-  | SomeLocalId !LocalId
-  deriving (Show, Ord, Eq)
-
-data GlobalId =
-  GlobalId
-    { exportedIdPackage :: {-# UNPACK #-}!ByteString
-    , exportedIdModule :: {-# UNPACK #-}!ByteString
-    , exportedIdName :: {-# UNPACK #-}!ByteString
-    }
-  deriving (Show, Ord, Eq)
-
-data LocalId =
-  LocalId
-    { localIdPackage :: {-# UNPACK #-}!ByteString
-    , localIdModule :: {-# UNPACK #-}!ByteString
-    , localIdName :: {-# UNPACK #-}!ByteString
-    , localIdUnique :: {-# UNPACK #-}!Unique
-    }
-  deriving (Show, Ord, Eq)
-
-newtype ConstrId =
-  ConstrId
-    { unConstrId :: GlobalId
-    }
-  deriving (Show, Ord, Eq)
-
 --------------------------------------------------------------------------------
 -- Convert GHC ids to exported or local IDS
 
-toConstrId :: Module.Module -> DataCon.DataCon -> Convert ConstrId
-toConstrId m = fmap ConstrId . toGlobalId m . DataCon.dataConWorkId
+toConstrNormalized :: Module.Module -> DataCon.DataCon -> Convert ConstrNormalized
+toConstrNormalized m =
+  fmap ConstrNormalized . toGlobalNormalized m . DataCon.dataConWorkId
 
-toGlobalId :: Module.Module -> Var.Id -> Convert GlobalId
-toGlobalId m thing =
+toGlobalNormalized :: Module.Module -> Var.Id -> Convert GlobalNormalized
+toGlobalNormalized m thing =
   if Name.isInternalName name
     then Convert (Failure [UnexpectedInternalName])
-    else pure (GlobalId package module' name')
+    else pure (GlobalNormalized package module' name')
   where
     package =
       FastString.fs_bs
@@ -253,12 +249,12 @@ toGlobalId m thing =
       where
         n = Name.getName thing
 
-toLocalId :: Module.Module -> Var.Id -> Convert LocalId
-toLocalId m thing =
+toLocalNormalized :: Module.Module -> Var.Id -> Convert LocalNormalized
+toLocalNormalized m thing =
   if Name.isInternalName name
     then Convert (Failure [UnexpectedInternalName])
     else pure
-           (LocalId
+           (LocalNormalized
               package
               module'
               name'
