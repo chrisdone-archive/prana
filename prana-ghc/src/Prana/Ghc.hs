@@ -1,3 +1,4 @@
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 
@@ -11,11 +12,17 @@ module Prana.Ghc
   ) where
 
 import qualified CoreSyn
+import           Data.ByteString (ByteString)
+import           Data.Int
 import           Data.Maybe
 import           Data.Validation
 import qualified DataCon
+import qualified FastString
+import qualified Module
+import qualified Name
 import           Prana.Types
 import qualified StgSyn
+import qualified Unique
 import qualified Var
 
 --------------------------------------------------------------------------------
@@ -24,6 +31,8 @@ import qualified Var
 data ConvertError
   = UnexpectedPolymorphicCaseAlts
   | UnexpectedLambda
+  | UnexpectedInternalName
+  | UnknownVariable
   deriving (Show, Eq)
 
 newtype Convert a =
@@ -168,10 +177,111 @@ lookupDataConId :: DataCon.DataCon -> Convert DataConId
 lookupDataConId = error "lookupDataConId"
 
 lookupSomeVarId :: Var.Id -> Convert SomeVarId
-lookupSomeVarId = error "lookupSomeVarId"
+lookupSomeVarId varId =
+  if Var.isExportedId varId
+    then fmap SomeGlobalVarId (lookupGlobalVarId varId)
+    else fmap SomeLocalVarId (lookupLocalVarId varId)
 
+-- TODO: use toGlobalId
 lookupGlobalVarId :: Var.Id -> Convert GlobalVarId
 lookupGlobalVarId = error "lookupGlobalVarId"
 
+-- TODO: use toLocalId
 lookupLocalVarId :: Var.Id -> Convert LocalVarId
 lookupLocalVarId = error "lookupLocalVarId"
+
+--------------------------------------------------------------------------------
+-- Names database
+
+newtype Unique =
+  Unique
+    { unUnique :: Int64
+    }
+  deriving (Eq, Show, Ord)
+
+data SomeId
+  = SomeGlobalId !GlobalId
+  | SomeLocalId !LocalId
+  deriving (Show, Ord, Eq)
+
+data GlobalId =
+  GlobalId
+    { exportedIdPackage :: {-# UNPACK #-}!ByteString
+    , exportedIdModule :: {-# UNPACK #-}!ByteString
+    , exportedIdName :: {-# UNPACK #-}!ByteString
+    }
+  deriving (Show, Ord, Eq)
+
+data LocalId =
+  LocalId
+    { localIdPackage :: {-# UNPACK #-}!ByteString
+    , localIdModule :: {-# UNPACK #-}!ByteString
+    , localIdName :: {-# UNPACK #-}!ByteString
+    , localIdUnique :: {-# UNPACK #-}!Unique
+    }
+  deriving (Show, Ord, Eq)
+
+newtype ConstrId =
+  ConstrId
+    { unConstrId :: GlobalId
+    }
+  deriving (Show, Ord, Eq)
+
+--------------------------------------------------------------------------------
+-- Convert GHC ids to exported or local IDS
+
+toConstrId :: Module.Module -> DataCon.DataCon -> Convert ConstrId
+toConstrId m = fmap ConstrId . toGlobalId m . DataCon.dataConWorkId
+
+toGlobalId :: Module.Module -> Var.Id -> Convert GlobalId
+toGlobalId m thing =
+  if Name.isInternalName name
+    then Convert (Failure [UnexpectedInternalName])
+    else pure (GlobalId package module' name')
+  where
+    package =
+      FastString.fs_bs
+        (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name)))
+    module' =
+      FastString.fs_bs
+        (Module.moduleNameFS (Module.moduleName (Name.nameModule name)))
+    name' = FastString.fs_bs (Name.getOccFS name)
+    name =
+      case Name.nameModule_maybe n of
+        Nothing -> qualifyName m n
+        Just {} -> n
+      where
+        n = Name.getName thing
+
+toLocalId :: Module.Module -> Var.Id -> Convert LocalId
+toLocalId m thing =
+  if Name.isInternalName name
+    then Convert (Failure [UnexpectedInternalName])
+    else pure
+           (LocalId
+              package
+              module'
+              name'
+              (Unique (fromIntegral (Unique.getKey (Unique.getUnique name)))))
+  where
+    package =
+      FastString.fs_bs
+        (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name)))
+    module' =
+      FastString.fs_bs
+        (Module.moduleNameFS (Module.moduleName (Name.nameModule name)))
+    name' = FastString.fs_bs (Name.getOccFS name)
+    name =
+      case Name.nameModule_maybe n of
+        Nothing -> qualifyName m n
+        Just {} -> n
+      where
+        n = Name.getName thing
+
+qualifyName :: Module.Module -> Name.Name -> Name.Name
+qualifyName m name =
+  Name.mkExternalName
+    (Unique.getUnique name)
+    m
+    (Name.nameOccName name)
+    (Name.nameSrcSpan name)
