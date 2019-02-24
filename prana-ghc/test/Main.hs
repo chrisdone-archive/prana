@@ -16,6 +16,7 @@ import qualified GHC
 import qualified GHC.Paths
 import qualified HscTypes
 import qualified Literal
+import           Prana.Ghc
 import qualified SimplStg
 import qualified StgSyn as GHC
 import qualified TyCon
@@ -37,7 +38,7 @@ main =
            mapM_
              (\modSummary -> do
                 stgs <- compile modSummary
-                liftIO (print stgs))
+                liftIO (print (runConvert (traverse fromGenStgTopBinding stgs))))
              mgraph))
 
 compile ::
