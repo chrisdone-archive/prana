@@ -1,3 +1,8 @@
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 -- | Rename the GHC AST to have globally unique names.
 
 module Prana.Rename
@@ -6,6 +11,9 @@ module Prana.Rename
   , Name
   ) where
 
+import qualified CoreSyn
+import           Data.Bifunctor.TH
+import           Data.Bitraversable
 import           Data.ByteString (ByteString)
 import           Data.Int
 import qualified FastString
@@ -38,6 +46,13 @@ data Unique
 data RenameFailure =
   UnexpectedInternalName !Name.Name
   deriving (Eq)
+
+-- | Rename the STG AST to have globally unique names.
+renameTopBinding ::
+     Module.Module
+  -> StgSyn.GenStgTopBinding Var.Id Var.Id
+  -> Either RenameFailure (StgSyn.GenStgTopBinding Name Name)
+renameTopBinding m = bitraverse (renameId m) (renameId m)
 
 -- | Rename the id to be a globally unique name.
 renameId :: Module.Module -> Var.Id -> Either RenameFailure Name
@@ -78,9 +93,27 @@ renameId m thing =
         (Name.nameOccName n)
         (Name.nameSrcSpan n)
 
--- | Rename the STG AST to have globally unique names.
-renameTopBinding ::
-     Module.Module
-  -> StgSyn.GenStgTopBinding Var.Id Var.Id
-  -> StgSyn.GenStgTopBinding Name Name
-renameTopBinding = undefined
+--------------------------------------------------------------------------------
+-- Orphans: Easily removable if these instances are ever provided
+-- upstream.
+
+deriveBifunctor ''StgSyn.GenStgTopBinding
+deriveBifunctor ''StgSyn.GenStgBinding
+deriveBifunctor ''StgSyn.GenStgRhs
+deriveBifunctor ''StgSyn.GenStgExpr
+deriving instance Functor StgSyn.GenStgArg
+deriving instance Functor CoreSyn.Tickish
+
+deriveBitraversable ''StgSyn.GenStgTopBinding
+deriveBitraversable ''StgSyn.GenStgBinding
+deriveBitraversable ''StgSyn.GenStgRhs
+deriveBitraversable ''StgSyn.GenStgExpr
+deriving instance Traversable StgSyn.GenStgArg
+deriving instance Traversable CoreSyn.Tickish
+
+deriveBifoldable ''StgSyn.GenStgTopBinding
+deriveBifoldable ''StgSyn.GenStgBinding
+deriveBifoldable ''StgSyn.GenStgRhs
+deriveBifoldable ''StgSyn.GenStgExpr
+deriving instance Foldable StgSyn.GenStgArg
+deriving instance Foldable CoreSyn.Tickish
