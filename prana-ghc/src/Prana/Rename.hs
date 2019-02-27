@@ -16,6 +16,8 @@ import           Data.Bifunctor.TH
 import           Data.Bitraversable
 import           Data.ByteString (ByteString)
 import           Data.Int
+import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Validation
 import qualified FastString
 import qualified Module
 import qualified Name
@@ -51,8 +53,9 @@ data RenameFailure =
 renameTopBinding ::
      Module.Module
   -> StgSyn.GenStgTopBinding Var.Id Var.Id
-  -> Either RenameFailure (StgSyn.GenStgTopBinding Name Name)
-renameTopBinding m = bitraverse (renameId m) (renameId m)
+  -> Validation (NonEmpty RenameFailure) (StgSyn.GenStgTopBinding Name Name)
+renameTopBinding m =
+  bitraverse (validationNel . renameId m) (validationNel . renameId m)
 
 -- | Rename the id to be a globally unique name.
 renameId :: Module.Module -> Var.Id -> Either RenameFailure Name
