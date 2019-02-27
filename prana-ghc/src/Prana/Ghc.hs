@@ -30,7 +30,7 @@ import qualified Var
 
 -- Pipeline:
 --
--- 1. RENAME each module.
+-- 1. RENAME each module. ✓
 --
 -- 2. COLLECT each module (get data cons, get globals, get locals).
 --
