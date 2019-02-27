@@ -9,7 +9,8 @@
 module Prana.Rename
   ( renameTopBinding
   , renameId
-  , Name
+  , Name(..)
+  , Unique(..)
   , RenameFailure(..)
   ) where
 

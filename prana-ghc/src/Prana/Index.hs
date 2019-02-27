@@ -21,7 +21,7 @@ data Index =
     , indexLocals :: Map Name LocalVarId
     , indexDataCons :: Map Name DataConId
     }
-  deriving (Generic)
+  deriving (Generic, Show)
 
 instance Binary Index
 
