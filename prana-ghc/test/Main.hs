@@ -51,12 +51,36 @@ main =
                                , nameName = "krep$*"
                                , nameUnique = Exported
                                }
-                           ,  Name
-                                { namePackage = "ghc-prim"
-                                , nameModule = "GHC.Types"
-                                , nameName = "[]"
-                                , nameUnique = Exported
-                                }
+                           , Name
+                               { namePackage = "ghc-prim"
+                               , nameModule = "GHC.Types"
+                               , nameName = "[]"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "base"
+                               , nameModule = "GHC.Num"
+                               , nameName = "fromInteger"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "ghc-prim"
+                               , nameModule = "GHC.Classes"
+                               , nameName = "=="
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "base"
+                               , nameModule = "GHC.Num"
+                               , nameName = "-"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "base"
+                               , nameModule = "GHC.Num"
+                               , nameName = "+"
+                               , nameUnique = Exported
+                               }
                            ]
                            (map (GlobalVarId . negate) [1 ..]))
                   , indexLocals = mempty
@@ -67,6 +91,24 @@ main =
                                { namePackage = "ghc-prim"
                                , nameModule = "GHC.Types"
                                , nameName = "TrNameS"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "integer-gmp"
+                               , nameModule = "GHC.Integer.Type"
+                               , nameName = "S#"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "ghc-prim"
+                               , nameModule = "GHC.Types"
+                               , nameName = "False"
+                               , nameUnique = Exported
+                               }
+                           , Name
+                               { namePackage = "ghc-prim"
+                               , nameModule = "GHC.Types"
+                               , nameName = "True"
                                , nameUnique = Exported
                                }
                            , Name

@@ -1,8 +1,11 @@
+
 -- |
 
-module Main where
+module Demo where
 
-main = print (fib 10)
+data Foo = Foo
+
+-- main = print (fib 10)
 
 fib 0 = 0
 fib 1 = 1
