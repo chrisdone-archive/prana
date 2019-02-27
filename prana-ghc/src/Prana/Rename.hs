@@ -9,6 +9,7 @@ module Prana.Rename
   ( renameTopBinding
   , renameId
   , Name
+  , RenameFailure(..)
   ) where
 
 import qualified CoreSyn

@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
@@ -11,12 +12,13 @@ module Prana.Reconstruct
   , Scope(..)
   ) where
 
-import           Control.Monad.Trans
-import           Control.Monad.Trans.Reader
+import           Control.Monad.Reader
 import qualified CoreSyn
 import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import           Data.Maybe
 import qualified DataCon
+import qualified Module
 import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
@@ -26,6 +28,7 @@ data Scope =
     { scopeGlobals :: Map Name GlobalVarId
     , scopeLocals :: Map Name LocalVarId
     , scopeDataCons :: Map Name DataConId
+    , scopeModule :: Module.Module
     }
 
 -- | A conversion monad.
@@ -33,13 +36,15 @@ newtype Convert a =
   Convert
     { runConvert :: ReaderT Scope (Either ConvertError) a
     }
-  deriving (Functor, Applicative, Monad)
+  deriving (Functor, Applicative, Monad, MonadReader Scope)
 
 -- | An error while converting the AST.
 data ConvertError
   = UnexpectedPolymorphicCaseAlts
   | UnexpectedLambda
-  deriving (Show, Eq)
+  | NameNotFound !Name
+  | RenameDataConError !DataCon.DataCon !RenameFailure
+  deriving (Eq)
 
 -- | Produce a failure.
 failure :: ConvertError -> Convert a
@@ -178,13 +183,37 @@ fromPrimAltTriples alts = do
 -- Lookup functions
 
 lookupSomeVarId :: Name -> Convert SomeVarId
-lookupSomeVarId = undefined
+lookupSomeVarId name = do
+  scope <- ask
+  case M.lookup name (scopeGlobals scope) of
+    Nothing ->
+      case M.lookup name (scopeLocals scope) of
+        Nothing -> failure (NameNotFound name)
+        Just g -> pure (SomeLocalVarId g)
+    Just g -> pure (SomeGlobalVarId g)
 
 lookupGlobalVarId :: Name -> Convert GlobalVarId
-lookupGlobalVarId = undefined
+lookupGlobalVarId name = do
+  scope <- ask
+  case M.lookup name (scopeGlobals scope) of
+    Nothing -> failure (NameNotFound name)
+    Just g -> pure g
 
 lookupLocalVarId :: Name -> Convert LocalVarId
-lookupLocalVarId = undefined
+lookupLocalVarId name = do
+  scope <- ask
+  case M.lookup name (scopeLocals scope) of
+    Nothing -> failure (NameNotFound name)
+    Just g -> pure g
 
 lookupDataConId :: DataCon.DataCon -> Convert DataConId
-lookupDataConId = undefined
+lookupDataConId dataCon = do
+  scope <- ask
+  name <-
+    either
+      (failure . RenameDataConError dataCon)
+      pure
+      (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon))
+  case M.lookup name (scopeDataCons scope) of
+    Nothing -> failure (NameNotFound name)
+    Just g -> pure g
