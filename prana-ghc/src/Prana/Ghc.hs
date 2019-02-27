@@ -28,11 +28,12 @@ import qualified StgSyn
 import qualified Unique
 import qualified Var
 
+
 -- Pipeline:
 --
 -- 1. RENAME each module. ✓
 --
--- 2. COLLECT each module (get data cons, get globals, get locals).
+-- 2. COLLECT each module (get data cons, get globals, get locals). ✓
 --
 -- 3. RECONSTRUCT each module.
 
