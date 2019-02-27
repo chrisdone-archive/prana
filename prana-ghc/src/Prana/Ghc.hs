@@ -4,111 +4,99 @@
 {-# LANGUAGE LambdaCase #-}
 
 -- | Import from GHC into Prana.
-
-module Prana.Ghc
-  {-( fromGenStgTopBinding
-  , runConvert
-  , Convert
-  , ConvertError(..)
-  )-} where
-
-import           Control.Monad.Trans.Reader
-import qualified CoreSyn
-import           Data.ByteString (ByteString)
-import           Data.Int
-import           Data.Maybe
-import           Data.Validation
-import qualified DataCon
-import qualified FastString
-import qualified GHC
-import qualified Module
-import qualified Name
-import           Prana.Types
-import qualified StgSyn
-import qualified Unique
-import qualified Var
-
-
+--
 -- Pipeline:
 --
--- 1. RENAME each module. ✓
+-- 0. COMPILE each module.
 --
--- 2. COLLECT each module (get data cons, get globals, get locals). ✓
+-- 1. RENAME each module.
+--
+-- 2. COLLECT each module (get data cons, get globals, get locals).
 --
 -- 3. RECONSTRUCT each module.
 
--- -- --------------------------------------------------------------------------------
--- -- -- Convert monad
+module Prana.Ghc
+  ( compileModSummary
+  ) where
 
--- data ConvertError
---   = UnexpectedPolymorphicCaseAlts
---   | UnexpectedLambda
---   | UnexpectedInternalName
---   | UnknownVariable
---   deriving (Show, Eq)
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Reader
+import           Control.Monad.State
+import qualified CorePrep
+import qualified CoreSyn
+import qualified CoreToStg
+import qualified CostCentre
+import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.Set as Set
 
--- data Db =
---   Db
---     { dbExportedVarIds :: [ExportedName]
---     , dbUnexportedIds :: [UnexportedName]
---     }
+import           Data.Validation
+import qualified DynFlags
+import qualified GHC
+import qualified HscTypes
+import           Prana.Collect
+import           Prana.Index
+import           Prana.Reconstruct
+import           Prana.Rename
+import           Prana.Types
+import qualified SimplStg
+import qualified StgSyn as GHC
+import qualified TyCon
 
--- --------------------------------------------------------------------------------
--- -- Convert GHC ids to exported or unexported IDS
+data CompileError
+  = RenameErrors (NonEmpty (RenameFailure))
+  | ConvertError ConvertError
 
--- toConstrName :: Module.Module -> DataCon.DataCon -> Validation [ConvertError] ConstrName
--- toConstrName m =
---   fmap ConstrName . toExportedName m . DataCon.dataConWorkId
+compileModSummary ::
+     GHC.ModSummary -> StateT Index GHC.Ghc (Either CompileError [GlobalBinding])
+compileModSummary modSummary = do
+  parsedModule <- lift (GHC.parseModule modSummary)
+  typecheckedModule <- lift (GHC.typecheckModule parsedModule)
+  desugared <- lift (GHC.desugarModule typecheckedModule)
+  topBindings <- lift (desugaredToStg modSummary desugared)
+  let module' = GHC.ms_mod modSummary
+      modguts = GHC.dm_core_module desugared
+      tyCons = collectDataCons (HscTypes.mg_tcs modguts)
+  case (,) <$> traverse (renameTopBinding module') topBindings <*>
+       traverse (validationNel . renameId module') (Set.toList tyCons) of
+    Failure errors -> pure (Left (RenameErrors errors))
+    Success (bindings, tycons) -> do
+      index <- updateIndex bindings tycons
+      let scope = Scope {scopeIndex = index, scopeModule = module'}
+      case runReaderT
+             (runConvert (traverse fromGenStgTopBinding bindings))
+             scope of
+        Left err -> pure (Left (ConvertError err))
+        Right globals -> pure (Right globals)
 
--- toExportedName :: Module.Module -> Var.Id -> Validation [ConvertError] ExportedName
--- toExportedName m thing =
---   if Name.isInternalName name
---     then Failure [UnexpectedInternalName]
---     else pure (ExportedName package module' name')
---   where
---     package =
---       FastString.fs_bs
---         (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name)))
---     module' =
---       FastString.fs_bs
---         (Module.moduleNameFS (Module.moduleName (Name.nameModule name)))
---     name' = FastString.fs_bs (Name.getOccFS name)
---     name =
---       case Name.nameModule_maybe n of
---         Nothing -> qualifyName m n
---         Just {} -> n
---       where
---         n = Name.getName thing
+-- | Convert a desguared Core AST to STG.
+desugaredToStg ::
+     GHC.GhcMonad m
+  => HscTypes.ModSummary
+  -> GHC.DesugaredModule
+  -> m [GHC.StgTopBinding]
+desugaredToStg modSummary desugared = do
+  hsc_env <- GHC.getSession
+  (prepd_binds, _) <-
+    liftIO
+      (CorePrep.corePrepPgm
+         hsc_env
+         this_mod
+         (GHC.ms_location modSummary)
+         (HscTypes.mg_binds modguts)
+         (filter TyCon.isDataTyCon (HscTypes.mg_tcs modguts)))
+  dflags <- DynFlags.getDynFlags
+  (stg_binds, _) <- liftIO (myCoreToStg dflags this_mod prepd_binds)
+  pure stg_binds
+  where modguts = GHC.dm_core_module desugared
+        this_mod = GHC.ms_mod modSummary
 
--- toUnexportedName :: Module.Module -> Var.Id -> Validation [ConvertError] UnexportedName
--- toUnexportedName m thing =
---   if Name.isInternalName name
---     then Failure [UnexpectedInternalName]
---     else pure
---            (UnexportedName
---               package
---               module'
---               name'
---               (Unique (fromIntegral (Unique.getKey (Unique.getUnique name)))))
---   where
---     package =
---       FastString.fs_bs
---         (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name)))
---     module' =
---       FastString.fs_bs
---         (Module.moduleNameFS (Module.moduleName (Name.nameModule name)))
---     name' = FastString.fs_bs (Name.getOccFS name)
---     name =
---       case Name.nameModule_maybe n of
---         Nothing -> qualifyName m n
---         Just {} -> n
---       where
---         n = Name.getName thing
-
--- qualifyName :: Module.Module -> Name.Name -> Name.Name
--- qualifyName m name =
---   Name.mkExternalName
---     (Unique.getUnique name)
---     m
---     (Name.nameOccName name)
---     (Name.nameSrcSpan name)
+-- | Perform core to STG transformation.
+myCoreToStg ::
+     GHC.DynFlags
+  -> GHC.Module
+  -> CoreSyn.CoreProgram
+  -> IO ([GHC.StgTopBinding], CostCentre.CollectedCCs)
+myCoreToStg dflags this_mod prepd_binds = do
+  let (stg_binds, cost_centre_info) = CoreToStg.coreToStg dflags this_mod prepd_binds
+  stg_binds2 <- SimplStg.stg2stg dflags stg_binds
+  return (stg_binds2, cost_centre_info)

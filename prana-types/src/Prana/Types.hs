@@ -6,6 +6,7 @@
 module Prana.Types where
 
 import           Data.Binary
+import           Data.Binary
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import           Data.Data (Data, Typeable)
@@ -70,9 +71,11 @@ data Rhs
 
 newtype GlobalVarId = GlobalVarId Int64
   deriving (Show, Eq, Generic)
+instance Binary GlobalVarId
 
 newtype LocalVarId = LocalVarId Int64
   deriving (Show, Eq, Generic)
+instance Binary LocalVarId
 
 data SomeVarId
   = SomeLocalVarId !LocalVarId
@@ -83,9 +86,10 @@ data Op =
   Op
   deriving (Show, Eq, Generic)
 
-data DataConId =
-  DataConId
+newtype DataConId =
+  DataConId Int64
   deriving (Show, Eq, Generic)
+instance Binary DataConId
 
 data UpdateFlag
   = ReEntrant

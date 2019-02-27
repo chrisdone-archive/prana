@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -14,12 +15,14 @@ module Prana.Rename
 
 import qualified CoreSyn
 import           Data.Bifunctor.TH
+import           Data.Binary
 import           Data.Bitraversable
 import           Data.ByteString (ByteString)
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Validation
 import qualified FastString
+import           GHC.Generics
 import qualified Module
 import qualified Name
 import qualified StgSyn
@@ -34,7 +37,8 @@ data Name =
     , nameName :: {-# UNPACK #-}!ByteString
     , nameUnique :: !Unique
     }
-  deriving (Show, Ord, Eq)
+  deriving (Show, Ord, Eq, Generic)
+instance Binary Name
 
 -- | Names can be referred to by their package-module-name
 -- combination. However, if it's a local name, then we need an extra
@@ -43,7 +47,8 @@ data Name =
 data Unique
   = Exported
   | Unexported !Int64
-  deriving (Show, Ord, Eq)
+  deriving (Show, Ord, Eq, Generic)
+instance Binary Unique
 
 -- | Some failure in the rename process.
 data RenameFailure =

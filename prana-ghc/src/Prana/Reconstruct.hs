@@ -10,26 +10,20 @@ module Prana.Reconstruct
   ( fromGenStgTopBinding
   , runConvert
   , Scope(..)
+  , ConvertError (..)
+  , failure
   ) where
 
 import           Control.Monad.Reader
 import qualified CoreSyn
-import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import qualified DataCon
 import qualified Module
+import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
-
-data Scope =
-  Scope
-    { scopeGlobals :: Map Name GlobalVarId
-    , scopeLocals :: Map Name LocalVarId
-    , scopeDataCons :: Map Name DataConId
-    , scopeModule :: Module.Module
-    }
 
 -- | A conversion monad.
 newtype Convert a =
@@ -44,7 +38,14 @@ data ConvertError
   | UnexpectedLambda
   | NameNotFound !Name
   | RenameDataConError !DataCon.DataCon !RenameFailure
+  | RenameFailure !RenameFailure
   deriving (Eq)
+
+data Scope =
+  Scope
+    { scopeIndex :: !Index
+    , scopeModule :: !Module.Module
+    }
 
 -- | Produce a failure.
 failure :: ConvertError -> Convert a
@@ -185,9 +186,9 @@ fromPrimAltTriples alts = do
 lookupSomeVarId :: Name -> Convert SomeVarId
 lookupSomeVarId name = do
   scope <- ask
-  case M.lookup name (scopeGlobals scope) of
+  case M.lookup name (indexGlobals (scopeIndex scope)) of
     Nothing ->
-      case M.lookup name (scopeLocals scope) of
+      case M.lookup name (indexLocals (scopeIndex scope)) of
         Nothing -> failure (NameNotFound name)
         Just g -> pure (SomeLocalVarId g)
     Just g -> pure (SomeGlobalVarId g)
@@ -195,14 +196,14 @@ lookupSomeVarId name = do
 lookupGlobalVarId :: Name -> Convert GlobalVarId
 lookupGlobalVarId name = do
   scope <- ask
-  case M.lookup name (scopeGlobals scope) of
+  case M.lookup name (indexGlobals (scopeIndex scope)) of
     Nothing -> failure (NameNotFound name)
     Just g -> pure g
 
 lookupLocalVarId :: Name -> Convert LocalVarId
 lookupLocalVarId name = do
   scope <- ask
-  case M.lookup name (scopeLocals scope) of
+  case M.lookup name (indexLocals (scopeIndex scope)) of
     Nothing -> failure (NameNotFound name)
     Just g -> pure g
 
@@ -214,6 +215,6 @@ lookupDataConId dataCon = do
       (failure . RenameDataConError dataCon)
       pure
       (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon))
-  case M.lookup name (scopeDataCons scope) of
+  case M.lookup name (indexDataCons (scopeIndex scope)) of
     Nothing -> failure (NameNotFound name)
     Just g -> pure g
