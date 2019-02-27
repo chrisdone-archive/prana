@@ -45,6 +45,7 @@ import qualified TyCon
 data CompileError
   = RenameErrors (NonEmpty (RenameFailure))
   | ConvertError ConvertError
+  deriving (Show)
 
 compileModSummary ::
      GHC.ModSummary -> StateT Index GHC.Ghc (Either CompileError [GlobalBinding])

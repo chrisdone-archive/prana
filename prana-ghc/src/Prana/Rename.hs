@@ -55,6 +55,9 @@ data RenameFailure =
   UnexpectedInternalName !Name.Name
   deriving (Eq)
 
+instance Show RenameFailure where
+  show (UnexpectedInternalName _) = "UnexpectedInternalName"
+
 -- | Rename the STG AST to have globally unique names.
 renameTopBinding ::
      Module.Module

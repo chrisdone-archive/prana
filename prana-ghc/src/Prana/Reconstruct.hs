@@ -41,6 +41,13 @@ data ConvertError
   | RenameFailure !RenameFailure
   deriving (Eq)
 
+instance Show ConvertError where
+ show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
+ show UnexpectedLambda {} = "UnexpectedLambda"
+ show (NameNotFound name) = "NameNotFound " ++ show name
+ show RenameDataConError{} = "RenameDataConError"
+ show RenameFailure {} = "RenameFailure"
+
 data Scope =
   Scope
     { scopeIndex :: !Index
