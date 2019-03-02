@@ -12,6 +12,7 @@
 module Main (main) where
 
 import qualified GHC.Paths
+import qualified Prana.Ghc
 
 -- The official GHC API
 import qualified GHC
@@ -728,6 +729,7 @@ doMake srcs  = do
 
     when (failed ok_flag) (liftIO $ exitWith (ExitFailure 1))
     return ()
+    Prana.Ghc.compileModuleGraph
 
 
 -- ---------------------------------------------------------------------------
