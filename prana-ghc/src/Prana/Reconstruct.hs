@@ -30,7 +30,7 @@ newtype Convert a =
   Convert
     { runConvert :: ReaderT Scope (Either ConvertError) a
     }
-  deriving (Functor, Applicative, Monad, MonadReader Scope)
+  deriving (Functor, Applicative)
 
 -- | An error while converting the AST.
 data ConvertError
@@ -191,37 +191,43 @@ fromPrimAltTriples alts = do
 -- Lookup functions
 
 lookupSomeVarId :: Name -> Convert SomeVarId
-lookupSomeVarId name = do
-  scope <- ask
-  case M.lookup name (indexGlobals (scopeIndex scope)) of
-    Nothing ->
-      case M.lookup name (indexLocals (scopeIndex scope)) of
-        Nothing -> failure (NameNotFound name)
-        Just g -> pure (SomeLocalVarId g)
-    Just g -> pure (SomeGlobalVarId g)
+lookupSomeVarId name =
+  asking
+    (\scope ->
+       case M.lookup name (indexGlobals (scopeIndex scope)) of
+         Nothing ->
+           case M.lookup name (indexLocals (scopeIndex scope)) of
+             Nothing -> Left (NameNotFound name)
+             Just g -> pure (SomeLocalVarId g)
+         Just g -> pure (SomeGlobalVarId g))
 
 lookupGlobalVarId :: Name -> Convert GlobalVarId
-lookupGlobalVarId name = do
-  scope <- ask
-  case M.lookup name (indexGlobals (scopeIndex scope)) of
-    Nothing -> failure (NameNotFound name)
-    Just g -> pure g
+lookupGlobalVarId name =
+  asking
+    (\scope ->
+       case M.lookup name (indexGlobals (scopeIndex scope)) of
+         Nothing -> Left (NameNotFound name)
+         Just g -> pure g)
 
 lookupLocalVarId :: Name -> Convert LocalVarId
-lookupLocalVarId name = do
-  scope <- ask
-  case M.lookup name (indexLocals (scopeIndex scope)) of
-    Nothing -> failure (NameNotFound name)
-    Just g -> pure g
+lookupLocalVarId name =
+  asking
+    (\scope ->
+       case M.lookup name (indexLocals (scopeIndex scope)) of
+         Nothing -> Left (NameNotFound name)
+         Just g -> pure g)
 
 lookupDataConId :: DataCon.DataCon -> Convert DataConId
-lookupDataConId dataCon = do
-  scope <- ask
-  name <-
-    either
-      (failure . RenameDataConError dataCon)
-      pure
-      (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon))
-  case M.lookup name (indexDataCons (scopeIndex scope)) of
-    Nothing -> failure (NameNotFound name)
-    Just g -> pure g
+lookupDataConId dataCon =
+  asking
+    (\scope ->
+       either
+         (Left . RenameDataConError dataCon)
+         (\name ->
+            case M.lookup name (indexDataCons (scopeIndex scope)) of
+              Nothing -> Left (NameNotFound name)
+              Just g -> pure g)
+         (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon)))
+
+asking :: (Scope -> Either ConvertError a) -> Convert a
+asking f = Convert (ReaderT f)
