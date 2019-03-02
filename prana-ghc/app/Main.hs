@@ -11,6 +11,8 @@
 
 module Main (main) where
 
+import qualified GHC.Paths
+
 -- The official GHC API
 import qualified GHC
 import GHC              ( -- DynFlags(..), HscTarget(..),
@@ -34,7 +36,6 @@ import GHCi.UI          ( interactiveUI, ghciWelcomeMsg, defaultGhciSettings )
 import DynamicLoading   ( loadFrontendPlugin )
 import Plugins
 #else
-import DynamicLoading   ( pluginError )
 #endif
 import Module           ( ModuleName )
 
@@ -106,7 +107,10 @@ main = do
 
    GHC.defaultErrorHandler defaultFatalMessager defaultFlushOut $ do
     -- 1. extract the -B flag from the args
-    argv0 <- getArgs
+    argv0 <- fmap (\args -> if any (isPrefixOf "-B") args
+                               then args
+                               else ("-B" ++ GHC.Paths.libdir) : args)
+                  getArgs
 
     let (minusB_args, argv1) = partition ("-B" `isPrefixOf`) argv0
         mbMinusB | null minusB_args = Nothing
@@ -838,7 +842,7 @@ dumpPackagesSimple dflags = putMsg dflags (pprPackagesSimple dflags)
 
 doFrontend :: ModuleName -> [(String, Maybe Phase)] -> Ghc ()
 #if !defined(GHCI)
-doFrontend modname _ = pluginError [modname]
+doFrontend _modname _ = error "No plugins supported in this mode."
 #else
 doFrontend modname srcs = do
     hsc_env <- getSession
