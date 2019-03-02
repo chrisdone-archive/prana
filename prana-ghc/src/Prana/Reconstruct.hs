@@ -16,8 +16,10 @@ module Prana.Reconstruct
 
 import           Control.Monad.Reader
 import qualified CoreSyn
+import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Validation
 import qualified DataCon
 import qualified Module
 import           Prana.Index
@@ -28,7 +30,7 @@ import qualified StgSyn
 -- | A conversion monad.
 newtype Convert a =
   Convert
-    { runConvert :: ReaderT Scope (Either ConvertError) a
+    { runConvert :: ReaderT Scope (Validation (NonEmpty ConvertError)) a
     }
   deriving (Functor, Applicative)
 
@@ -56,7 +58,7 @@ data Scope =
 
 -- | Produce a failure.
 failure :: ConvertError -> Convert a
-failure = Convert . lift . Left
+failure e = Convert (ReaderT (\_ -> Failure (pure e)))
 
 --------------------------------------------------------------------------------
 -- Conversion functions
@@ -197,7 +199,7 @@ lookupSomeVarId name =
        case M.lookup name (indexGlobals (scopeIndex scope)) of
          Nothing ->
            case M.lookup name (indexLocals (scopeIndex scope)) of
-             Nothing -> Left (NameNotFound name)
+             Nothing -> Failure (pure (NameNotFound name))
              Just g -> pure (SomeLocalVarId g)
          Just g -> pure (SomeGlobalVarId g))
 
@@ -206,7 +208,7 @@ lookupGlobalVarId name =
   asking
     (\scope ->
        case M.lookup name (indexGlobals (scopeIndex scope)) of
-         Nothing -> Left (NameNotFound name)
+         Nothing -> Failure (pure (NameNotFound name))
          Just g -> pure g)
 
 lookupLocalVarId :: Name -> Convert LocalVarId
@@ -214,7 +216,7 @@ lookupLocalVarId name =
   asking
     (\scope ->
        case M.lookup name (indexLocals (scopeIndex scope)) of
-         Nothing -> Left (NameNotFound name)
+         Nothing -> Failure (pure (NameNotFound name))
          Just g -> pure g)
 
 lookupDataConId :: DataCon.DataCon -> Convert DataConId
@@ -222,12 +224,13 @@ lookupDataConId dataCon =
   asking
     (\scope ->
        either
-         (Left . RenameDataConError dataCon)
+         (Failure . pure . RenameDataConError dataCon)
          (\name ->
             case M.lookup name (indexDataCons (scopeIndex scope)) of
-              Nothing -> Left (NameNotFound name)
+              Nothing -> Failure (pure (NameNotFound name))
               Just g -> pure g)
          (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon)))
 
-asking :: (Scope -> Either ConvertError a) -> Convert a
+-- | A way of injecting @ask@ into the Applicative.
+asking :: (Scope -> Validation (NonEmpty ConvertError) a) -> Convert a
 asking f = Convert (ReaderT f)

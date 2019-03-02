@@ -17,6 +17,7 @@
 
 module Prana.Ghc
   ( compileModSummary
+  , compileModuleGraph
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
@@ -26,13 +27,16 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
+import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
-
 import           Data.Validation
+import qualified Digraph
 import qualified DynFlags
 import qualified GHC
 import qualified HscTypes
+import qualified Outputable
 import           Prana.Collect
 import           Prana.Index
 import           Prana.Reconstruct
@@ -44,9 +48,43 @@ import qualified TyCon
 
 data CompileError
   = RenameErrors (NonEmpty (RenameFailure))
-  | ConvertError ConvertError
+  | ConvertErrors (NonEmpty ConvertError)
   deriving (Show)
 
+-- | Compile all modules in the graph.
+--
+-- 1) Load up the names index.
+-- 2) Compile each module in the graph.
+-- 3) Write back out the names index.
+-- 4) Write out the files.
+compileModuleGraph :: GHC.Ghc ()
+compileModuleGraph = do
+  mgraph <-
+    fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
+  _index <-
+    execStateT
+      (mapM_
+         (\modSummary -> do
+            liftIO
+              (putStrLn
+                 ("Compiling " ++
+                  Outputable.showSDocUnsafe
+                    (Outputable.ppr (GHC.ms_mod modSummary))))
+            result <- compileModSummary modSummary
+            case result of
+              Left compileErrors ->
+                liftIO
+                  (case compileErrors of
+                     ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
+                     RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
+              Right _bindings -> pure ())
+         (Digraph.flattenSCCs mgraph))
+      (Index
+         {indexGlobals = mempty, indexLocals = mempty, indexDataCons = mempty})
+  pure ()
+
+-- | Compile the module summary to a set of global bindings, updating
+-- the names index too.
 compileModSummary ::
      GHC.ModSummary -> StateT Index GHC.Ghc (Either CompileError [GlobalBinding])
 compileModSummary modSummary = do
@@ -66,8 +104,8 @@ compileModSummary modSummary = do
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of
-        Left err -> pure (Left (ConvertError err))
-        Right globals -> pure (Right globals)
+        Failure errs -> pure (Left (ConvertErrors errs))
+        Success globals -> pure (Right globals)
 
 -- | Convert a desguared Core AST to STG.
 desugaredToStg ::
