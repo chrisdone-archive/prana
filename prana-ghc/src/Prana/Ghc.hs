@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -27,9 +28,15 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S8
+import qualified Data.ByteString.Lazy.Char8 as L8
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
+import           Data.Set (Set)
 import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
@@ -61,7 +68,7 @@ compileModuleGraph :: GHC.Ghc ()
 compileModuleGraph = do
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
-  _index <-
+  index <-
     execStateT
       (mapM_
          (\modSummary -> do
@@ -71,17 +78,30 @@ compileModuleGraph = do
                   Outputable.showSDocUnsafe
                     (Outputable.ppr (GHC.ms_mod modSummary))))
             result <- compileModSummary modSummary
+            index <- get
             case result of
               Left compileErrors ->
                 liftIO
-                  (case compileErrors of
-                     ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
-                     RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
+                  (do case compileErrors of
+                        ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
+                        RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
               Right _bindings -> pure ())
          (Digraph.flattenSCCs mgraph))
       (Index
          {indexGlobals = mempty, indexLocals = mempty, indexDataCons = mempty})
+  liftIO
+    (S8.putStrLn
+       (mconcat
+          (intersperse
+             ", "
+             (nubbed (map nameName (M.keys (indexGlobals index)))))))
+  liftIO
+    (S8.putStrLn
+       (mconcat
+          (intersperse ", " (nubbed (map nameName (M.keys (indexLocals index)))))))
   pure ()
+  where
+    nubbed = Set.toList . Set.fromList
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
@@ -92,6 +112,7 @@ compileModSummary modSummary = do
   typecheckedModule <- lift (GHC.typecheckModule parsedModule)
   desugared <- lift (GHC.desugarModule typecheckedModule)
   topBindings <- lift (desugaredToStg modSummary desugared)
+  liftIO (liftIO (putStrLn $ Outputable.showPpr DynFlags.unsafeGlobalDynFlags topBindings))
   let module' = GHC.ms_mod modSummary
       modguts = GHC.dm_core_module desugared
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
