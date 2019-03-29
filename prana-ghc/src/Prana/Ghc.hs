@@ -29,8 +29,11 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
+import           Data.Binary (encode, decode)
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
+import qualified Data.ByteString.Lazy as L
 import qualified Data.ByteString.Lazy.Char8 as L8
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -53,6 +56,8 @@ import           Prana.Rename
 import           Prana.Types
 import qualified SimplStg
 import qualified StgSyn as GHC
+import           System.Directory
+import           System.Environment
 import           TidyPgm
 import qualified TyCon
 
@@ -72,7 +77,20 @@ compileModuleGraph = do
   dflags <- GHC.getSessionDynFlags
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
+  fp <- liftIO (getEnv "PRANA_INDEX")
   index <-
+    liftIO
+      (do
+          exists <- doesFileExist fp
+          if exists
+            then fmap decode (L.readFile fp)
+            else pure
+                   Index
+                     { indexGlobals = mempty
+                     , indexLocals = mempty
+                     , indexDataCons = mempty
+                     })
+  index' <-
     execStateT
       (mapM_
          (\(setInterpreted -> modSummary) -> do
@@ -80,9 +98,7 @@ compileModuleGraph = do
               (putStrLn
                  (Outputable.showSDocUnsafe
                     (Outputable.ppr (GHC.ms_mod modSummary)) <>
-
-                  ": Type-checking"
-                  ))
+                  ": Type-checking"))
             result <- compileModSummary modSummary
             index <- get
             case result of
@@ -93,8 +109,7 @@ compileModuleGraph = do
                         RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
               Right _bindings -> pure ())
          (Digraph.flattenSCCs mgraph))
-      (Index
-         {indexGlobals = mempty, indexLocals = mempty, indexDataCons = mempty})
+      index
   -- liftIO
   --   (S8.putStrLn
   --      (mconcat
@@ -105,6 +120,7 @@ compileModuleGraph = do
   --   (S8.putStrLn
   --      (mconcat
   --         (intersperse ", " (nubbed (map nameName (M.keys (indexLocals index)))))))
+  liftIO (L.writeFile fp (encode index'))
   pure ()
   -- where
   --   nubbed = Set.toList . Set.fromList

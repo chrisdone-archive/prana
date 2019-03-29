@@ -88,6 +88,15 @@ data WiredInVal
   = WiredIn_coercionToken#
   | WiredIn_void#
   | WiredIn_realWorld#
+  | WiredIn_patError
+    -- TODO:
+    -- Design decision required.
+    --
+    -- This is something that is actually defined, but it's used by
+    -- integer-simple before it's actually defined. I think this may
+    -- be a "known-key" rather than "wired-in". I think this can
+    -- simply be translated back to its respective GlobalVarId,
+    -- although I'm not exactly sure when.
   deriving (Show, Eq, Generic)
 
 data Op =

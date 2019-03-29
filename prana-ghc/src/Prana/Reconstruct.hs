@@ -18,6 +18,7 @@ module Prana.Reconstruct
 
 import           Control.Monad.Reader
 import qualified CoreSyn
+import qualified Data.ByteString.Char8 as S8
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
@@ -277,23 +278,31 @@ wiredInVals =
           , nameUnique = Exported
           }
       , WiredIn_realWorld#)
+    , (Name
+         { namePackage = "base"
+         , nameModule = "Control.Exception.Base"
+         , nameName = "patError"
+         , nameUnique = Exported
+         }, WiredIn_patError)
     ]
 
 wiredInCons :: Map Name WiredInCon
 wiredInCons =
   M.fromList
-    [ ( Name
-          { namePackage = "ghc-prim"
-          , nameModule = "GHC.Prim"
-          , nameName = "Unit#"
-          , nameUnique = Exported
-          }
-      , WiredIn_Unit#)
-    , ( Name
-          { namePackage = "ghc-prim"
-          , nameModule = "GHC.Prim"
-          , nameName = "(##)"
-          , nameUnique = Exported
-          }
-      , WiredIn_unboxed_tuple)
-    ]
+    ([ ( Name
+           { namePackage = "ghc-prim"
+           , nameModule = "GHC.Prim"
+           , nameName = "Unit#"
+           , nameUnique = Exported
+           }
+       , WiredIn_Unit#)
+     ] ++
+     [ ( Name
+           { namePackage = "ghc-prim"
+           , nameModule = "GHC.Prim"
+           , nameName = "(#" <> S8.replicate count ',' <> "#)"
+           , nameUnique = Exported
+           }
+       , WiredIn_unboxed_tuple)
+     | count <- [0 .. 64]
+     ])
