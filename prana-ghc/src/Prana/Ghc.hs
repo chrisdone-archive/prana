@@ -75,6 +75,7 @@ data CompileError
 compileModuleGraph :: GHC.Ghc ()
 compileModuleGraph = do
   dflags <- GHC.getSessionDynFlags
+  GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   fp <- liftIO (getEnv "PRANA_INDEX")
@@ -93,21 +94,21 @@ compileModuleGraph = do
   index' <-
     execStateT
       (mapM_
-         (\(setInterpreted -> modSummary) -> do
-            liftIO
-              (putStrLn
-                 (Outputable.showSDocUnsafe
-                    (Outputable.ppr (GHC.ms_mod modSummary)) <>
-                  ": Type-checking"))
-            result <- compileModSummary modSummary
-            index <- get
-            case result of
-              Left compileErrors ->
-                liftIO
-                  (do case compileErrors of
-                        ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
-                        RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
-              Right _bindings -> pure ())
+         (\modSummary -> do
+                      liftIO
+                        (putStrLn
+                           (Outputable.showSDocUnsafe
+                              (Outputable.ppr (GHC.ms_mod modSummary)) <>
+                            ": Type-checking"))
+                      result <- compileModSummary modSummary
+                      index <- get
+                      case result of
+                        Left compileErrors ->
+                          liftIO
+                            (do case compileErrors of
+                                  ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
+                                  RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
+                        Right _bindings -> pure ())
          (Digraph.flattenSCCs mgraph))
       index
   -- liftIO
@@ -124,13 +125,6 @@ compileModuleGraph = do
   pure ()
   -- where
   --   nubbed = Set.toList . Set.fromList
-
-setInterpreted :: GHC.ModSummary -> GHC.ModSummary
-setInterpreted m =
-  m
-    { HscTypes.ms_hspp_opts =
-        (HscTypes.ms_hspp_opts m) {GHC.hscTarget = DynFlags.HscInterpreted}
-    }
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
