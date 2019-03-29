@@ -78,9 +78,11 @@ compileModuleGraph = do
          (\(setInterpreted -> modSummary) -> do
             liftIO
               (putStrLn
-                 ("Compiling " ++
-                  Outputable.showSDocUnsafe
-                    (Outputable.ppr (GHC.ms_mod modSummary))))
+                 (Outputable.showSDocUnsafe
+                    (Outputable.ppr (GHC.ms_mod modSummary)) <>
+
+                  ": Type-checking"
+                  ))
             result <- compileModSummary modSummary
             index <- get
             case result of
@@ -156,14 +158,19 @@ compileModSummary modSum = do
   let module' = GHC.ms_mod modSum
       modguts = GHC.dm_core_module dmod
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
+  liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                    ": Scanning"))
   case (,) <$> traverse (renameTopBinding module') stg_binds <*>
        traverse (validationNel . renameId module') (Set.toList tyCons) of
     Failure errors -> pure (Left (RenameErrors errors))
     Success (bindings, tycons) -> do
-      liftIO (putStrLn ("Updating index w/ " ++ intercalate ", " (map (S8.unpack . nameName) tycons)))
+      -- liftIO (putStrLn ("Updating index w/ " ++ intercalate ", " (map (S8.unpack . nameName) tycons)))
+      liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                        ": Indexing"))
       index <- updateIndex bindings tycons
       let scope = Scope {scopeIndex = index, scopeModule = module'}
-      liftIO (putStrLn "Running convert ...")
+      liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                  ": Rewriting"))
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of
