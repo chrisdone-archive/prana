@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 -- |
@@ -80,16 +81,30 @@ instance Binary LocalVarId
 data SomeVarId
   = SomeLocalVarId !LocalVarId
   | SomeGlobalVarId !GlobalVarId
+  | WiredInVal !WiredInVal
+  deriving (Show, Eq, Generic)
+
+data WiredInVal
+  = WiredIn_coercionToken#
+  | WiredIn_void#
+  | WiredIn_realWorld#
   deriving (Show, Eq, Generic)
 
 data Op =
   Op
   deriving (Show, Eq, Generic)
 
-newtype DataConId =
-  DataConId Int64
+data DataConId
+  = DataConId Int64
+  | WiredInCon WiredInCon
   deriving (Show, Eq, Generic)
 instance Binary DataConId
+
+data WiredInCon
+  = WiredIn_Unit#
+  | WiredIn_unboxed_tuple
+  deriving (Show, Eq, Generic)
+instance Binary WiredInCon
 
 data UpdateFlag
   = ReEntrant

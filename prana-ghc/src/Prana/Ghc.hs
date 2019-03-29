@@ -1,3 +1,4 @@
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ApplicativeDo #-}
@@ -42,6 +43,7 @@ import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
 import qualified GHC
+import           HscTypes
 import qualified HscTypes
 import qualified Outputable
 import           Prana.Collect
@@ -51,6 +53,7 @@ import           Prana.Rename
 import           Prana.Types
 import qualified SimplStg
 import qualified StgSyn as GHC
+import           TidyPgm
 import qualified TyCon
 
 data CompileError
@@ -66,12 +69,13 @@ data CompileError
 -- 4) Write out the files.
 compileModuleGraph :: GHC.Ghc ()
 compileModuleGraph = do
+  dflags <- GHC.getSessionDynFlags
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   index <-
     execStateT
       (mapM_
-         (\modSummary -> do
+         (\(setInterpreted -> modSummary) -> do
             liftIO
               (putStrLn
                  ("Compiling " ++
@@ -89,39 +93,77 @@ compileModuleGraph = do
          (Digraph.flattenSCCs mgraph))
       (Index
          {indexGlobals = mempty, indexLocals = mempty, indexDataCons = mempty})
-  liftIO
-    (S8.putStrLn
-       (mconcat
-          (intersperse
-             ", "
-             (nubbed (map nameName (M.keys (indexGlobals index)))))))
-  liftIO
-    (S8.putStrLn
-       (mconcat
-          (intersperse ", " (nubbed (map nameName (M.keys (indexLocals index)))))))
+  -- liftIO
+  --   (S8.putStrLn
+  --      (mconcat
+  --         (intersperse
+  --            ", "
+  --            (nubbed (map nameName (M.keys (indexGlobals index)))))))
+  -- liftIO
+  --   (S8.putStrLn
+  --      (mconcat
+  --         (intersperse ", " (nubbed (map nameName (M.keys (indexLocals index)))))))
   pure ()
-  where
-    nubbed = Set.toList . Set.fromList
+  -- where
+  --   nubbed = Set.toList . Set.fromList
+
+setInterpreted :: GHC.ModSummary -> GHC.ModSummary
+setInterpreted m =
+  m
+    { HscTypes.ms_hspp_opts =
+        (HscTypes.ms_hspp_opts m) {GHC.hscTarget = DynFlags.HscInterpreted}
+    }
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
 compileModSummary ::
      GHC.ModSummary -> StateT Index GHC.Ghc (Either CompileError [GlobalBinding])
-compileModSummary modSummary = do
-  parsedModule <- lift (GHC.parseModule modSummary)
-  typecheckedModule <- lift (GHC.typecheckModule parsedModule)
-  desugared <- lift (GHC.desugarModule typecheckedModule)
-  topBindings <- lift (desugaredToStg modSummary desugared)
-  liftIO (liftIO (putStrLn $ Outputable.showPpr DynFlags.unsafeGlobalDynFlags topBindings))
-  let module' = GHC.ms_mod modSummary
-      modguts = GHC.dm_core_module desugared
+compileModSummary modSum = do
+  pmod <- lift $ GHC.parseModule modSum      -- ModuleSummary
+  tmod <- lift $  GHC.typecheckModule pmod    -- TypecheckedSource
+  dmod <- lift $  GHC.desugarModule tmod      -- DesugaredModule
+  let core = GHC.coreModule dmod      -- CoreModule
+  let cb = HscTypes.mg_binds core -- [CoreBind]
+  -- liftIO (putStrLn $ showPpr unsafeGlobalDynFlags cb)
+  hsc_env <- lift $  GHC.getSession
+  let modguts = GHC.dm_core_module dmod
+      this_mod = GHC.ms_mod modSum
+  (CgGuts {cg_binds = core_binds, cg_tycons = tycons}, modDetails) <-
+    liftIO (TidyPgm.tidyProgram hsc_env core)
+  let data_tycons = filter TyCon.isDataTyCon tycons
+  (prepd_binds, _) <-
+    liftIO
+      (CorePrep.corePrepPgm
+         hsc_env
+         this_mod
+         (GHC.ms_location modSum)
+         core_binds
+         data_tycons)
+  -- liftIO (putStrLn $ showPpr unsafeGlobalDynFlags prepd_binds)
+  -- YES!!!!!!!!!!!!!!!!!
+  dflags <- lift $  DynFlags.getDynFlags
+  (stg_binds, _) <- liftIO (myCoreToStg dflags this_mod prepd_binds)
+  -- liftIO (liftIO (putStrLn $ Outputable.showPpr DynFlags.unsafeGlobalDynFlags stg_binds))
+  pure (Right [])
+
+
+
+  -- parsedModule <- lift (GHC.parseModule modSummary)
+  -- typecheckedModule <- lift (GHC.typecheckModule parsedModule)
+  -- desugared <- lift (GHC.desugarModule typecheckedModule)
+  -- topBindings <- lift (desugaredToStg modSummary desugared)
+  -- liftIO (liftIO (putStrLn $ Outputable.showPpr DynFlags.unsafeGlobalDynFlags topBindings))
+  let module' = GHC.ms_mod modSum
+      modguts = GHC.dm_core_module dmod
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
-  case (,) <$> traverse (renameTopBinding module') topBindings <*>
+  case (,) <$> traverse (renameTopBinding module') stg_binds <*>
        traverse (validationNel . renameId module') (Set.toList tyCons) of
     Failure errors -> pure (Left (RenameErrors errors))
     Success (bindings, tycons) -> do
+      liftIO (putStrLn ("Updating index w/ " ++ intercalate ", " (map (S8.unpack . nameName) tycons)))
       index <- updateIndex bindings tycons
       let scope = Scope {scopeIndex = index, scopeModule = module'}
+      liftIO (putStrLn "Running convert ...")
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of
@@ -149,6 +191,17 @@ desugaredToStg modSummary desugared = do
   pure stg_binds
   where modguts = GHC.dm_core_module desugared
         this_mod = GHC.ms_mod modSummary
+
+-- -- | Perform core to STG transformation.
+-- myCoreToStg ::
+--      GHC.DynFlags
+--   -> GHC.Module
+--   -> CoreSyn.CoreProgram
+--   -> IO ([GHC.StgTopBinding], CostCentre.CollectedCCs)
+-- myCoreToStg dflags this_mod prepd_binds = do
+--   let (stg_binds, cost_centre_info) = CoreToStg.coreToStg dflags this_mod prepd_binds
+--   stg_binds2 <- SimplStg.stg2stg dflags stg_binds
+--   return (stg_binds2, cost_centre_info)
 
 -- | Perform core to STG transformation.
 myCoreToStg ::

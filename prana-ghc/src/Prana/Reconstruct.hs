@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
@@ -17,6 +19,7 @@ module Prana.Reconstruct
 import           Control.Monad.Reader
 import qualified CoreSyn
 import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
 import           Data.Validation
@@ -38,7 +41,10 @@ newtype Convert a =
 data ConvertError
   = UnexpectedPolymorphicCaseAlts
   | UnexpectedLambda
-  | NameNotFound !Name
+  | ConNameNotFound !Name
+  | GlobalNameNotFound !Name
+  | LocalNameNotFound !Name
+  | SomeNameNotFound !Name
   | RenameDataConError !DataCon.DataCon !RenameFailure
   | RenameFailure !RenameFailure
   deriving (Eq)
@@ -46,7 +52,10 @@ data ConvertError
 instance Show ConvertError where
  show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
  show UnexpectedLambda {} = "UnexpectedLambda"
- show (NameNotFound name) = "NameNotFound " ++ show name
+ show (ConNameNotFound name) = "ConNameNotFound " ++ show name
+ show (LocalNameNotFound name) = "LocalNameNotFound " ++ show name
+ show (GlobalNameNotFound name) = "GlobalNameNotFound " ++ show name
+ show (SomeNameNotFound name) = "SomeNameNotFound " ++ show name
  show RenameDataConError{} = "RenameDataConError"
  show RenameFailure {} = "RenameFailure"
 
@@ -196,19 +205,22 @@ lookupSomeVarId :: Name -> Convert SomeVarId
 lookupSomeVarId name =
   asking
     (\scope ->
-       case M.lookup name (indexGlobals (scopeIndex scope)) of
+       case M.lookup name wiredInVals of
+         Just wiredIn -> pure (WiredInVal wiredIn)
          Nothing ->
-           case M.lookup name (indexLocals (scopeIndex scope)) of
-             Nothing -> Failure (pure (NameNotFound name))
-             Just g -> pure (SomeLocalVarId g)
-         Just g -> pure (SomeGlobalVarId g))
+           case M.lookup name (indexGlobals (scopeIndex scope)) of
+             Nothing ->
+               case M.lookup name (indexLocals (scopeIndex scope)) of
+                 Nothing -> Failure (pure (SomeNameNotFound name))
+                 Just g -> pure (SomeLocalVarId g)
+             Just g -> pure (SomeGlobalVarId g))
 
 lookupGlobalVarId :: Name -> Convert GlobalVarId
 lookupGlobalVarId name =
   asking
     (\scope ->
        case M.lookup name (indexGlobals (scopeIndex scope)) of
-         Nothing -> Failure (pure (NameNotFound name))
+         Nothing -> Failure (pure (GlobalNameNotFound name))
          Just g -> pure g)
 
 lookupLocalVarId :: Name -> Convert LocalVarId
@@ -216,7 +228,7 @@ lookupLocalVarId name =
   asking
     (\scope ->
        case M.lookup name (indexLocals (scopeIndex scope)) of
-         Nothing -> Failure (pure (NameNotFound name))
+         Nothing -> Failure (pure (LocalNameNotFound name))
          Just g -> pure g)
 
 lookupDataConId :: DataCon.DataCon -> Convert DataConId
@@ -226,11 +238,62 @@ lookupDataConId dataCon =
        either
          (Failure . pure . RenameDataConError dataCon)
          (\name ->
-            case M.lookup name (indexDataCons (scopeIndex scope)) of
-              Nothing -> Failure (pure (NameNotFound name))
-              Just g -> pure g)
+            case M.lookup name wiredInCons of
+              Just wiredCon -> pure (WiredInCon wiredCon)
+              Nothing ->
+                case M.lookup name (indexDataCons (scopeIndex scope)) of
+                  Nothing -> Failure (pure (ConNameNotFound name))
+                  Just g -> pure g)
          (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon)))
 
 -- | A way of injecting @ask@ into the Applicative.
 asking :: (Scope -> Validation (NonEmpty ConvertError) a) -> Convert a
 asking f = Convert (ReaderT f)
+
+--------------------------------------------------------------------------------
+-- Wired-in names
+
+wiredInVals :: Map Name WiredInVal
+wiredInVals =
+  M.fromList
+    [ ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "void#"
+          , nameUnique = Exported
+          }
+      , WiredIn_void#)
+    , ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "coercionToken#"
+          , nameUnique = Exported
+          }
+      , WiredIn_coercionToken#)
+    , ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "realWorld#"
+          , nameUnique = Exported
+          }
+      , WiredIn_realWorld#)
+    ]
+
+wiredInCons :: Map Name WiredInCon
+wiredInCons =
+  M.fromList
+    [ ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "Unit#"
+          , nameUnique = Exported
+          }
+      , WiredIn_Unit#)
+    , ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "(##)"
+          , nameUnique = Exported
+          }
+      , WiredIn_unboxed_tuple)
+    ]
