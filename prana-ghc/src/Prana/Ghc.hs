@@ -95,17 +95,19 @@ compileModuleGraph = do
   (index', errors) <-
     (evalStateT
        (runWriterT
-          (mapM_
-             (\modSummary -> do
-                let modName =
-                      Outputable.showSDocUnsafe
-                        (Outputable.ppr (GHC.ms_mod modSummary))
-                liftIO (putStrLn ("Compiling " <> modName <> " [prana]"))
-                result <- lift (compileModSummary modSummary)
-                case result of
-                  Left compileErrors -> tell [(modName, compileErrors)]
-                  Right _bindings -> pure ())
-             (Digraph.flattenSCCs mgraph)))
+          (do let sccs = Digraph.flattenSCCs mgraph
+                  total = length sccs
+              mapM_
+                (\(i, modSummary) -> do
+                   let modName =
+                         Outputable.showSDocUnsafe
+                           (Outputable.ppr (GHC.ms_mod modSummary))
+                   liftIO (putStrLn ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName <> " (Prana)"))
+                   result <- lift (compileModSummary modSummary)
+                   case result of
+                     Left compileErrors -> tell [(modName, compileErrors)]
+                     Right _bindings -> pure ())
+                (zip [1 :: Int ..] sccs)))
        index)
   -- liftIO
   --   (S8.putStrLn
