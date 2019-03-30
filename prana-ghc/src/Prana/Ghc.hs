@@ -102,7 +102,7 @@ compileModuleGraph = do
                    let modName =
                          Outputable.showSDocUnsafe
                            (Outputable.ppr (GHC.ms_mod modSummary))
-                   liftIO (putStrLn ("[" <> show i <> " of " <> show total <> "] Prana compiling " <> modName))
+                   liftIO (putStrLn ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName))
                    result <- lift (compileModSummary modSummary)
                    case result of
                      Left compileErrors -> tell [(modName, compileErrors)]
