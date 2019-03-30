@@ -88,6 +88,8 @@ data WiredInVal
   = WiredIn_coercionToken#
   | WiredIn_void#
   | WiredIn_realWorld#
+  | WiredIn_nullAddr#
+  | WiredIn_seq
   | WiredIn_patError
     -- TODO:
     -- Design decision required.

@@ -278,12 +278,27 @@ wiredInVals =
           , nameUnique = Exported
           }
       , WiredIn_realWorld#)
-    , (Name
-         { namePackage = "base"
-         , nameModule = "Control.Exception.Base"
-         , nameName = "patError"
-         , nameUnique = Exported
-         }, WiredIn_patError)
+    ,  ( Name
+           { namePackage = "ghc-prim"
+           , nameModule = "GHC.Prim"
+           , nameName = "nullAddr#"
+           , nameUnique = Exported
+           }
+       , WiredIn_nullAddr#)
+    , ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
+          , nameName = "seq"
+          , nameUnique = Exported
+          }
+      , WiredIn_seq)
+    , ( Name
+          { namePackage = "base"
+          , nameModule = "Control.Exception.Base"
+          , nameName = "patError"
+          , nameUnique = Exported
+          }
+      , WiredIn_patError)
     ]
 
 wiredInCons :: Map Name WiredInCon
