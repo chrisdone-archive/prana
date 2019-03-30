@@ -90,6 +90,7 @@ data WiredInVal
   | WiredIn_realWorld#
   | WiredIn_nullAddr#
   | WiredIn_seq
+  | WiredIn_magicDict
   | WiredIn_patError
     -- TODO:
     -- Design decision required.

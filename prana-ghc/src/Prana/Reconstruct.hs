@@ -277,6 +277,13 @@ wiredInVals =
     [ ( Name
           { namePackage = "ghc-prim"
           , nameModule = "GHC.Prim"
+          , nameName = "magicDict"
+          , nameUnique = Exported
+          }
+      , WiredIn_magicDict),
+      ( Name
+          { namePackage = "ghc-prim"
+          , nameModule = "GHC.Prim"
           , nameName = "void#"
           , nameUnique = Exported
           }
