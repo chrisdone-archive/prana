@@ -90,7 +90,7 @@ compileModuleGraph = do
 compileToPrana ::
      Int
   -> (Int, ModSummary)
-  -> WriterT [(GHC.Module, CompileError)] (StateT Index GHC.Ghc) ()
+  -> WriterT [(GHC.Module, ([GHC.StgTopBinding],CompileError))] (StateT Index GHC.Ghc) ()
 compileToPrana total (i, modSummary) = do
   let modName =
         Outputable.showSDocUnsafe (Outputable.ppr mn)
@@ -106,7 +106,7 @@ compileToPrana total (i, modSummary) = do
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
 compileModSummary ::
-     GHC.ModSummary -> StateT Index GHC.Ghc (Either CompileError [GlobalBinding])
+     GHC.ModSummary -> StateT Index GHC.Ghc (Either ([GHC.StgTopBinding],CompileError) [GlobalBinding])
 compileModSummary modSum = do
   pmod <- lift (GHC.parseModule modSum)
   tmod <- lift (GHC.typecheckModule pmod)
@@ -132,14 +132,14 @@ compileModSummary modSum = do
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
   case (,) <$> traverse (renameTopBinding module') stg_binds <*>
        traverse (validationNel . renameId module') (Set.toList tyCons) of
-    Failure errors -> pure (Left (RenameErrors errors))
+    Failure errors -> pure (Left (stg_binds, RenameErrors errors))
     Success (bindings, dataCons) -> do
       index <- updateIndex bindings dataCons
       let scope = Scope {scopeIndex = index, scopeModule = module'}
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of
-        Failure errs -> pure (Left (ConvertErrors errs))
+        Failure errs -> pure (Left (stg_binds, ConvertErrors errs))
         Success globals -> pure (Right globals)
 
 -- | Perform core to STG transformation.
@@ -154,11 +154,12 @@ myCoreToStg dflags this_mod prepd_binds = do
   return (stg_binds2, cost_centre_info)
 
 -- | Show errors.
-showErrors :: (MonadIO m) => [(GHC.Module, CompileError)] -> m ()
+showErrors ::
+     (MonadIO m) => [(GHC.Module, ([GHC.StgTopBinding], CompileError))] -> m ()
 showErrors errors =
   liftIO
     (mapM_
-       (\(modName, compileErrors) -> do
+       (\(modName, (bindings, compileErrors)) -> do
           putStrLn
             ("\nErrors in " ++
              (Outputable.showSDocUnsafe (Outputable.ppr modName)) ++ ":")
@@ -170,7 +171,11 @@ showErrors errors =
             RenameErrors errs ->
               mapM_
                 (putStrLn . ("  " ++) . displayException)
-                (nub (NE.toList errs)))
+                (nub (NE.toList errs))
+          when
+            False
+            (do putStrLn ("Module STG is: ")
+                putStrLn (Outputable.showSDocUnsafe (Outputable.ppr bindings))))
        errors)
 
 -- | Read the name index.
