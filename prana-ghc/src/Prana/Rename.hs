@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -14,6 +15,7 @@ module Prana.Rename
   , RenameFailure(..)
   ) where
 
+import           Control.Exception
 import qualified CoreSyn
 import           Data.Bifunctor.TH
 import           Data.Binary
@@ -21,11 +23,13 @@ import           Data.Bitraversable
 import           Data.ByteString (ByteString)
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
+import           Data.Typeable
 import           Data.Validation
 import qualified FastString
 import           GHC.Generics
 import qualified Module
 import qualified Name
+import qualified Outputable
 import qualified StgSyn
 import qualified Unique
 import qualified Var
@@ -54,7 +58,14 @@ instance Binary Unique
 -- | Some failure in the rename process.
 data RenameFailure =
   UnexpectedInternalName !Name.Name
-  deriving (Eq)
+  deriving (Eq, Typeable)
+
+instance Exception RenameFailure where
+  displayException =
+    \case
+      UnexpectedInternalName n ->
+        "Unexpected internal name: " ++
+        (Outputable.showSDocUnsafe (Outputable.ppr n))
 
 instance Show RenameFailure where
   show (UnexpectedInternalName _) = "UnexpectedInternalName"

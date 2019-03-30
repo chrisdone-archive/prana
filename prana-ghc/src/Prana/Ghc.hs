@@ -22,6 +22,7 @@ module Prana.Ghc
   , compileModuleGraph
   ) where
 
+import           Control.Exception
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -62,7 +63,7 @@ import           TidyPgm
 import qualified TyCon
 
 data CompileError
-  = RenameErrors (NonEmpty (RenameFailure))
+  = RenameErrors (NonEmpty RenameFailure)
   | ConvertErrors (NonEmpty ConvertError)
   deriving (Show)
 
@@ -81,8 +82,7 @@ compileModuleGraph = do
   fp <- liftIO (getEnv "PRANA_INDEX")
   index <-
     liftIO
-      (do
-          exists <- doesFileExist fp
+      (do exists <- doesFileExist fp
           if exists
             then fmap decode (L.readFile fp)
             else pure
@@ -95,20 +95,27 @@ compileModuleGraph = do
     execStateT
       (mapM_
          (\modSummary -> do
-                      liftIO
-                        (putStrLn
-                           (Outputable.showSDocUnsafe
-                              (Outputable.ppr (GHC.ms_mod modSummary)) <>
-                            ": Type-checking"))
-                      result <- compileModSummary modSummary
-                      index <- get
-                      case result of
-                        Left compileErrors ->
-                          liftIO
-                            (do case compileErrors of
-                                  ConvertErrors errs -> mapM_ print (nub (NE.toList errs))
-                                  RenameErrors errs -> mapM_ print (nub (NE.toList errs)))
-                        Right _bindings -> pure ())
+            liftIO
+              (putStrLn
+                 ("Compiling " <>
+                  Outputable.showSDocUnsafe
+                    (Outputable.ppr (GHC.ms_mod modSummary)) <>
+                  " [prana]"))
+            result <- compileModSummary modSummary
+            index <- get
+            case result of
+              Left compileErrors ->
+                liftIO
+                  (do case compileErrors of
+                        ConvertErrors errs ->
+                          mapM_
+                            (putStrLn . displayException)
+                            (nub (NE.toList errs))
+                        RenameErrors errs ->
+                          mapM_
+                            (putStrLn . displayException)
+                            (nub (NE.toList errs)))
+              Right _bindings -> pure ())
          (Digraph.flattenSCCs mgraph))
       index
   -- liftIO
@@ -168,19 +175,19 @@ compileModSummary modSum = do
   let module' = GHC.ms_mod modSum
       modguts = GHC.dm_core_module dmod
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
-  liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
-                    ": Scanning"))
+  {-liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                    ": Scanning"))-}
   case (,) <$> traverse (renameTopBinding module') stg_binds <*>
        traverse (validationNel . renameId module') (Set.toList tyCons) of
     Failure errors -> pure (Left (RenameErrors errors))
     Success (bindings, tycons) -> do
       -- liftIO (putStrLn ("Updating index w/ " ++ intercalate ", " (map (S8.unpack . nameName) tycons)))
-      liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
-                        ": Indexing"))
+      {-liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                        ": Indexing"))-}
       index <- updateIndex bindings tycons
       let scope = Scope {scopeIndex = index, scopeModule = module'}
-      liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
-                  ": Rewriting"))
+      {-liftIO (putStrLn (Outputable.showSDocUnsafe (Outputable.ppr (GHC.ms_mod modSum)) ++
+                  ": Rewriting"))-}
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of

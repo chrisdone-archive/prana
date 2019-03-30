@@ -16,6 +16,7 @@ module Prana.Reconstruct
   , failure
   ) where
 
+import           Control.Exception
 import           Control.Monad.Reader
 import qualified CoreSyn
 import qualified Data.ByteString.Char8 as S8
@@ -23,6 +24,7 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
+import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
 import qualified Module
@@ -48,7 +50,22 @@ data ConvertError
   | SomeNameNotFound !Name
   | RenameDataConError !DataCon.DataCon !RenameFailure
   | RenameFailure !RenameFailure
-  deriving (Eq)
+  deriving (Eq, Typeable)
+
+instance Exception ConvertError where
+  displayException =
+    \case
+      SomeNameNotFound name -> "Variable name not found: " <> displayName name
+      LocalNameNotFound name -> "Local variable name not found: " <> displayName name
+      GlobalNameNotFound name -> "Global variable name not found: " <> displayName name
+      ConNameNotFound name -> "Constructor name not found: " <> displayName name
+      orelse -> show orelse
+
+displayName :: Name -> String
+displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> ":" <> md <> "." <> name <> ext)
+  where ext = case u of
+                Exported -> ""
+                Unexported i -> " (" <> S8.pack (show i) <> ")"
 
 instance Show ConvertError where
  show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
