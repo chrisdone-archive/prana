@@ -26,6 +26,7 @@ import           Control.Exception
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
 import           Control.Monad.State
+import           Control.Monad.Writer
 import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
@@ -91,33 +92,21 @@ compileModuleGraph = do
                      , indexLocals = mempty
                      , indexDataCons = mempty
                      })
-  index' <-
-    execStateT
-      (mapM_
-         (\modSummary -> do
-            liftIO
-              (putStrLn
-                 ("Compiling " <>
-                  Outputable.showSDocUnsafe
-                    (Outputable.ppr (GHC.ms_mod modSummary)) <>
-                  " [prana]"))
-            result <- compileModSummary modSummary
-            index <- get
-            case result of
-              Left compileErrors ->
-                liftIO
-                  (do case compileErrors of
-                        ConvertErrors errs ->
-                          mapM_
-                            (putStrLn . displayException)
-                            (nub (NE.toList errs))
-                        RenameErrors errs ->
-                          mapM_
-                            (putStrLn . displayException)
-                            (nub (NE.toList errs)))
-              Right _bindings -> pure ())
-         (Digraph.flattenSCCs mgraph))
-      index
+  (index', errors) <-
+    (evalStateT
+       (runWriterT
+          (mapM_
+             (\modSummary -> do
+                let modName =
+                      Outputable.showSDocUnsafe
+                        (Outputable.ppr (GHC.ms_mod modSummary))
+                liftIO (putStrLn ("Compiling " <> modName <> " [prana]"))
+                result <- lift (compileModSummary modSummary)
+                case result of
+                  Left compileErrors -> tell [(modName, compileErrors)]
+                  Right _bindings -> pure ())
+             (Digraph.flattenSCCs mgraph)))
+       index)
   -- liftIO
   --   (S8.putStrLn
   --      (mconcat
@@ -128,7 +117,23 @@ compileModuleGraph = do
   --   (S8.putStrLn
   --      (mconcat
   --         (intersperse ", " (nubbed (map nameName (M.keys (indexLocals index)))))))
-  liftIO (L.writeFile fp (encode index'))
+  case errors of
+    [] -> liftIO (L.writeFile fp (encode index'))
+    _ ->
+      liftIO
+        (mapM_
+           (\(modName, compileErrors) -> do
+              putStrLn ("\nErrors in " ++ modName ++ ":")
+              case compileErrors of
+                ConvertErrors errs ->
+                  mapM_
+                    (putStrLn . ("  " ++) . displayException)
+                    (nub (NE.toList errs))
+                RenameErrors errs ->
+                  mapM_
+                    (putStrLn . ("  " ++) . displayException)
+                    (nub (NE.toList errs)))
+           errors)
   pure ()
   -- where
   --   nubbed = Set.toList . Set.fromList

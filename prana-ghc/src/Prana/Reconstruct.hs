@@ -62,7 +62,7 @@ instance Exception ConvertError where
       orelse -> show orelse
 
 displayName :: Name -> String
-displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> ":" <> md <> "." <> name <> ext)
+displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)
   where ext = case u of
                 Exported -> ""
                 Unexported i -> " (" <> S8.pack (show i) <> ")"
