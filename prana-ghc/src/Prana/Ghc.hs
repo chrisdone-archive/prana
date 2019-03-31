@@ -37,7 +37,9 @@ import qualified Data.ByteString.Lazy as L
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import           Data.Maybe
 import qualified Data.Set as Set
+import           Data.Typeable
 import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
@@ -105,6 +107,11 @@ compileToPrana total (i, modSummary) = do
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
+--
+-- I _believe_ this is the correct way to get STG from a module,
+-- however I asked on the ghc-devs mailing list and got no reply:
+-- <https://mail.haskell.org/pipermail/ghc-devs/2019-February/017117.html>
+-- So it's really just guess-work here.
 compileModSummary ::
      GHC.ModSummary -> StateT Index GHC.Ghc (Either ([GHC.StgTopBinding],CompileError) [GlobalBinding])
 compileModSummary modSum = do
