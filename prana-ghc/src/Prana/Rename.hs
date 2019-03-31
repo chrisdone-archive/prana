@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -25,12 +26,15 @@ import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Typeable
 import           Data.Validation
+import qualified DataCon
 import qualified FastString
 import           GHC.Generics
+import qualified Id
 import qualified Module
 import qualified Name
 import qualified Outputable
 import qualified StgSyn
+import qualified TyCon
 import qualified Unique
 import qualified Var
 
@@ -79,22 +83,35 @@ renameTopBinding m =
   bitraverse (validationNel . renameId m) (validationNel . renameId m)
 
 -- | Rename the id to be a globally unique name.
+--
+-- For some reason, newtype constructors appear in the AST even at
+-- this stage. So we replace them with id. I asked ghc-devs, but again
+-- got no answer:
+-- <https://mail.haskell.org/pipermail/ghc-devs/2019-March/017384.html>
+-- So hopefully this just works.
 renameId :: Module.Module -> Var.Id -> Either RenameFailure Name
 renameId m thing =
   if Name.isInternalName name
     then Left (UnexpectedInternalName name)
     else Right
-           (Name
-              { namePackage = package
-              , nameModule = module'
-              , nameName = name'
-              , nameUnique =
-                  if Var.isExportedId thing
-                    then Exported
-                    else Unexported
-                           (fromIntegral
-                              (Unique.getKey (Unique.getUnique name)))
-              })
+           (if isNewtypeConstructor thing
+              then Name
+                     { namePackage = "base"
+                     , nameModule = "GHC.Base"
+                     , nameName = "id"
+                     , nameUnique = Exported
+                     }
+              else Name
+                     { namePackage = package
+                     , nameModule = module'
+                     , nameName = name'
+                     , nameUnique =
+                         if Var.isExportedId thing
+                           then Exported
+                           else Unexported
+                                  (fromIntegral
+                                     (Unique.getKey (Unique.getUnique name)))
+                     })
   where
     package =
       FastString.fs_bs
@@ -116,6 +133,16 @@ renameId m thing =
         m
         (Name.nameOccName n)
         (Name.nameSrcSpan n)
+
+--------------------------------------------------------------------------------
+-- Predicates
+
+-- | Is this a newtype constructor?
+isNewtypeConstructor :: Id.Id -> Bool
+isNewtypeConstructor i =
+  case Id.isDataConId_maybe i of
+    Nothing -> False
+    Just dc -> TyCon.isNewTyCon (DataCon.dataConTyCon dc)
 
 --------------------------------------------------------------------------------
 -- Orphans: Easily removable if these instances are ever provided
