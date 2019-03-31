@@ -33,13 +33,13 @@ import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
 import           Data.Binary (encode, decode)
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
-import           Data.Maybe
 import qualified Data.Set as Set
-import           Data.Typeable
 import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
@@ -77,15 +77,15 @@ compileModuleGraph = do
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   fp <- liftIO (getEnv "PRANA_INDEX")
   index <- liftIO (readIndex fp)
-  (index', errors) <-
-    (evalStateT
+  ((_bindings, errors), index') <-
+    (runStateT
        (runWriterT
           (do let sccs = Digraph.flattenSCCs mgraph
                   total = length sccs
               mapM_ (compileToPrana total) (zip [1 :: Int ..] sccs)))
        index)
   case errors of
-    [] -> liftIO (L.writeFile fp (encode index'))
+    [] -> liftIO (L.writeFile fp (encode (index' :: Index)))
     _ -> showErrors errors
 
 -- | Compile the module to a prana file and update the index.
@@ -146,7 +146,10 @@ compileModSummary modSum = do
       case runReaderT
              (runConvert (traverse fromGenStgTopBinding bindings))
              scope of
-        Failure errs -> pure (Left (stg_binds, ConvertErrors errs))
+        Failure errs -> do showErrors [(this_mod, (stg_binds, ConvertErrors errs))]
+                           liftIO (print index)
+                           error "Quitting early."
+                           pure (Left (stg_binds, ConvertErrors errs))
         Success globals -> pure (Right globals)
 
 -- | Perform core to STG transformation.
@@ -190,7 +193,7 @@ readIndex :: FilePath -> IO Index
 readIndex fp = do
   exists <- doesFileExist fp
   if exists
-    then fmap decode (L.readFile fp)
+    then fmap (decode . L.fromStrict) (S.readFile fp)
     else pure
            Index
              { indexGlobals = mempty
