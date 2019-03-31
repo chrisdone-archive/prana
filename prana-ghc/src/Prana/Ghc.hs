@@ -99,7 +99,8 @@ compileModuleGraph = do
                    liftIO
                      (putStrLn
                         ("[" <> show i <> " of " <> show total <> "] Converting " <> modName))
-                   let scope = Scope {scopeIndex = index, scopeModule = module'}
+                   index' <- lift get
+                   let scope = Scope {scopeIndex = index', scopeModule = module'}
                    case result of
                      Left e -> pure (Left e)
                      Right bindings ->
