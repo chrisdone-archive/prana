@@ -11,6 +11,7 @@
 module Prana.Rename
   ( renameTopBinding
   , renameId
+  , displayName
   , Name(..)
   , Unique(..)
   , RenameFailure(..)
@@ -22,11 +23,14 @@ import           Data.Bifunctor.TH
 import           Data.Binary
 import           Data.Bitraversable
 import           Data.ByteString (ByteString)
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Char8 as S8
 import           Data.Int
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
+import           Debug.Trace
 import qualified FastString
 import           GHC.Generics
 import qualified Id
@@ -37,6 +41,12 @@ import qualified StgSyn
 import qualified TyCon
 import qualified Unique
 import qualified Var
+
+displayName :: Name -> String
+displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)
+  where ext = case u of
+                Exported -> ""
+                Unexported i -> " (" <> S8.pack (show i) <> ")"
 
 -- | A syntactically globally unique name.
 data Name =
@@ -93,25 +103,33 @@ renameId :: Module.Module -> Var.Id -> Either RenameFailure Name
 renameId m thing =
   if Name.isInternalName name
     then Left (UnexpectedInternalName name)
-    else Right
-           (if isNewtypeConstructor thing
-              then Name
-                     { namePackage = "base"
-                     , nameModule = "GHC.Base"
-                     , nameName = "id"
-                     , nameUnique = Exported
-                     }
-              else Name
-                     { namePackage = package
-                     , nameModule = module'
-                     , nameName = name'
-                     , nameUnique =
-                         if Var.isExportedId thing
-                           then Exported
-                           else Unexported
-                                  (fromIntegral
-                                     (Unique.getKey (Unique.getUnique name)))
-                     })
+    else
+           (let x =
+                  Name
+                    { namePackage = package
+                    , nameModule = module'
+                    , nameName = name'
+                    , nameUnique =
+                        if Var.isExportedId thing
+                          then Exported
+                          else Unexported
+                                 (fromIntegral
+                                    (Unique.getKey (Unique.getUnique name)))
+                    }
+             in (if x==Name "base" "GHC.Exception" "errorCallWithCallStackException" Exported
+                    then id -- trace (displayName x ++ " is defined here!")
+                    else id) (if isNewtypeConstructor thing
+                                         then let y =
+                                                    Name
+                                                      { namePackage = "base"
+                                                      , nameModule = "GHC.Base"
+                                                      , nameName = "id"
+                                                      , nameUnique = Exported
+                                                      }
+                                               in -- trace
+                                                  --   ("Replacing " ++ displayName x ++ " with " ++ displayName y)
+                                                    (Right y)
+                                         else Right x))
   where
     package =
       FastString.fs_bs

@@ -30,6 +30,7 @@ import qualified DataCon
 import qualified Module
 import           Prana.Index
 import           Prana.Rename
+import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
 
@@ -60,12 +61,6 @@ instance Exception ConvertError where
       GlobalNameNotFound name -> "Global variable name not found: " <> displayName name
       ConNameNotFound name -> "Constructor name not found: " <> displayName name
       orelse -> show orelse
-
-displayName :: Name -> String
-displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)
-  where ext = case u of
-                Exported -> ""
-                Unexported i -> " (" <> S8.pack (show i) <> ")"
 
 instance Show ConvertError where
  show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"

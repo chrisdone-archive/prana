@@ -1,3 +1,5 @@
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -32,6 +34,7 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
+import           Data.Bifunctor
 import           Data.Binary (encode, decode)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
@@ -82,7 +85,33 @@ compileModuleGraph = do
        (runWriterT
           (do let sccs = Digraph.flattenSCCs mgraph
                   total = length sccs
-              mapM_ (compileToPrana total) (zip [1 :: Int ..] sccs)))
+              modules <-
+                mapM
+                  (\(i, modSummary) ->
+                     fmap
+                       (GHC.ms_mod modSummary, )
+                       (compileToPrana total i modSummary))
+                  (zip [1 :: Int ..] sccs)
+              mapM_
+                (\(i, (module', result)) -> do
+                   let modName =
+                         Outputable.showSDocUnsafe (Outputable.ppr module')
+                   liftIO
+                     (putStrLn
+                        ("[" <> show i <> " of " <> show total <> "] Converting " <> modName))
+                   let scope = Scope {scopeIndex = index, scopeModule = module'}
+                   case result of
+                     Left e -> pure (Left e)
+                     Right bindings ->
+                       case runReaderT
+                              (runConvert
+                                 (traverse fromGenStgTopBinding bindings))
+                              scope of
+                         Failure errs -> do
+                           showErrors [(module', ([], ConvertErrors errs))]
+                           pure (Left ([], ConvertErrors errs))
+                         Success globals -> pure (Right globals))
+                (zip [1 :: Int ..] modules)))
        index)
   case errors of
     [] -> liftIO (L.writeFile fp (encode (index' :: Index)))
@@ -91,19 +120,24 @@ compileModuleGraph = do
 -- | Compile the module to a prana file and update the index.
 compileToPrana ::
      Int
-  -> (Int, ModSummary)
-  -> WriterT [(GHC.Module, ([GHC.StgTopBinding],CompileError))] (StateT Index GHC.Ghc) ()
-compileToPrana total (i, modSummary) = do
+  -> Int
+  -> ModSummary
+  -> WriterT [(GHC.Module, ([GHC.StgTopBinding], CompileError))]
+             (StateT Index GHC.Ghc)
+             (Either ( [GHC.StgTopBinding]
+                     , CompileError)
+                    [GHC.GenStgTopBinding Name Name])
+compileToPrana total i modSummary = do
   let modName =
         Outputable.showSDocUnsafe (Outputable.ppr mn)
       mn = GHC.ms_mod modSummary
   liftIO
     (putStrLn
        ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName))
-  result <- lift (compileModSummary modSummary)
-  case result of
-    Left compileErrors -> tell [(mn, compileErrors)]
-    Right _bindings -> pure ()
+  lift (compileModSummary modSummary)
+  -- case result of
+  --   Left compileErrors -> tell [(mn, compileErrors)]
+  --   Right bindings -> pure bindings
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
@@ -113,7 +147,8 @@ compileToPrana total (i, modSummary) = do
 -- <https://mail.haskell.org/pipermail/ghc-devs/2019-February/017117.html>
 -- So it's really just guess-work here.
 compileModSummary ::
-     GHC.ModSummary -> StateT Index GHC.Ghc (Either ([GHC.StgTopBinding],CompileError) [GlobalBinding])
+     GHC.ModSummary
+  -> StateT Index GHC.Ghc (Either ([GHC.StgTopBinding], CompileError) [GHC.GenStgTopBinding Name Name])
 compileModSummary modSum = do
   pmod <- lift (GHC.parseModule modSum)
   tmod <- lift (GHC.typecheckModule pmod)
@@ -141,16 +176,19 @@ compileModSummary modSum = do
        traverse (validationNel . renameId module') (Set.toList tyCons) of
     Failure errors -> pure (Left (stg_binds, RenameErrors errors))
     Success (bindings, dataCons) -> do
-      index <- updateIndex bindings dataCons
-      let scope = Scope {scopeIndex = index, scopeModule = module'}
-      case runReaderT
-             (runConvert (traverse fromGenStgTopBinding bindings))
-             scope of
-        Failure errs -> do showErrors [(this_mod, (stg_binds, ConvertErrors errs))]
-                           liftIO (print index)
-                           error "Quitting early."
-                           pure (Left (stg_binds, ConvertErrors errs))
-        Success globals -> pure (Right globals)
+      void (updateIndex bindings dataCons)
+      {-when
+        False
+        (do let scope = Scope {scopeIndex = index, scopeModule = module'}
+            case runReaderT
+                   (runConvert (traverse fromGenStgTopBinding bindings))
+                   scope of
+              Failure errs -> do
+                showErrors [(this_mod, (stg_binds, ConvertErrors errs))]
+                error "Quitting early."
+                pure (Left (stg_binds, ConvertErrors errs))
+              Success globals -> pure (Right globals))-}
+      pure (Right bindings)
 
 -- | Perform core to STG transformation.
 myCoreToStg ::
