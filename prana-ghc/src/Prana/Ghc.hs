@@ -34,9 +34,7 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
-import           Data.Bifunctor
 import           Data.Binary (encode, decode)
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import           Data.List
@@ -53,7 +51,6 @@ import           Prana.Collect
 import           Prana.Index
 import           Prana.Reconstruct
 import           Prana.Rename
-import           Prana.Types
 import qualified SimplStg
 import qualified StgSyn as GHC
 import           System.Directory
@@ -80,7 +77,7 @@ compileModuleGraph = do
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   fp <- liftIO (getEnv "PRANA_INDEX")
   index <- liftIO (readIndex fp)
-  ((_bindings, errors), index') <-
+  ((listOfListOfbindings, errors), index') <-
     (runStateT
        (runWriterT
           (do let sccs = Digraph.flattenSCCs mgraph
@@ -92,15 +89,18 @@ compileModuleGraph = do
                        (GHC.ms_mod modSummary, )
                        (compileToPrana total i modSummary))
                   (zip [1 :: Int ..] sccs)
-              mapM_
+              mapM
                 (\(i, (module', result)) -> do
                    let modName =
                          Outputable.showSDocUnsafe (Outputable.ppr module')
                    liftIO
                      (putStrLn
-                        ("[" <> show i <> " of " <> show total <> "] Converting " <> modName))
+                        ("[" <> show i <> " of " <> show total <>
+                         "] Converting " <>
+                         modName))
                    index' <- lift get
-                   let scope = Scope {scopeIndex = index', scopeModule = module'}
+                   let scope =
+                         Scope {scopeIndex = index', scopeModule = module'}
                    case result of
                      Left e -> pure (Left e)
                      Right bindings ->
@@ -115,7 +115,11 @@ compileModuleGraph = do
                 (zip [1 :: Int ..] modules)))
        index)
   case errors of
-    [] -> liftIO (L.writeFile fp (encode (index' :: Index)))
+    [] -> do
+      liftIO (L.writeFile fp (encode (index' :: Index)))
+      let bindings = concatMap (either (const []) id) listOfListOfbindings
+      -- liftIO (putStrLn ("Bindings:\n" ++ (show bindings)))
+      pure ()
     _ -> showErrors errors
 
 -- | Compile the module to a prana file and update the index.
