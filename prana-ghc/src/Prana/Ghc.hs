@@ -45,8 +45,10 @@ import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
+import qualified FastString
 import qualified GHC
 import           HscTypes
+import qualified Module
 import qualified Outputable
 import           Prana.Collect
 import           Prana.Index
@@ -54,6 +56,7 @@ import           Prana.Reconstruct
 import           Prana.Rename
 import qualified SimplStg
 import qualified StgSyn as GHC
+import           System.Directory
 import           System.Directory
 import           System.Environment
 import           TidyPgm
@@ -66,11 +69,17 @@ data CompileError
 
 data Options =
   Options
-    { optionsIndexPath :: FilePath
+    { optionsDir :: FilePath
     }
 
 getOptions :: IO Options
-getOptions = Options <$> getEnv "PRANA_INDEX"
+getOptions = Options <$> getEnv "PRANA_DIR"
+
+optionsIndexPath :: Options -> FilePath
+optionsIndexPath options = optionsDir options <> "/index"
+
+optionsPackagesDir :: Options -> FilePath
+optionsPackagesDir options = optionsDir options <> "/packages/"
 
 -- | Read in arguments from PRANA_ARGS
 compileModuleGraphFromEnv :: GHC.Ghc ()
@@ -86,6 +95,7 @@ compileModuleGraphFromEnv = do
 -- 4) Write out the files.
 compileModuleGraph :: Options -> GHC.Ghc ()
 compileModuleGraph options = do
+  liftIO (createDirectoryIfMissing True (optionsPackagesDir options))
   dflags <- GHC.getSessionDynFlags
   GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
   mgraph <-
@@ -132,8 +142,14 @@ compileModuleGraph options = do
     [] -> do
       liftIO (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
       let bindings = concatMap (either (const []) id) listOfListOfbindings
-      -- liftIO (putStrLn ("Bindings:\n" ++ (show bindings)))
-      pure ()
+          fp = pkg ++ ".prana"
+          pkg =
+            FastString.unpackFS
+              (Module.installedUnitIdFS
+                 (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
+          path = optionsPackagesDir options ++ "/" ++ fp
+      liftIO (putStrLn ("Writing library " ++ pkg ++ " ..."))
+      liftIO (L.writeFile path (encode bindings))
     _ -> showErrors errors
 
 -- | Compile the module to a prana file and update the index.

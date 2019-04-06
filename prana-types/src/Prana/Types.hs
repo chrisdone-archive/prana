@@ -144,3 +144,23 @@ data PrimRep =
 data TyCon =
   TyCon
   deriving (Show, Eq, Generic)
+
+--------------------------------------------------------------------------------
+-- Binary instances
+
+instance Binary GlobalBinding
+instance Binary Rhs
+instance Binary UpdateFlag
+instance Binary Expr
+instance Binary Arg
+instance Binary SomeVarId
+instance Binary Type
+instance Binary Op
+instance Binary Alts
+instance Binary LocalBinding
+instance Binary Lit
+instance Binary WiredInVal
+instance Binary TyCon
+instance Binary DataAlt
+instance Binary PrimRep
+instance Binary LitAlt
