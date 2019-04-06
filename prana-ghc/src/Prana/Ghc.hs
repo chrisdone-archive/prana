@@ -21,7 +21,8 @@
 -- 3. RECONSTRUCT each module.
 
 module Prana.Ghc
-  ( compileModSummary
+  ( compileModuleGraphFromEnv
+  , compileModSummary
   , compileModuleGraph
   ) where
 
@@ -63,20 +64,33 @@ data CompileError
   | ConvertErrors (NonEmpty ConvertError)
   deriving (Show)
 
+data Options =
+  Options
+    { optionsIndexPath :: FilePath
+    }
+
+getOptions :: IO Options
+getOptions = Options <$> getEnv "PRANA_INDEX"
+
+-- | Read in arguments from PRANA_ARGS
+compileModuleGraphFromEnv :: GHC.Ghc ()
+compileModuleGraphFromEnv = do
+  options <- liftIO getOptions
+  compileModuleGraph options
+
 -- | Compile all modules in the graph.
 --
 -- 1) Load up the names index.
 -- 2) Compile each module in the graph.
 -- 3) Write back out the names index.
 -- 4) Write out the files.
-compileModuleGraph :: GHC.Ghc ()
-compileModuleGraph = do
+compileModuleGraph :: Options -> GHC.Ghc ()
+compileModuleGraph options = do
   dflags <- GHC.getSessionDynFlags
   GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
-  fp <- liftIO (getEnv "PRANA_INDEX")
-  index <- liftIO (readIndex fp)
+  index <- liftIO (readIndex (optionsIndexPath options))
   ((listOfListOfbindings, errors), index') <-
     (runStateT
        (runWriterT
@@ -116,7 +130,7 @@ compileModuleGraph = do
        index)
   case errors of
     [] -> do
-      liftIO (L.writeFile fp (encode (index' :: Index)))
+      liftIO (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
       let bindings = concatMap (either (const []) id) listOfListOfbindings
       -- liftIO (putStrLn ("Bindings:\n" ++ (show bindings)))
       pure ()

@@ -729,7 +729,7 @@ doMake srcs  = do
 
     when (failed ok_flag) (liftIO $ exitWith (ExitFailure 1))
     return ()
-    Prana.Ghc.compileModuleGraph
+    Prana.Ghc.compileModuleGraphFromEnv
 
 
 -- ---------------------------------------------------------------------------

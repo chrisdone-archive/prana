@@ -31,5 +31,5 @@ main =
            target <- GHC.guessTarget "Fib.hs" Nothing
            GHC.setTargets [target]
            _ <- GHC.load GHC.LoadAllTargets
-           compileModuleGraph
+           compileModuleGraphFromEnv
            liftIO (putStrLn "Good to go!")))
