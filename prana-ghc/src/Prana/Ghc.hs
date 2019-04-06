@@ -57,7 +57,6 @@ import           Prana.Rename
 import qualified SimplStg
 import qualified StgSyn as GHC
 import           System.Directory
-import           System.Directory
 import           System.Environment
 import           TidyPgm
 import qualified TyCon
@@ -67,13 +66,26 @@ data CompileError
   | ConvertErrors (NonEmpty ConvertError)
   deriving (Show)
 
+data Mode = DEV | INSTALL
+  deriving (Show, Enum, Bounded)
+
 data Options =
   Options
     { optionsDir :: FilePath
+    , optionsMode :: Mode
     }
 
 getOptions :: IO Options
-getOptions = Options <$> getEnv "PRANA_DIR"
+getOptions =
+  Options <$> getEnv "PRANA_DIR" <*>
+  (lookupEnv "PRANA_MODE" >>=
+   (\case
+      Just "DEV" -> pure DEV
+      Just "INSTALL" -> pure INSTALL
+      _ ->
+        error
+          ("Please specify a mode via PRANA_MODE: " ++
+           show [minBound .. maxBound :: Mode])))
 
 optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
@@ -140,7 +152,6 @@ compileModuleGraph options = do
        index)
   case errors of
     [] -> do
-      liftIO (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
       let bindings = concatMap (either (const []) id) listOfListOfbindings
           fp = pkg ++ ".prana"
           pkg =
@@ -148,8 +159,14 @@ compileModuleGraph options = do
               (Module.installedUnitIdFS
                  (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
           path = optionsPackagesDir options ++ "/" ++ fp
-      liftIO (putStrLn ("Writing library " ++ pkg ++ " ..."))
-      liftIO (L.writeFile path (encode bindings))
+      case optionsMode options of
+        INSTALL -> do
+          liftIO (putStrLn "Updating index ...")
+          liftIO
+            (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
+          liftIO (putStrLn ("Writing library " ++ pkg ++ " ..."))
+          liftIO (L.writeFile path (encode bindings))
+        DEV -> pure ()
     _ -> showErrors errors
 
 -- | Compile the module to a prana file and update the index.
