@@ -37,6 +37,7 @@ import qualified CoreToStg
 import qualified CostCentre
 import           Data.Binary (encode, decode)
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -130,10 +131,10 @@ compileModuleGraph options = do
                    let modName =
                          Outputable.showSDocUnsafe (Outputable.ppr module')
                    liftIO
-                     (putStrLn
-                        ("[" <> show i <> " of " <> show total <>
-                         "] Converting " <>
-                         modName))
+                     (S8.putStrLn
+                           (S8.pack ("[" <> show i <> " of " <> show total <>
+                                     "] Converting " <>
+                                     modName)))
                    index' <- lift get
                    let scope =
                          Scope {scopeIndex = index', scopeModule = module'}
@@ -161,10 +162,10 @@ compileModuleGraph options = do
           path = optionsPackagesDir options ++ "/" ++ fp
       case optionsMode options of
         INSTALL -> do
-          liftIO (putStrLn "Updating index ...")
+          liftIO (S8.putStrLn "Updating index ...")
           liftIO
             (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
-          liftIO (putStrLn ("Writing library " ++ pkg ++ " ..."))
+          liftIO (S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ...")))
           liftIO (L.writeFile path (encode bindings))
         DEV -> pure ()
     _ -> showErrors errors
@@ -184,8 +185,8 @@ compileToPrana total i modSummary = do
         Outputable.showSDocUnsafe (Outputable.ppr mn)
       mn = GHC.ms_mod modSummary
   liftIO
-    (putStrLn
-       ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName))
+    (S8.putStrLn
+          (S8.pack ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName)))
   lift (compileModSummary modSummary)
   -- case result of
   --   Left compileErrors -> tell [(mn, compileErrors)]
@@ -260,17 +261,17 @@ showErrors errors =
   liftIO
     (mapM_
        (\(modName, (bindings, compileErrors)) -> do
-          putStrLn
-            ("\nErrors in " ++
-             (Outputable.showSDocUnsafe (Outputable.ppr modName)) ++ ":")
+          S8.putStrLn
+               (S8.pack ("\nErrors in " ++
+                         (Outputable.showSDocUnsafe (Outputable.ppr modName)) ++ ":"))
           case compileErrors of
             ConvertErrors errs ->
               mapM_
-                (putStrLn . ("  " ++) . displayException)
+                (S8.putStrLn . S8.pack . ("  " ++) . displayException)
                 (nub (NE.toList errs))
             RenameErrors errs ->
               mapM_
-                (putStrLn . ("  " ++) . displayException)
+                (S8.putStrLn . S8.pack . ("  " ++) . displayException)
                 (nub (NE.toList errs))
           when
             False
