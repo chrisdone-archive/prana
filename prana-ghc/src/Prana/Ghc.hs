@@ -254,17 +254,6 @@ compileModSummary modSum = do
     Failure errors -> pure (Left (stg_binds, RenameErrors errors))
     Success (bindings, dataCons) -> do
       void (updateIndex bindings dataCons)
-      {-when
-        False
-        (do let scope = Scope {scopeIndex = index, scopeModule = module'}
-            case runReaderT
-                   (runConvert (traverse fromGenStgTopBinding bindings))
-                   scope of
-              Failure errs -> do
-                showErrors [(this_mod, (stg_binds, ConvertErrors errs))]
-                error "Quitting early."
-                pure (Left (stg_binds, ConvertErrors errs))
-              Success globals -> pure (Right globals))-}
       pure (Right bindings)
 
 -- | Perform core to STG transformation.
