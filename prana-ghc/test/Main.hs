@@ -8,16 +8,10 @@
 module Main where
 
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.State
-import           Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 import qualified DynFlags
 import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
-import           Prana.Index
-import           Prana.Rename
-import           Prana.Types
 
 main :: IO ()
 main =
