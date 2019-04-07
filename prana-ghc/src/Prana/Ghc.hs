@@ -98,7 +98,7 @@ optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
 
 optionsIndexTmpPath :: Options -> FilePath
-optionsIndexTmpPath options = optionsDir options <> "/index.tmp"
+optionsIndexTmpPath options = optionsIndexTmpPath options <> ".tmp"
 
 optionsPackagesDir :: Options -> FilePath
 optionsPackagesDir options = optionsDir options <> "/packages/"
