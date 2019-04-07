@@ -25,5 +25,8 @@ main =
            target <- GHC.guessTarget "Fib.hs" Nothing
            GHC.setTargets [target]
            _ <- GHC.load GHC.LoadAllTargets
-           compileModuleGraphFromEnv
-           liftIO (putStrLn "Good to go!")))
+           options <- liftIO getOptions
+           result <- compileModuleGraph options
+           case result of
+             Right (index, bindings) -> liftIO (putStrLn "Good to go!")
+             Left err -> showErrors err))

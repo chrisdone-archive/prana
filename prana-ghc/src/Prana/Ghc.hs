@@ -24,6 +24,8 @@ module Prana.Ghc
   ( compileModuleGraphFromEnv
   , compileModSummary
   , compileModuleGraph
+  , getOptions
+  , showErrors
   ) where
 
 import           Control.Exception
@@ -39,9 +41,12 @@ import           Data.Binary (encode, decode, Binary)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
+import           Data.Either
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
@@ -111,7 +116,7 @@ optionsPackagesDir options = optionsDir options <> "/packages/"
 compileModuleGraphFromEnv :: GHC.Ghc ()
 compileModuleGraphFromEnv = do
   options <- liftIO getOptions
-  compileModuleGraph options
+  void (compileModuleGraph options)
 
 --------------------------------------------------------------------------------
 -- General entry point
@@ -122,7 +127,9 @@ compileModuleGraphFromEnv = do
 -- 2) Compile each module in the graph.
 -- 3) Write back out the names index.
 -- 4) Write out the files.
-compileModuleGraph :: Options -> GHC.Ghc ()
+compileModuleGraph ::
+     Options
+  -> GHC.Ghc (Either (Map Module.Module CompileError) (Index, [GlobalBinding]))
 compileModuleGraph options = do
   liftIO (createDirectoryIfMissing True (optionsPackagesDir options))
   dflags <- GHC.getSessionDynFlags
@@ -132,25 +139,26 @@ compileModuleGraph options = do
   index <- liftIO (readIndex (optionsIndexPath options))
   ((listOfListOfbindings, errors), index') <-
     (runStateT (runWriterT (buildGraph mgraph)) index)
-  case errors of
-    [] ->
+  if M.null errors
+    then do
+      let allBindings = concat (rights listOfListOfbindings)
       case optionsMode options of
-        INSTALL -> installPackage options index' listOfListOfbindings
+        INSTALL -> installPackage options index' allBindings
         DEV -> pure ()
-    _ -> showErrors errors
+      pure (Right (index, allBindings))
+    else pure (Left errors)
 
 -- | Install package by updating the index and writing the library
 -- to a file in the packages dir.
 installPackage ::
-     (GHC.GhcMonad m, Binary binding, Foldable t)
+     (GHC.GhcMonad m, Binary binding)
   => Options
   -> Index
-  -> t (Either errs [binding])
+  -> [binding]
   -> m ()
-installPackage options index' listOfListOfbindings = do
+installPackage options index' bindings = do
   dflags <- GHC.getSessionDynFlags
-  let bindings = concatMap (either (const []) id) listOfListOfbindings
-      fp = pkg ++ ".prana"
+  let fp = pkg ++ ".prana"
       pkg =
         FastString.unpackFS
           (Module.installedUnitIdFS
@@ -169,10 +177,9 @@ installPackage options index' listOfListOfbindings = do
 -- | Build the graph, writing errors, if any, and returning either error or success.
 buildGraph ::
      [Digraph.SCC ModSummary]
-  -> WriterT [(Module.Module, ([GHC.StgTopBinding], CompileError))]
+  -> WriterT (Map Module.Module CompileError)
              (StateT Index GHC.Ghc)
-             [Either ( [GHC.StgTopBinding]
-                     , CompileError) [GlobalBinding]]
+             [Either CompileError [GlobalBinding]]
 buildGraph mgraph = do
   let sccs = Digraph.flattenSCCs mgraph
       total = length sccs
@@ -198,8 +205,8 @@ buildGraph mgraph = do
                   (runConvert (traverse fromGenStgTopBinding bindings))
                   scope of
              Failure errs -> do
-               showErrors [(module', ([], ConvertErrors errs))]
-               pure (Left ([], ConvertErrors errs))
+               showErrors (M.singleton module' (ConvertErrors errs))
+               pure (Left (ConvertErrors errs))
              Success globals -> pure (Right globals))
     (zip [1 :: Int ..] modules)
 
@@ -208,10 +215,9 @@ compileToPrana ::
      Int
   -> Int
   -> ModSummary
-  -> WriterT [(GHC.Module, ([GHC.StgTopBinding], CompileError))]
+  -> WriterT (Map GHC.Module CompileError)
              (StateT Index GHC.Ghc)
-             (Either ( [GHC.StgTopBinding]
-                     , CompileError)
+             (Either CompileError
                     [GHC.GenStgTopBinding Name Name])
 compileToPrana total i modSummary = do
   let modName =
@@ -231,7 +237,7 @@ compileToPrana total i modSummary = do
 -- So it's really just guess-work here.
 compileModSummary ::
      GHC.ModSummary
-  -> StateT Index GHC.Ghc (Either ([GHC.StgTopBinding], CompileError) [GHC.GenStgTopBinding Name Name])
+  -> StateT Index GHC.Ghc (Either CompileError [GHC.GenStgTopBinding Name Name])
 compileModSummary modSum = do
   pmod <- lift (GHC.parseModule modSum)
   tmod <- lift (GHC.typecheckModule pmod)
@@ -257,7 +263,7 @@ compileModSummary modSum = do
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
   case (,) <$> traverse (renameTopBinding module') stg_binds <*>
        traverse (validationNel . renameId module') (Set.toList tyCons) of
-    Failure errors -> pure (Left (stg_binds, RenameErrors errors))
+    Failure errors -> pure (Left (RenameErrors errors))
     Success (bindings, dataCons) -> do
       void (updateIndex bindings dataCons)
       pure (Right bindings)
@@ -275,14 +281,15 @@ myCoreToStg dflags this_mod prepd_binds = do
 
 -- | Show errors.
 showErrors ::
-     (MonadIO m) => [(GHC.Module, ([GHC.StgTopBinding], CompileError))] -> m ()
+     (MonadIO m) => Map GHC.Module CompileError -> m ()
 showErrors errors =
   liftIO
     (mapM_
-       (\(modName, (bindings, compileErrors)) -> do
+       (\(modName, compileErrors) -> do
           S8.putStrLn
-               (S8.pack ("\nErrors in " ++
-                         (Outputable.showSDocUnsafe (Outputable.ppr modName)) ++ ":"))
+            (S8.pack
+               ("\nErrors in " ++
+                (Outputable.showSDocUnsafe (Outputable.ppr modName)) ++ ":"))
           case compileErrors of
             ConvertErrors errs ->
               mapM_
@@ -291,12 +298,8 @@ showErrors errors =
             RenameErrors errs ->
               mapM_
                 (S8.putStrLn . S8.pack . ("  " ++) . displayException)
-                (nub (NE.toList errs))
-          when
-            False
-            (do putStrLn ("Module STG is: ")
-                putStrLn (Outputable.showSDocUnsafe (Outputable.ppr bindings))))
-       errors)
+                (nub (NE.toList errs)))
+       (M.toList errors))
 
 -- | Read the name index.
 readIndex :: FilePath -> IO Index
