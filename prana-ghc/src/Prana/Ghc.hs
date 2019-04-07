@@ -97,6 +97,9 @@ getOptions =
 optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
 
+optionsIndexTmpPath :: Options -> FilePath
+optionsIndexTmpPath options = optionsDir options <> "/index.tmp"
+
 optionsPackagesDir :: Options -> FilePath
 optionsPackagesDir options = optionsDir options <> "/packages/"
 
@@ -144,9 +147,10 @@ compileModuleGraph options = do
                          Outputable.showSDocUnsafe (Outputable.ppr module')
                    liftIO
                      (S8.putStrLn
-                           (S8.pack ("[" <> show i <> " of " <> show total <>
-                                     "] Converting " <>
-                                     modName)))
+                        (S8.pack
+                           ("[" <> show i <> " of " <> show total <>
+                            "] Converting " <>
+                            modName)))
                    index' <- lift get
                    let scope =
                          Scope {scopeIndex = index', scopeModule = module'}
@@ -172,13 +176,21 @@ compileModuleGraph options = do
               (Module.installedUnitIdFS
                  (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
           path = optionsPackagesDir options ++ "/" ++ fp
+          pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
       case optionsMode options of
         INSTALL -> do
-          liftIO (S8.putStrLn "Updating index ...")
           liftIO
-            (L.writeFile (optionsIndexPath options) (encode (index' :: Index)))
-          liftIO (S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ...")))
-          liftIO (L.writeFile path (encode bindings))
+            (do S8.putStrLn "Updating index ..."
+                L.writeFile
+                  (optionsIndexTmpPath options)
+                  (encode (index' :: Index))
+                renameFile
+                  (optionsIndexTmpPath options)
+                  (optionsIndexPath options))
+          liftIO
+            (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
+                L.writeFile pathTmp (encode bindings)
+                renameFile pathTmp path)
         DEV -> pure ()
     _ -> showErrors errors
 
