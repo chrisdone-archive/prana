@@ -9,10 +9,13 @@
 module Main where
 
 import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Reader
+import qualified Data.ByteString.Builder as L
 import qualified DynFlags
 import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
+import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 
@@ -40,12 +43,22 @@ main =
                        , nameUnique = Exported
                        }
                liftIO
-                 (case lookupGlobalBindingRhs index bindings name of
+                 (case lookupGlobalBindingRhsByName index bindings name of
                     Just (RhsClosure freeVars updateFlag args@[] expr) -> do
-                      ghcPrim <- loadLibrary options "ghc-prim"
-                      integerGmp <- loadLibrary options "integer-gmp"
-                      base <- loadLibrary options "base"
-                      pure ()
+                      -- ghcPrim <- loadLibrary options "ghc-prim"
+                      -- integerGmp <- loadLibrary options "integer-gmp"
+                      -- base <- loadLibrary options "base"
+                      print expr
+                      print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
+                      {-interpret bindings expr-}
                     Just _ -> putStrLn "The expression should take no arguments."
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
+
+interpret :: Expr -> IO ()
+interpret = go
+  where go = \case
+                _ -> undefined
+
+displayExpr :: Expr -> Reader Index L.Builder
+displayExpr = undefined

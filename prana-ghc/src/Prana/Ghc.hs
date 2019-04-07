@@ -26,7 +26,8 @@ module Prana.Ghc
   , compileModuleGraph
   , getOptions
   , showErrors
-  , lookupGlobalBindingRhs
+  , lookupGlobalBindingRhsByName
+  , lookupGlobalBindingRhsById
   , loadLibrary
   ) where
 
@@ -43,7 +44,6 @@ import qualified CostCentre
 import           Data.Binary (encode, decode, Binary)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
-import qualified Data.ByteString.Lazy as L
 import           Data.Either
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -331,9 +331,18 @@ loadLibrary options name =
         let !bs = decode bytes
         pure bs)
 
-lookupGlobalBindingRhs :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
-lookupGlobalBindingRhs index bindings name = do
+lookupGlobalBindingRhsByName :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
+lookupGlobalBindingRhsByName index bindings name = do
   globalVarId <- M.lookup name (indexGlobals index)
+  listToMaybe
+    (mapMaybe
+       (\case
+          GlobalNonRec i rhs | i == globalVarId -> pure rhs
+          _ -> Nothing)
+       bindings)
+
+lookupGlobalBindingRhsById :: [GlobalBinding] -> GlobalVarId -> Maybe Rhs
+lookupGlobalBindingRhsById bindings globalVarId = do
   listToMaybe
     (mapMaybe
        (\case
