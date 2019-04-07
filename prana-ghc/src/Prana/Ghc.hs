@@ -26,6 +26,7 @@ module Prana.Ghc
   , compileModuleGraph
   , getOptions
   , showErrors
+  , lookupGlobalBindingRhs
   ) where
 
 import           Control.Exception
@@ -47,6 +48,7 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
@@ -136,16 +138,16 @@ compileModuleGraph options = do
   GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
-  index <- liftIO (readIndex (optionsIndexPath options))
+  index0 <- liftIO (readIndex (optionsIndexPath options))
   ((listOfListOfbindings, errors), index') <-
-    (runStateT (runWriterT (buildGraph mgraph)) index)
+    (runStateT (runWriterT (buildGraph mgraph)) index0)
   if M.null errors
     then do
       let allBindings = concat (rights listOfListOfbindings)
       case optionsMode options of
         INSTALL -> installPackage options index' allBindings
         DEV -> pure ()
-      pure (Right (index, allBindings))
+      pure (Right (index', allBindings))
     else pure (Left errors)
 
 -- | Install package by updating the index and writing the library
@@ -314,3 +316,16 @@ readIndex fp = do
              , indexLocals = mempty
              , indexDataCons = mempty
              }
+
+--------------------------------------------------------------------------------
+-- Index helpers
+
+lookupGlobalBindingRhs :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
+lookupGlobalBindingRhs index bindings name = do
+  globalVarId <- M.lookup name (indexGlobals index)
+  listToMaybe
+    (mapMaybe
+       (\case
+          GlobalNonRec i rhs | i == globalVarId -> pure rhs
+          _ -> Nothing)
+       bindings)

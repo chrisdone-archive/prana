@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
@@ -12,6 +13,7 @@ import qualified DynFlags
 import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
+import           Prana.Rename
 
 main :: IO ()
 main =
@@ -28,5 +30,16 @@ main =
            options <- liftIO getOptions
            result <- compileModuleGraph options
            case result of
-             Right (index, bindings) -> liftIO (putStrLn "Good to go!")
+             Right (index, bindings) -> do
+               let name =
+                     Name
+                       { namePackage = "main"
+                       , nameModule = "Fib"
+                       , nameName = "it"
+                       , nameUnique = Exported
+                       }
+               liftIO
+                 (case lookupGlobalBindingRhs index bindings name of
+                    Just {} -> putStrLn "Got RHS!"
+                    Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
