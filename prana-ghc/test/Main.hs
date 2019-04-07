@@ -14,6 +14,7 @@ import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
 import           Prana.Rename
+import           Prana.Types
 
 main :: IO ()
 main =
@@ -40,10 +41,11 @@ main =
                        }
                liftIO
                  (case lookupGlobalBindingRhs index bindings name of
-                    Just {} -> do
+                    Just (RhsClosure freeVars updateFlag args@[] expr) -> do
                       ghcPrim <- loadLibrary options "ghc-prim"
                       integerGmp <- loadLibrary options "integer-gmp"
                       base <- loadLibrary options "base"
                       pure ()
+                    Just _ -> putStrLn "The expression should take no arguments."
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
