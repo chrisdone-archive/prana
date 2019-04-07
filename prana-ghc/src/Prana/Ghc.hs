@@ -62,6 +62,9 @@ import           System.Environment
 import           TidyPgm
 import qualified TyCon
 
+--------------------------------------------------------------------------------
+-- Types
+
 data CompileError
   = RenameErrors (NonEmpty RenameFailure)
   | ConvertErrors (NonEmpty ConvertError)
@@ -75,6 +78,9 @@ data Options =
     { optionsDir :: FilePath
     , optionsMode :: Mode
     }
+
+--------------------------------------------------------------------------------
+-- Parse options for this compiler mod
 
 getOptions :: IO Options
 getOptions =
@@ -94,11 +100,17 @@ optionsIndexPath options = optionsDir options <> "/index"
 optionsPackagesDir :: Options -> FilePath
 optionsPackagesDir options = optionsDir options <> "/packages/"
 
+--------------------------------------------------------------------------------
+-- Entry point for modded GHC
+
 -- | Read in arguments from PRANA_ARGS
 compileModuleGraphFromEnv :: GHC.Ghc ()
 compileModuleGraphFromEnv = do
   options <- liftIO getOptions
   compileModuleGraph options
+
+--------------------------------------------------------------------------------
+-- General entry point
 
 -- | Compile all modules in the graph.
 --
