@@ -35,7 +35,7 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
-import           Data.Binary (encode, decode)
+import           Data.Binary (encode, decode, Binary)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
@@ -55,6 +55,7 @@ import           Prana.Collect
 import           Prana.Index
 import           Prana.Reconstruct
 import           Prana.Rename
+import           Prana.Types
 import qualified SimplStg
 import qualified StgSyn as GHC
 import           System.Directory
@@ -130,69 +131,77 @@ compileModuleGraph options = do
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   index <- liftIO (readIndex (optionsIndexPath options))
   ((listOfListOfbindings, errors), index') <-
-    (runStateT
-       (runWriterT
-          (do let sccs = Digraph.flattenSCCs mgraph
-                  total = length sccs
-              modules <-
-                mapM
-                  (\(i, modSummary) ->
-                     fmap
-                       (GHC.ms_mod modSummary, )
-                       (compileToPrana total i modSummary))
-                  (zip [1 :: Int ..] sccs)
-              mapM
-                (\(i, (module', result)) -> do
-                   let modName =
-                         Outputable.showSDocUnsafe (Outputable.ppr module')
-                   liftIO
-                     (S8.putStrLn
-                        (S8.pack
-                           ("[" <> show i <> " of " <> show total <>
-                            "] Converting " <>
-                            modName)))
-                   index' <- lift get
-                   let scope =
-                         Scope {scopeIndex = index', scopeModule = module'}
-                   case result of
-                     Left e -> pure (Left e)
-                     Right bindings ->
-                       case runReaderT
-                              (runConvert
-                                 (traverse fromGenStgTopBinding bindings))
-                              scope of
-                         Failure errs -> do
-                           showErrors [(module', ([], ConvertErrors errs))]
-                           pure (Left ([], ConvertErrors errs))
-                         Success globals -> pure (Right globals))
-                (zip [1 :: Int ..] modules)))
-       index)
+    (runStateT (runWriterT (buildGraph mgraph)) index)
   case errors of
-    [] -> do
-      let bindings = concatMap (either (const []) id) listOfListOfbindings
-          fp = pkg ++ ".prana"
-          pkg =
-            FastString.unpackFS
-              (Module.installedUnitIdFS
-                 (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
-          path = optionsPackagesDir options ++ "/" ++ fp
-          pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
+    [] ->
       case optionsMode options of
-        INSTALL -> do
-          liftIO
-            (do S8.putStrLn "Updating index ..."
-                L.writeFile
-                  (optionsIndexTmpPath options)
-                  (encode (index' :: Index))
-                renameFile
-                  (optionsIndexTmpPath options)
-                  (optionsIndexPath options))
-          liftIO
-            (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
-                L.writeFile pathTmp (encode bindings)
-                renameFile pathTmp path)
+        INSTALL -> installPackage options index' listOfListOfbindings
         DEV -> pure ()
     _ -> showErrors errors
+
+-- | Install package by updating the index and writing the library
+-- to a file in the packages dir.
+installPackage ::
+     (GHC.GhcMonad m, Binary binding, Foldable t)
+  => Options
+  -> Index
+  -> t (Either errs [binding])
+  -> m ()
+installPackage options index' listOfListOfbindings = do
+  dflags <- GHC.getSessionDynFlags
+  let bindings = concatMap (either (const []) id) listOfListOfbindings
+      fp = pkg ++ ".prana"
+      pkg =
+        FastString.unpackFS
+          (Module.installedUnitIdFS
+             (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
+      path = optionsPackagesDir options ++ "/" ++ fp
+      pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
+  liftIO
+    (do S8.putStrLn "Updating index ..."
+        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index))
+        renameFile (optionsIndexTmpPath options) (optionsIndexPath options))
+  liftIO
+    (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
+        L.writeFile pathTmp (encode bindings)
+        renameFile pathTmp path)
+
+-- | Build the graph, writing errors, if any, and returning either error or success.
+buildGraph ::
+     [Digraph.SCC ModSummary]
+  -> WriterT [(Module.Module, ([GHC.StgTopBinding], CompileError))]
+             (StateT Index GHC.Ghc)
+             [Either ( [GHC.StgTopBinding]
+                     , CompileError) [GlobalBinding]]
+buildGraph mgraph = do
+  let sccs = Digraph.flattenSCCs mgraph
+      total = length sccs
+  modules <-
+    mapM
+      (\(i, modSummary) ->
+         fmap (GHC.ms_mod modSummary, ) (compileToPrana total i modSummary))
+      (zip [1 :: Int ..] sccs)
+  mapM
+    (\(i, (module', result)) -> do
+       let modName = Outputable.showSDocUnsafe (Outputable.ppr module')
+       liftIO
+         (S8.putStrLn
+            (S8.pack
+               ("[" <> show i <> " of " <> show total <> "] Converting " <>
+                modName)))
+       index' <- lift get
+       let scope = Scope {scopeIndex = index', scopeModule = module'}
+       case result of
+         Left e -> pure (Left e)
+         Right bindings ->
+           case runReaderT
+                  (runConvert (traverse fromGenStgTopBinding bindings))
+                  scope of
+             Failure errs -> do
+               showErrors [(module', ([], ConvertErrors errs))]
+               pure (Left ([], ConvertErrors errs))
+             Success globals -> pure (Right globals))
+    (zip [1 :: Int ..] modules)
 
 -- | Compile the module to a prana file and update the index.
 compileToPrana ::
