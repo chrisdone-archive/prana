@@ -40,6 +40,10 @@ main =
                        }
                liftIO
                  (case lookupGlobalBindingRhs index bindings name of
-                    Just {} -> putStrLn "Got RHS!"
+                    Just {} -> do
+                      ghcPrim <- loadLibrary options "ghc-prim"
+                      integerGmp <- loadLibrary options "integer-gmp"
+                      base <- loadLibrary options "base"
+                      pure ()
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))

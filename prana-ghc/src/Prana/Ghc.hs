@@ -27,8 +27,10 @@ module Prana.Ghc
   , getOptions
   , showErrors
   , lookupGlobalBindingRhs
+  , loadLibrary
   ) where
 
+import qualified Data.ByteString.Lazy as L
 import           Control.Exception
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
@@ -319,6 +321,15 @@ readIndex fp = do
 
 --------------------------------------------------------------------------------
 -- Index helpers
+
+loadLibrary :: MonadIO m => Options -> String -> m [GlobalBinding]
+loadLibrary options name =
+  liftIO
+    (do S8.putStrLn (S8.pack ("Loading library " ++ name ++ " ..."))
+        bytes <-
+          L.readFile (optionsPackagesDir options ++ "/" ++ name ++ ".prana")
+        let !bs = decode bytes
+        pure bs)
 
 lookupGlobalBindingRhs :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
 lookupGlobalBindingRhs index bindings name = do
