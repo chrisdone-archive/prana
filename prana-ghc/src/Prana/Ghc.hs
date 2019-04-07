@@ -167,11 +167,12 @@ installPackage options index' bindings = do
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO
     (do S8.putStrLn "Updating index ..."
-        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index))
-        renameFile (optionsIndexTmpPath options) (optionsIndexPath options))
+        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
   liftIO
     (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
-        L.writeFile pathTmp (encode bindings)
+        L.writeFile pathTmp (encode bindings))
+  liftIO
+    (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
         renameFile pathTmp path)
 
 -- | Build the graph, writing errors, if any, and returning either error or success.
