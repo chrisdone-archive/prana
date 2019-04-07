@@ -212,9 +212,6 @@ compileToPrana total i modSummary = do
     (S8.putStrLn
           (S8.pack ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName)))
   lift (compileModSummary modSummary)
-  -- case result of
-  --   Left compileErrors -> tell [(mn, compileErrors)]
-  --   Right bindings -> pure bindings
 
 -- | Compile the module summary to a set of global bindings, updating
 -- the names index too.
