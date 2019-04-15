@@ -44,11 +44,11 @@ main =
                        }
                liftIO
                  (case lookupGlobalBindingRhsByName index bindings name of
-                    Just (RhsClosure freeVars updateFlag args@[] expr) -> do
+                    Just (RhsClosure closure@Closure{closureParams = []}) -> do
                       -- ghcPrim <- loadLibrary options "ghc-prim"
                       -- integerGmp <- loadLibrary options "integer-gmp"
                       -- base <- loadLibrary options "base"
-                      print expr
+                      print closure
                       print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
                       {-interpret bindings expr-}
                     Just _ -> putStrLn "The expression should take no arguments."

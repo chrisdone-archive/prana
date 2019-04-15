@@ -62,13 +62,24 @@ data LitAlt =
   deriving (Show, Eq, Generic)
 
 data Rhs
-  = RhsClosure
-      ![LocalVarId] -- Free variables.
-      !UpdateFlag
-      ![LocalVarId] -- Parameters.
-      !Expr
-  | RhsCon !DataConId ![Arg]
+  = RhsClosure !Closure
+  | RhsCon !Con
   deriving (Show, Eq, Generic)
+
+data Con =
+  Con
+    { conDataCon :: !DataConId
+    , conArg :: ![Arg]
+    }
+  deriving (Show, Eq, Generic)
+
+data Closure =
+  Closure
+    { closureFreeVars :: ![LocalVarId]
+    , closureUpdateFlag :: !UpdateFlag
+    , closureParams :: ![LocalVarId]
+    , closureExpr :: !Expr
+    } deriving (Show, Eq, Generic)
 
 newtype GlobalVarId = GlobalVarId Int64
   deriving (Show, Eq, Generic)
@@ -164,3 +175,5 @@ instance Binary TyCon
 instance Binary DataAlt
 instance Binary PrimRep
 instance Binary LitAlt
+instance Binary Closure
+instance Binary Con

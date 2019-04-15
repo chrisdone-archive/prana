@@ -30,7 +30,6 @@ import qualified DataCon
 import qualified Module
 import           Prana.Index
 import           Prana.Rename
-import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
 
@@ -115,16 +114,17 @@ fromGenStgRhs :: StgSyn.GenStgRhs Name Name -> Convert Rhs
 fromGenStgRhs =
   \case
     StgSyn.StgRhsClosure _costCentreStack _binderInfo freeVariables updateFlag parameters expr ->
-      RhsClosure <$> traverse lookupLocalVarId freeVariables <*>
-      pure
-        (case updateFlag of
-           StgSyn.ReEntrant -> ReEntrant
-           StgSyn.Updatable -> Updatable
-           StgSyn.SingleEntry -> SingleEntry) <*>
-      traverse lookupLocalVarId parameters <*>
-      fromStgGenExpr expr
+      RhsClosure <$>
+      (Closure <$> traverse lookupLocalVarId freeVariables <*>
+       pure
+         (case updateFlag of
+            StgSyn.ReEntrant -> ReEntrant
+            StgSyn.Updatable -> Updatable
+            StgSyn.SingleEntry -> SingleEntry) <*>
+       traverse lookupLocalVarId parameters <*>
+       fromStgGenExpr expr)
     StgSyn.StgRhsCon _costCentreStack dataCon arguments ->
-      RhsCon <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments
+      RhsCon <$> (Con <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments)
 
 fromStgGenArg :: StgSyn.GenStgArg Name -> Convert Arg
 fromStgGenArg =
