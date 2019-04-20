@@ -68,6 +68,8 @@ main =
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
 
+-- NEXT STEP: make a forcing printer to force all the Boxes.
+
 data Whnf
   = LitWhnf Lit
   | ConWhnf DataConId [Box]
