@@ -82,11 +82,11 @@ data Closure =
     } deriving (Show, Eq, Generic)
 
 newtype GlobalVarId = GlobalVarId Int64
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Ord)
 instance Binary GlobalVarId
 
 newtype LocalVarId = LocalVarId Int64
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Ord)
 instance Binary LocalVarId
 
 data SomeVarId
