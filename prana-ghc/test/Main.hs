@@ -54,7 +54,10 @@ main =
                       print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
-                      evalExpr globals mempty (closureExpr closure) >>= print
+
+                      whnf <- evalExpr globals mempty (closureExpr closure)
+                      printWhnf globals whnf
+                      putStrLn ""
                     Just (RhsCon con) -> do
                       -- ghcPrim <- loadLibrary options "ghc-prim"
                       -- integerGmp <- loadLibrary options "integer-gmp"
@@ -63,10 +66,30 @@ main =
                       print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
-                      evalCon mempty con >>= print
+                      whnf <- evalCon mempty con
+                      printWhnf globals whnf
+                      putStrLn ""
                     Just clj -> putStrLn ("The expression should take no arguments: " ++ show clj)
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
+
+printWhnf :: Map GlobalVarId Box -> Whnf -> IO ()
+printWhnf globals =
+  \case
+    LitWhnf lit -> putStr (show lit)
+    ConWhnf dataConId boxes -> do
+      putStr "("
+      putStr (show dataConId)
+      mapM_
+        (\(i, box) -> do
+           when (i/=length boxes) (putStr " ")
+           whnf <- evalBox globals box
+           printWhnf globals whnf)
+        (zip [0 ..] boxes)
+      putStr ")"
+    ClosureWhnf closure -> do
+      whnf <- evalExpr globals mempty (closureExpr closure)
+      printWhnf globals whnf
 
 -- NEXT STEP: make a forcing printer to force all the Boxes.
 
