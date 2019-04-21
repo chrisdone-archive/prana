@@ -139,7 +139,41 @@ evalExpr index globals locals0 = go locals0
                     (zip (closureParams closure) args)
                 go locals' (closureExpr closure)
             _ -> error ("Expected function, but got: " <> show whnf)
-        e@CaseExpr {} -> error ("TODO: implement case: " <> show e)
+        e@CaseExpr {} -> error ("TODO: implement case: " <> prettyExpr index e)
+
+-- WIP: a printer.
+prettyExpr :: ReverseIndex -> Expr -> String
+prettyExpr index =
+  \case
+    AppExpr someVarId args ->
+      node
+        (concat [["AppExpr", prettySomeVarId someVarId], map prettyArg args])
+    ConAppExpr dataConId args _ty ->
+      node (concat [[case M.lookup dataConId (reverseIndexDataCons index) of
+                       Nothing -> error "Couldn't find name! BUG!"
+                       Just name -> show (displayName name)]
+                   ,map prettyArg args])
+    OpAppExpr {} -> "OpAppExpr"
+    CaseExpr expr localVarId alts -> node ["CaseExpr", prettyExpr index expr]
+    LetExpr binding expr -> node ["LetExpr", prettyExpr index expr]
+    LitExpr lit -> show lit
+  where
+    prettySomeVarId =
+      \case
+        SomeLocalVarId localVarId ->
+          (case M.lookup localVarId (reverseIndexLocals index) of
+             Nothing -> error "Couldn't find name! BUG!"
+             Just name -> show (displayName name))
+        SomeGlobalVarId globalVarId ->
+          (case M.lookup globalVarId (reverseIndexGlobals index) of
+             Nothing -> error "Couldn't find name! BUG!"
+             Just name -> show (displayName name))
+        w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+    prettyArg =
+      \case
+        VarArg someVarId -> node ["VarArg", prettySomeVarId someVarId]
+        LitArg lit -> node ["LitArg", show lit]
+    node = ("("++) . (++")") . unwords
 
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do
