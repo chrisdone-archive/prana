@@ -139,7 +139,7 @@ evalExpr index globals locals0 = go locals0
                     (zip (closureParams closure) args)
                 go locals' (closureExpr closure)
             _ -> error ("Expected function, but got: " <> show whnf)
-        CaseExpr {} -> error "TODO: implement case"
+        e@CaseExpr {} -> error ("TODO: implement case: " <> show e)
 
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do
