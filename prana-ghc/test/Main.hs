@@ -18,6 +18,7 @@ import qualified DynFlags
 import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
+import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 
@@ -36,7 +37,7 @@ main =
            options <- liftIO getOptions
            result <- compileModuleGraph options
            case result of
-             Right (index, bindings) -> do
+             Right (index, bindings0) -> do
                let name =
                      Name
                        { namePackage = "main"
@@ -45,53 +46,54 @@ main =
                        , nameUnique = Exported
                        }
                liftIO
-                 (case lookupGlobalBindingRhsByName index bindings name of
+                 (case lookupGlobalBindingRhsByName index bindings0 name of
                     Just (RhsClosure closure@Closure{closureParams = []}) -> do
-                      -- ghcPrim <- loadLibrary options "ghc-prim"
-                      -- integerGmp <- loadLibrary options "integer-gmp"
-                      -- base <- loadLibrary options "base"
-                      print closure
+                      ghcPrim <- loadLibrary options "ghc-prim"
+                      integerGmp <- loadLibrary options "integer-gmp"
+                      base <- loadLibrary options "base"
+                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
 
-                      whnf <- evalExpr globals mempty (closureExpr closure)
-                      printWhnf globals whnf
+                      whnf <- evalExpr (reverseIndex index) globals mempty (closureExpr closure)
+                      printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
                     Just (RhsCon con) -> do
-                      -- ghcPrim <- loadLibrary options "ghc-prim"
-                      -- integerGmp <- loadLibrary options "integer-gmp"
-                      -- base <- loadLibrary options "base"
+                      ghcPrim <- loadLibrary options "ghc-prim"
+                      integerGmp <- loadLibrary options "integer-gmp"
+                      base <- loadLibrary options "base"
+                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       print con
                       print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
                       whnf <- evalCon mempty con
-                      printWhnf globals whnf
+                      printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
                     Just clj -> putStrLn ("The expression should take no arguments: " ++ show clj)
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
 
-printWhnf :: Map GlobalVarId Box -> Whnf -> IO ()
-printWhnf globals =
+printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
+printWhnf index globals =
   \case
     LitWhnf lit -> putStr (show lit)
     ConWhnf dataConId boxes -> do
       putStr "("
-      putStr (show dataConId)
+      putStr (case M.lookup dataConId (reverseIndexDataCons index) of
+                Nothing -> error "Couldn't find name! BUG!"
+                Just name -> displayName name)
       mapM_
         (\(i, box) -> do
            when (i/=length boxes) (putStr " ")
-           whnf <- evalBox globals box
-           printWhnf globals whnf)
+           whnf <- evalBox index globals box
+           printWhnf index globals whnf)
         (zip [0 ..] boxes)
       putStr ")"
     ClosureWhnf closure -> do
-      whnf <- evalExpr globals mempty (closureExpr closure)
-      printWhnf globals whnf
-
--- NEXT STEP: make a forcing printer to force all the Boxes.
+      whnf <- evalExpr index globals mempty (closureExpr closure)
+      printWhnf index globals whnf
 
 data Whnf
   = LitWhnf Lit
@@ -112,8 +114,8 @@ data Env =
     , envGlobals :: Map GlobalVarId Box
     }
 
-evalExpr :: Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO Whnf
-evalExpr globals locals0 = go locals0
+evalExpr :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO Whnf
+evalExpr index globals locals0 = go locals0
   where
     go locals =
       \case
@@ -124,7 +126,7 @@ evalExpr globals locals0 = go locals0
         LitExpr lit -> pure (LitWhnf lit)
         ConAppExpr dataConId args _types -> evalCon locals (Con dataConId args)
         AppExpr someVarId args -> do
-          whnf <- evalSomeVarId globals locals someVarId
+          whnf <- evalSomeVarId index globals locals someVarId
           case whnf of
             ClosureWhnf closure
               | not (null (closureParams closure)) -> do
@@ -137,27 +139,38 @@ evalExpr globals locals0 = go locals0
                     (zip (closureParams closure) args)
                 go locals' (closureExpr closure)
             _ -> error ("Expected function, but got: " <> show whnf)
+        CaseExpr {} -> error "TODO: implement case"
 
-evalBox :: Map GlobalVarId Box -> Box -> IO Whnf
-evalBox globals box = do
+evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
+evalBox index globals box = do
   thunk <- readIORef (boxIORef box)
   case thunk of
     WhnfThunk whnf -> pure whnf
-    UnevaluatedThunk locals someVarId -> evalSomeVarId globals locals someVarId
+    UnevaluatedThunk locals someVarId -> evalSomeVarId index globals locals someVarId
 
 evalSomeVarId ::
-     Map GlobalVarId Box -> Map LocalVarId Box -> SomeVarId -> IO Whnf
-evalSomeVarId globals locals someVarId =
+     ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> SomeVarId -> IO Whnf
+evalSomeVarId index globals locals someVarId =
   case someVarId of
     SomeLocalVarId localVarId ->
       case M.lookup localVarId locals of
-        Nothing -> error ("Couldn't find local " ++ show localVarId)
-        Just box -> evalBox globals box
+        Nothing ->
+          error
+            ("Couldn't find local " ++
+             case M.lookup localVarId (reverseIndexLocals index) of
+               Nothing -> error "Couldn't find name! BUG!"
+               Just name -> displayName name)
+        Just box -> evalBox index globals box
     SomeGlobalVarId globalVarId ->
       case M.lookup globalVarId globals of
-        Nothing -> error ("Couldn't find global " ++ show globalVarId)
-        Just box -> evalBox globals box
-    w@WiredInVal{} -> error ("TODO: Wired in: " ++ show w)
+        Nothing ->
+          error
+            ("Couldn't find global " ++
+             case M.lookup globalVarId (reverseIndexGlobals index) of
+               Nothing -> error "Couldn't find name! BUG!"
+               Just name -> displayName name)
+        Just box -> evalBox index globals box
+    w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
 evalCon locals (Con dataConId args) =

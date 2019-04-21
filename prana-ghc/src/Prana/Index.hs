@@ -1,7 +1,13 @@
 {-# LANGUAGE DeriveGeneric #-}
--- |
 
-module Prana.Index where
+-- | Name indexes.
+
+module Prana.Index
+  ( updateIndex
+  , Index(..)
+  , reverseIndex
+  , ReverseIndex(..)
+  ) where
 
 import           Control.Monad.State
 import           Data.Binary (Binary)
@@ -9,6 +15,7 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as Set
+import           Data.Tuple
 import           GHC.Generics
 import           Prana.Collect
 import           Prana.Rename
@@ -22,8 +29,14 @@ data Index =
     , indexDataCons :: Map Name DataConId
     }
   deriving (Generic, Show)
-
 instance Binary Index
+
+data ReverseIndex =
+  ReverseIndex
+    { reverseIndexDataCons :: Map DataConId Name
+    , reverseIndexGlobals :: Map GlobalVarId Name
+    , reverseIndexLocals :: Map LocalVarId Name
+    }
 
 updateIndex ::
      Monad m
@@ -54,3 +67,14 @@ updateIndex bindings tycons =
                       (zip tycons [start ..])
             })
      get
+
+reverseIndex :: Index -> ReverseIndex
+reverseIndex index =
+  ReverseIndex
+    { reverseIndexDataCons =
+        M.fromList (map swap (M.toList (indexDataCons index)))
+    , reverseIndexLocals =
+        M.fromList (map swap (M.toList (indexLocals index)))
+    , reverseIndexGlobals =
+        M.fromList (map swap (M.toList (indexGlobals index)))
+    }

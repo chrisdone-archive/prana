@@ -120,13 +120,13 @@ data Op =
 data DataConId
   = DataConId Int64
   | WiredInCon WiredInCon
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Ord)
 instance Binary DataConId
 
 data WiredInCon
   = WiredIn_Unit#
   | WiredIn_unboxed_tuple
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic, Ord)
 instance Binary WiredInCon
 
 data UpdateFlag

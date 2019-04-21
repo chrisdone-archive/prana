@@ -103,33 +103,26 @@ renameId :: Module.Module -> Var.Id -> Either RenameFailure Name
 renameId m thing =
   if Name.isInternalName name
     then Left (UnexpectedInternalName name)
-    else
-           (let x =
-                  Name
-                    { namePackage = package
-                    , nameModule = module'
-                    , nameName = name'
-                    , nameUnique =
-                        if Var.isExportedId thing
-                          then Exported
-                          else Unexported
-                                 (fromIntegral
-                                    (Unique.getKey (Unique.getUnique name)))
-                    }
-             in (if x==Name "base" "GHC.Exception" "errorCallWithCallStackException" Exported
-                    then id -- trace (displayName x ++ " is defined here!")
-                    else id) (if isNewtypeConstructor thing
-                                         then let y =
-                                                    Name
-                                                      { namePackage = "base"
-                                                      , nameModule = "GHC.Base"
-                                                      , nameName = "id"
-                                                      , nameUnique = Exported
-                                                      }
-                                               in -- trace
-                                                  --   ("Replacing " ++ displayName x ++ " with " ++ displayName y)
-                                                    (Right y)
-                                         else Right x))
+    else (if isNewtypeConstructor thing
+            then Right
+                   (Name
+                      { namePackage = "base"
+                      , nameModule = "GHC.Base"
+                      , nameName = "id"
+                      , nameUnique = Exported
+                      })
+            else Right
+                   (Name
+                      { namePackage = package
+                      , nameModule = module'
+                      , nameName = name'
+                      , nameUnique =
+                          if Var.isExportedId thing
+                            then Exported
+                            else Unexported
+                                   (fromIntegral
+                                      (Unique.getKey (Unique.getUnique name)))
+                      }))
   where
     package =
       FastString.fs_bs
