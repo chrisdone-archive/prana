@@ -57,7 +57,7 @@ main =
                       -- let bindings = bindings0
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
-                      putStr (displayName name ++ " = ")
+                      putStrLn (displayName name ++ " = ")
                       whnf <- evalExpr (reverseIndex index) globals mempty (closureExpr closure)
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
@@ -118,9 +118,13 @@ data Env =
     }
 
 evalExpr :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO Whnf
-evalExpr index globals locals0 = go locals0
+evalExpr index globals locals0 = do
+  go locals0
   where
-    go locals =
+    go locals expr = do
+      putStrLn (prettyExpr index expr)
+      go' locals expr
+    go' locals =
       \case
         e@(OpAppExpr {}) -> error ("TODO: " <> show e)
         LetExpr localBinding expr -> do
@@ -128,21 +132,60 @@ evalExpr index globals locals0 = go locals0
           go locals' expr
         LitExpr lit -> pure (LitWhnf lit)
         ConAppExpr dataConId args _types -> evalCon locals (Con dataConId args)
-        AppExpr someVarId args -> do
-          whnf <- evalSomeVarId index globals locals someVarId
-          case whnf of
-            ClosureWhnf closure
-              | not (null (closureParams closure)) -> do
-                locals' <-
-                  foldM
-                    (\locals' (param, arg) -> do
-                       box <- boxArg locals arg
-                       pure (M.insert param box locals'))
-                    locals
-                    (zip (closureParams closure) args)
-                go locals' (closureExpr closure)
-            _ -> error ("Expected function, but got: " <> show whnf)
-        e@CaseExpr {} -> error ("TODO: implement case:\n" <> prettyExpr index e)
+        AppExpr someVarId args ->
+          let loop [] whnf = pure whnf
+              loop args0 whnf = do
+                case whnf of
+                  ClosureWhnf closure -> do
+                      let (closureArgs, remainderArgs) = splitAt (length (closureParams closure)) args0
+                      locals' <-
+                        foldM
+                          (\locals' (param, arg) -> do
+                             box <- boxArg locals arg
+                             pure (M.insert param box locals'))
+                          locals
+                          (zip (closureParams closure) closureArgs)
+                      whnf' <- go locals' (closureExpr closure)
+                      loop remainderArgs whnf'
+                  ConWhnf {} ->
+                    if null args
+                      then pure whnf
+                      else error
+                             "Unexpected arguments for already-saturated data constructor."
+                  _ -> error ("Expected function, but got: " <> show whnf)
+           in do whnf <- evalSomeVarId index globals locals someVarId
+                 loop args whnf
+        CaseExpr expr caseExprVarId dataAlts ->
+          case dataAlts of
+            DataAlts _tyCon alts _ -> do
+              whnf <- go locals expr
+              caseExprBox <- boxWhnf locals whnf
+              case whnf of
+                ConWhnf dataConId boxes ->
+                  let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
+                        if dataConId == altDataConId
+                          then if length boxes == length localVarIds
+                                 then do
+                                   locals' <-
+                                     foldM
+                                       (\locals' (box, localVarId) -> do
+                                          pure (M.insert localVarId box locals'))
+                                       (M.insert
+                                          caseExprVarId
+                                          caseExprBox
+                                          locals)
+                                       (zip boxes localVarIds)
+                                   go locals' rhsExpr
+                                 else error
+                                        "Mismatch between number of slots in constructor and pattern."
+                          else loop rest
+                      loop [] = error "Inexhaustive pattern match!"
+                   in loop alts
+                _ ->
+                  error
+                    ("Expected constructor for case, but got: " ++ show whnf)
+            _ ->
+              error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
 
 
 prettyRhs :: ReverseIndex -> Rhs -> String
@@ -162,48 +205,53 @@ prettyExpr index =
     AppExpr someVarId args ->
       node
         "AppExpr"
-        (prettySomeVarId index someVarId : map (prettyArg index) args)
+        [ prettySomeVarId index someVarId
+        , prettyList (map (prettyArg index) args)
+        ]
     ConAppExpr dataConId args _ty ->
       node
         "ConAppExpr"
-        (prettyDataConId index dataConId : map (prettyArg index) args)
+        [ prettyDataConId index dataConId
+        , prettyList (map (prettyArg index) args)
+        ]
     OpAppExpr {} -> "OpAppExpr"
     CaseExpr expr localVarId alts ->
       node
         "CaseExpr"
         [ prettyExpr index expr
         , prettyLocalVar index localVarId
-        , prettyAlts alts
+        , prettyAlts index alts
         ]
     LetExpr binding expr -> node "LetExpr[TODO]" [prettyExpr index expr]
     LitExpr lit -> show lit
-  where
-    prettyAlts =
-      \case
-        PolymorphicAlt e -> node "PolymorphicAlt" [prettyExpr index e]
-        DataAlts tyCon dataAlts mexpr ->
-          node
-            "DataAlts"
-            [ prettyTyCon tyCon
-            , prettyList (map prettyDataAlt dataAlts)
-            , maybe "Nothing" (prettyExpr index) mexpr
-            ]
-        MultiValAlts int dataAlts mexpr ->
-          node
-            "MultiValAlts"
-            [ show int
-            , prettyList (map prettyDataAlt dataAlts)
-            , maybe "Nothing" (prettyExpr index) mexpr
-            ]
-        PrimAlts primRep litAlts mexpr -> node "PrimAlts[TODO]" []
-    prettyTyCon = show
-    prettyDataAlt dataAlt =
+
+prettyAlts :: ReverseIndex -> Alts -> [Char]
+prettyAlts index =
+  \case
+    PolymorphicAlt e -> node "PolymorphicAlt" [prettyExpr index e]
+    DataAlts tyCon dataAlts mexpr ->
       node
-        "DataAlt"
-        [ prettyDataConId index (dataAltCon dataAlt)
-        , prettyList (map (prettyLocalVar index) (dataAltBinders dataAlt))
-        , prettyExpr index (dataAltExpr dataAlt)
+        "DataAlts"
+        [ prettyTyCon tyCon
+        , prettyList (map prettyDataAlt dataAlts)
+        , maybe "Nothing" (prettyExpr index) mexpr
         ]
+    MultiValAlts int dataAlts mexpr ->
+      node
+        "MultiValAlts"
+        [ show int
+        , prettyList (map prettyDataAlt dataAlts)
+        , maybe "Nothing" (prettyExpr index) mexpr
+        ]
+    PrimAlts primRep litAlts mexpr -> node "PrimAlts[TODO]" []
+  where prettyTyCon = show
+        prettyDataAlt dataAlt =
+          node
+            "DataAlt"
+            [ prettyDataConId index (dataAltCon dataAlt)
+            , prettyList (map (prettyLocalVar index) (dataAltBinders dataAlt))
+            , prettyExpr index (dataAltExpr dataAlt)
+            ]
 
 prettyLocalVar :: ReverseIndex -> LocalVarId -> String
 prettyLocalVar index localVarId =
@@ -255,26 +303,29 @@ evalBox index globals box = do
 evalSomeVarId ::
      ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> SomeVarId -> IO Whnf
 evalSomeVarId index globals locals someVarId =
-  case someVarId of
-    SomeLocalVarId localVarId ->
-      case M.lookup localVarId locals of
-        Nothing ->
-          error
-            ("Couldn't find local " ++
-             case M.lookup localVarId (reverseIndexLocals index) of
-               Nothing -> error "Couldn't find name! BUG!"
-               Just name -> displayName name)
-        Just box -> evalBox index globals box
-    SomeGlobalVarId globalVarId ->
-      case M.lookup globalVarId globals of
-        Nothing ->
-          error
-            ("Couldn't find global " ++
-             case M.lookup globalVarId (reverseIndexGlobals index) of
-               Nothing -> error "Couldn't find name! BUG!"
-               Just name -> displayName name)
-        Just box -> evalBox index globals box
-    w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+  do whnf <- case someVarId of
+               SomeLocalVarId localVarId ->
+                 case M.lookup localVarId locals of
+                   Nothing ->
+                     error
+                       ("Couldn't find local " ++ show localVarId ++ ", " ++
+                        (case M.lookup localVarId (reverseIndexLocals index) of
+                           Nothing -> error "Couldn't find name! BUG!"
+                           Just name -> displayName name) ++
+                        "\nIn scope: " ++ show locals)
+                   Just box -> evalBox index globals box
+               SomeGlobalVarId globalVarId ->
+                 case M.lookup globalVarId globals of
+                   Nothing ->
+                     error
+                       ("Couldn't find global " ++
+                        case M.lookup globalVarId (reverseIndexGlobals index) of
+                          Nothing -> error "Couldn't find name! BUG!"
+                          Just name -> displayName name)
+                   Just box -> evalBox index globals box
+               w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+     putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+     pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
 evalCon locals (Con dataConId args) =
@@ -327,3 +378,7 @@ boxRhs locals =
       boxes <- traverse (boxArg locals) args
       fmap Box (newIORef (WhnfThunk (ConWhnf dataConId boxes)))
     RhsClosure closure -> fmap Box (newIORef (WhnfThunk (ClosureWhnf closure)))
+
+boxWhnf :: Map LocalVarId Box -> Whnf -> IO Box
+boxWhnf locals whnf =
+  fmap Box (newIORef (WhnfThunk whnf))
