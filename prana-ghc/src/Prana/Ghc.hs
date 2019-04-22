@@ -334,7 +334,8 @@ loadLibrary options name =
 lookupGlobalBindingRhsByName :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
 lookupGlobalBindingRhsByName index bindings name = do
   globalVarId <- M.lookup name (indexGlobals index)
-  listToMaybe
+
+  listToMaybe'
     (mapMaybe
        (\case
           GlobalNonRec i rhs | i == globalVarId -> pure rhs
@@ -343,9 +344,14 @@ lookupGlobalBindingRhsByName index bindings name = do
 
 lookupGlobalBindingRhsById :: [GlobalBinding] -> GlobalVarId -> Maybe Rhs
 lookupGlobalBindingRhsById bindings globalVarId = do
-  listToMaybe
+  listToMaybe'
     (mapMaybe
        (\case
           GlobalNonRec i rhs | i == globalVarId -> pure rhs
           _ -> Nothing)
        bindings)
+
+listToMaybe' :: Show a => [a] -> Maybe a
+listToMaybe' [a] = Just a
+listToMaybe' [] = Nothing
+listToMaybe' xs = error ("listToMaybe': invalid number of items (" ++ show (length xs) ++ "): " ++ take 512 (show xs))
