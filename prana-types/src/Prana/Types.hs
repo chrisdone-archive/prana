@@ -34,6 +34,7 @@ data Expr
   | LitExpr !Lit
   deriving (Show, Eq, Generic)
 
+-- The Maybe Expr is the DEFAULT case.
 data Alts
   = PolymorphicAlt !Expr
     -- ^ Polymorphic value, we force it.
@@ -148,9 +149,32 @@ data Lit =
   Lit
   deriving (Show, Eq, Generic)
 
-data PrimRep =
-  PrimRep
-  deriving (Show, Eq, Generic)
+data PrimRep
+  = VoidRep
+  | LiftedRep
+  | UnliftedRep -- ^ Unlifted pointer
+  | IntRep -- ^ Signed, word-sized value
+  | WordRep -- ^ Unsigned, word-sized value
+  | Int64Rep -- ^ Signed, 64 bit value (with 32-bit words only)
+  | Word64Rep -- ^ Unsigned, 64 bit value (with 32-bit words only)
+  | AddrRep -- ^ A pointer, but /not/ to a Haskell value (use '(Un)liftedRep')
+  | FloatRep
+  | DoubleRep
+  | VecRep Int PrimElemRep -- ^ A vector
+  deriving (Eq, Show, Generic)
+
+data PrimElemRep
+  = Int8ElemRep
+  | Int16ElemRep
+  | Int32ElemRep
+  | Int64ElemRep
+  | Word8ElemRep
+  | Word16ElemRep
+  | Word32ElemRep
+  | Word64ElemRep
+  | FloatElemRep
+  | DoubleElemRep
+   deriving( Eq, Show, Generic )
 
 data TyCon =
   TyCon
@@ -174,6 +198,7 @@ instance Binary WiredInVal
 instance Binary TyCon
 instance Binary DataAlt
 instance Binary PrimRep
+instance Binary PrimElemRep
 instance Binary LitAlt
 instance Binary Closure
 instance Binary Con

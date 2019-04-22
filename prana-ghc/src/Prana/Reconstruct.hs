@@ -32,6 +32,7 @@ import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
+import qualified TyCon
 
 -- | A conversion monad.
 newtype Convert a =
@@ -158,7 +159,7 @@ fromStgGenExpr =
           (\(mdef, dataAlts) -> DataAlts (const TyCon tyCon) dataAlts mdef) <$>
             fromAltTriples alts
         StgSyn.PrimAlt primRep -> do
-          (\(mdef, primAlts) -> PrimAlts (const PrimRep primRep) primAlts mdef) <$>
+          (\(mdef, primAlts) -> PrimAlts (fromPrimRep primRep) primAlts mdef) <$>
             fromPrimAltTriples alts
     StgSyn.StgLet binding expr ->
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
@@ -166,6 +167,35 @@ fromStgGenExpr =
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
     StgSyn.StgLam {} -> failure UnexpectedLambda
+
+fromPrimRep :: TyCon.PrimRep -> PrimRep
+fromPrimRep =
+  \case
+    TyCon.VoidRep -> VoidRep
+    TyCon.LiftedRep -> LiftedRep
+    TyCon.UnliftedRep -> UnliftedRep
+    TyCon.IntRep -> IntRep
+    TyCon.WordRep -> WordRep
+    TyCon.Int64Rep -> Int64Rep
+    TyCon.Word64Rep -> Word64Rep
+    TyCon.AddrRep -> AddrRep
+    TyCon.FloatRep -> FloatRep
+    TyCon.DoubleRep -> DoubleRep
+    TyCon.VecRep size primElemRep -> VecRep size (fromPrimElemRep primElemRep)
+
+fromPrimElemRep :: TyCon.PrimElemRep -> PrimElemRep
+fromPrimElemRep =
+  \case
+    TyCon.Int8ElemRep -> Int8ElemRep
+    TyCon.Int16ElemRep -> Int16ElemRep
+    TyCon.Int32ElemRep -> Int32ElemRep
+    TyCon.Int64ElemRep -> Int64ElemRep
+    TyCon.Word8ElemRep -> Word8ElemRep
+    TyCon.Word16ElemRep -> Word16ElemRep
+    TyCon.Word32ElemRep -> Word32ElemRep
+    TyCon.Word64ElemRep -> Word64ElemRep
+    TyCon.FloatElemRep -> FloatElemRep
+    TyCon.DoubleElemRep -> DoubleElemRep
 
 fromAltTriples :: [StgSyn.GenStgAlt Name Name] -> Convert (Maybe Expr, [DataAlt])
 fromAltTriples alts = do
