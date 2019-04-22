@@ -82,7 +82,7 @@ main =
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 printWhnf index globals =
   \case
-    LitWhnf lit -> putStr (show lit)
+    LitWhnf lit -> putStr ("(" ++ show lit ++ ")")
     ConWhnf dataConId boxes -> do
       putStr "("
       putStr (case M.lookup dataConId (reverseIndexDataCons index) of
@@ -123,7 +123,7 @@ evalExpr index globals locals0 = do
   go locals0
   where
     go locals expr = do
-      putStrLn (prettyExpr index expr)
+      -- putStrLn (prettyExpr index expr)
       go' locals expr
     go' locals =
       \case
@@ -360,7 +360,7 @@ evalSomeVarId index globals locals someVarId =
                           Just name -> displayName name)
                    Just box -> evalBox index globals box
                w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
-     putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+     -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
      pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
