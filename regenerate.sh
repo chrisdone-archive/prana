@@ -1,6 +1,8 @@
 set -e
 set -x
 
+stack build --test --no-run-tests
+
 rm -r ~/Work/chrisdone/prana/prana-dir/
 mkdir -p ~/Work/chrisdone/prana/prana-dir/packages/
 

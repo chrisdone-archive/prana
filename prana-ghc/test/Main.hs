@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -126,7 +127,21 @@ evalExpr index globals locals0 = do
       go' locals expr
     go' locals =
       \case
-        OpAppExpr op args _type -> error ("TODO: Op: " <> show op)
+        OpAppExpr op args _type ->
+          case op of
+            PrimOp primOp ->
+              case primOp of
+                UnknownPrimOp string ->
+                  error ("Unimplemented primop: " ++ string)
+                IntNegOp ->
+                  case args of
+                    [arg] -> do
+                      i <- evalIntArg index globals locals arg
+                      let i' = negate i
+                      pure (LitWhnf (IntLit i'))
+                    _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+            OtherOp ->
+              error "Unimplemented op type (either custom primop or FFI)."
         LetExpr localBinding expr -> do
           locals' <- bindLocal localBinding locals
           go locals' expr
@@ -188,16 +203,18 @@ evalExpr index globals locals0 = do
                     ("Expected constructor for case, but got: " ++ show whnf)
             PrimAlts primRep litAlts mdefaultExpr -> do
               whnf <- go locals expr
+              caseExprBox <- boxWhnf locals whnf
+              let locals1 = M.insert caseExprVarId caseExprBox locals
               case whnf of
                 LitWhnf lit ->
                   let loop [] =
                         case mdefaultExpr of
                           Nothing ->
                             error "Inexhaustive primitive pattern match..."
-                          Just defaultExpr -> go locals defaultExpr
+                          Just defaultExpr -> go locals1 defaultExpr
                       loop (litAlt:rest) =
                         if litAltLit litAlt == lit
-                          then go locals (litAltExpr litAlt)
+                          then go locals1 (litAltExpr litAlt)
                           else loop rest
                    in loop litAlts
                 _ ->
@@ -401,3 +418,18 @@ boxRhs locals =
 boxWhnf :: Map LocalVarId Box -> Whnf -> IO Box
 boxWhnf locals whnf =
   fmap Box (newIORef (WhnfThunk whnf))
+
+evalIntArg :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Arg -> IO Integer
+evalIntArg index globals locals =
+  \case
+    LitArg (IntLit !i) -> pure i
+    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId index globals locals someVarId
+      case whnf of
+        LitWhnf (IntLit !i) -> pure i
+        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
+        _ ->
+          error
+            ("Unexpected whnf for evalIntArg (I'm sure ClosureWhnf will come up here): " ++
+             show whnf)

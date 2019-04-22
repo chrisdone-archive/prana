@@ -195,7 +195,7 @@ fromPrimOp :: PrimOp.PrimOp -> PrimOp
 fromPrimOp =
   \case
     PrimOp.IntNegOp -> IntNegOp
-    op -> UnknownPrimOp (show op)
+    op -> UnknownPrimOp (show op ++ " aka " ++ Outputable.showSDocUnsafe (Outputable.ppr op))
 
 fromPrimRep :: TyCon.PrimRep -> PrimRep
 fromPrimRep =
