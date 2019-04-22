@@ -170,7 +170,7 @@ installPackage options index' bindings = do
       path = optionsPackagesDir options ++ "/" ++ fp
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO
-    (do putStrLn ("Updating index ... " ++ optionsIndexTmpPath options)
+    (do S8.putStrLn "Updating index ... "
         L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
   liftIO
     (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))

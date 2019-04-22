@@ -68,11 +68,11 @@ main =
                       -- base <- loadLibrary options "base"
                       -- let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       let bindings = bindings0
-                      print con
-                      print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
+                      putStrLn ("con = "++ show con)
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
                       whnf <- evalCon mempty con
+                      putStr (displayName name ++ " = ")
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
                     Just clj -> putStrLn ("The expression should take no arguments: " ++ show clj)
