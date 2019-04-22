@@ -137,16 +137,17 @@ evalExpr index globals locals0 = do
               loop args0 whnf = do
                 case whnf of
                   ClosureWhnf closure -> do
-                      let (closureArgs, remainderArgs) = splitAt (length (closureParams closure)) args0
-                      locals' <-
-                        foldM
-                          (\locals' (param, arg) -> do
-                             box <- boxArg locals arg
-                             pure (M.insert param box locals'))
-                          locals
-                          (zip (closureParams closure) closureArgs)
-                      whnf' <- go locals' (closureExpr closure)
-                      loop remainderArgs whnf'
+                    let (closureArgs, remainderArgs) =
+                          splitAt (length (closureParams closure)) args0
+                    locals' <-
+                      foldM
+                        (\locals' (param, arg) -> do
+                           box <- boxArg locals arg
+                           pure (M.insert param box locals'))
+                        locals
+                        (zip (closureParams closure) closureArgs)
+                    whnf' <- go locals' (closureExpr closure)
+                    loop remainderArgs whnf'
                   ConWhnf {} ->
                     if null args
                       then pure whnf
@@ -157,9 +158,10 @@ evalExpr index globals locals0 = do
                  loop args whnf
         CaseExpr expr caseExprVarId dataAlts ->
           case dataAlts of
-            DataAlts _tyCon alts _ -> do
+            DataAlts _tyCon alts mdefaultExpr -> do
               whnf <- go locals expr
               caseExprBox <- boxWhnf locals whnf
+              let locals1 = M.insert caseExprVarId caseExprBox locals
               case whnf of
                 ConWhnf dataConId boxes ->
                   let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
@@ -170,24 +172,39 @@ evalExpr index globals locals0 = do
                                      foldM
                                        (\locals' (box, localVarId) -> do
                                           pure (M.insert localVarId box locals'))
-                                       (M.insert
-                                          caseExprVarId
-                                          caseExprBox
-                                          locals)
+                                       locals1
                                        (zip boxes localVarIds)
                                    go locals' rhsExpr
                                  else error
                                         "Mismatch between number of slots in constructor and pattern."
                           else loop rest
-                      loop [] = error "Inexhaustive pattern match!"
+                      loop [] =
+                        case mdefaultExpr of
+                          Nothing -> error "Inexhaustive pattern match!"
+                          Just defaultExpr -> go locals1 defaultExpr
                    in loop alts
                 _ ->
                   error
                     ("Expected constructor for case, but got: " ++ show whnf)
-            PrimAlts primRep litAlts mdefaultExpr ->
-              error "TODO"
-            _ ->
-              error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
+            PrimAlts primRep litAlts mdefaultExpr -> do
+              whnf <- go locals expr
+              case whnf of
+                LitWhnf lit ->
+                  let loop [] =
+                        case mdefaultExpr of
+                          Nothing ->
+                            error "Inexhaustive primitive pattern match..."
+                          Just defaultExpr -> go locals defaultExpr
+                      loop (litAlt:rest) =
+                        if litAltLit litAlt == lit
+                          then go locals (litAltExpr litAlt)
+                          else loop rest
+                   in loop litAlts
+                _ ->
+                  error
+                    ("Unexpected whnf for PrimAlts (I'm sure ClosureWhnf will come up here): " ++
+                     show whnf)
+            _ -> error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
 
 
 prettyRhs :: ReverseIndex -> Rhs -> String
