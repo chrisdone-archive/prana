@@ -186,6 +186,7 @@ data Op
 data PrimOp
   = UnknownPrimOp String
   | IntNegOp
+  | IntEqOp
   deriving (Show, Eq, Generic)
 
 --------------------------------------------------------------------------------

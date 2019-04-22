@@ -123,21 +123,35 @@ evalExpr index globals locals0 = do
   go locals0
   where
     go locals expr = do
-      -- putStrLn (prettyExpr index expr)
       go' locals expr
     go' locals =
       \case
-        OpAppExpr op args _type ->
+        OpAppExpr op args typ ->
           case op of
             PrimOp primOp ->
               case primOp of
                 UnknownPrimOp string ->
-                  error ("Unimplemented primop: " ++ string)
+                  error
+                    ("Unimplemented primop: " ++
+                     string ++ " (type: " ++ show typ ++ ")")
+                IntEqOp ->
+                  case args of
+                    [arg1, arg2] -> do
+                      i <- evalIntArg index globals locals arg1
+                      i2 <- evalIntArg index globals locals arg2
+                      let !r = i == i2
+                      pure
+                        (LitWhnf
+                           (IntLit
+                              (if r
+                                 then 0
+                                 else 1)))
+                    _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
                 IntNegOp ->
                   case args of
                     [arg] -> do
                       i <- evalIntArg index globals locals arg
-                      let i' = negate i
+                      let !i' = negate i
                       pure (LitWhnf (IntLit i'))
                     _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
             OtherOp ->
