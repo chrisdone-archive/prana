@@ -114,9 +114,6 @@ data WiredInVal
     -- although I'm not exactly sure when.
   deriving (Show, Eq, Generic)
 
-data Op =
-  Op
-  deriving (Show, Eq, Generic)
 
 data DataConId
   = DataConId Int64
@@ -181,6 +178,16 @@ data TyCon =
   TyCon
   deriving (Show, Eq, Generic)
 
+data Op
+  = PrimOp PrimOp
+  | OtherOp
+  deriving (Show, Eq, Generic)
+
+data PrimOp
+  = UnknownPrimOp String
+  | IntNegOp
+  deriving (Show, Eq, Generic)
+
 --------------------------------------------------------------------------------
 -- Binary instances
 
@@ -192,6 +199,7 @@ instance Binary Arg
 instance Binary SomeVarId
 instance Binary Type
 instance Binary Op
+instance Binary PrimOp
 instance Binary Alts
 instance Binary LocalBinding
 instance Binary Lit

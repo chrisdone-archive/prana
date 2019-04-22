@@ -1,9 +1,11 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | Reconstruct the AST by taking the GHC STG AST and producing
 -- Prana's own ASt.
@@ -29,9 +31,11 @@ import           Data.Validation
 import qualified DataCon
 import qualified Literal
 import qualified Module
+import qualified Outputable
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
+import qualified PrimOp
 import qualified StgSyn
 import qualified TyCon
 
@@ -153,7 +157,7 @@ fromStgGenExpr =
       ConAppExpr <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
-      OpAppExpr <$> pure (const Op stgOp) <*> traverse fromStgGenArg arguments <*>
+      OpAppExpr <$> pure (fromStgOp stgOp) <*> traverse fromStgGenArg arguments <*>
       pure (const Type typ)
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
@@ -177,6 +181,21 @@ fromStgGenExpr =
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
     StgSyn.StgLam {} -> failure UnexpectedLambda
+
+fromStgOp :: StgSyn.StgOp -> Op
+fromStgOp =
+  \case
+     StgSyn.StgPrimOp op -> PrimOp (fromPrimOp op)
+     _ -> OtherOp
+
+deriving instance Show PrimOp.PrimOp
+deriving instance Show PrimOp.PrimOpVecCat
+
+fromPrimOp :: PrimOp.PrimOp -> PrimOp
+fromPrimOp =
+  \case
+    PrimOp.IntNegOp -> IntNegOp
+    op -> UnknownPrimOp (show op)
 
 fromPrimRep :: TyCon.PrimRep -> PrimRep
 fromPrimRep =

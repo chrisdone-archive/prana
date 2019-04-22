@@ -126,7 +126,7 @@ evalExpr index globals locals0 = do
       go' locals expr
     go' locals =
       \case
-        e@(OpAppExpr {}) -> error ("TODO: " <> show e)
+        OpAppExpr op args _type -> error ("TODO: Op: " <> show op)
         LetExpr localBinding expr -> do
           locals' <- bindLocal localBinding locals
           go locals' expr
