@@ -108,7 +108,7 @@ optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
 
 optionsIndexTmpPath :: Options -> FilePath
-optionsIndexTmpPath options = optionsIndexTmpPath options <> ".tmp"
+optionsIndexTmpPath options = optionsDir options <> ".tmp"
 
 optionsPackagesDir :: Options -> FilePath
 optionsPackagesDir options = optionsDir options <> "/packages/"
@@ -170,7 +170,7 @@ installPackage options index' bindings = do
       path = optionsPackagesDir options ++ "/" ++ fp
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO
-    (do S8.putStrLn "Updating index ..."
+    (do putStrLn ("Updating index ... " ++ optionsIndexTmpPath options)
         L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
   liftIO
     (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
