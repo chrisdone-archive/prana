@@ -27,6 +27,7 @@ import           Data.Maybe
 import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
+import qualified Literal
 import qualified Module
 import           Prana.Index
 import           Prana.Rename
@@ -131,14 +132,23 @@ fromStgGenArg :: StgSyn.GenStgArg Name -> Convert Arg
 fromStgGenArg =
   \case
     StgSyn.StgVarArg occ -> VarArg <$> lookupSomeVarId occ
-    StgSyn.StgLitArg _literal -> pure (LitArg Lit)
+    StgSyn.StgLitArg literal ->
+      pure
+        (LitArg
+           (fromLiteral literal))
+
+fromLiteral :: Literal.Literal -> Lit
+fromLiteral =
+  \case
+    Literal.MachInt integer -> IntLit integer
+    _ -> UnknownLit
 
 fromStgGenExpr :: StgSyn.GenStgExpr Name Name -> Convert Expr
 fromStgGenExpr =
   \case
     StgSyn.StgApp occ arguments ->
       AppExpr <$> lookupSomeVarId occ <*> traverse fromStgGenArg arguments
-    StgSyn.StgLit literal -> LitExpr <$> pure (const Lit literal)
+    StgSyn.StgLit literal -> LitExpr <$> pure (fromLiteral literal)
     StgSyn.StgConApp dataCon arguments types ->
       ConAppExpr <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
@@ -237,7 +247,7 @@ fromPrimAltTriples alts = do
   (,) <$> maybe (pure Nothing) (fmap Just . fromStgGenExpr) mdef <*>
     traverse
       (\(dc, bs, e) ->
-         LitAlt <$> pure (const Lit dc) <*> traverse lookupLocalVarId bs <*>
+         LitAlt <$> pure (fromLiteral dc) <*> traverse lookupLocalVarId bs <*>
          fromStgGenExpr e)
       adtAlts
 

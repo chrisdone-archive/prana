@@ -145,8 +145,9 @@ data Arg
   | LitArg !Lit
   deriving (Show, Eq, Generic)
 
-data Lit =
-  Lit
+data Lit
+  = IntLit !Integer -- Machine int.
+  | UnknownLit
   deriving (Show, Eq, Generic)
 
 data PrimRep

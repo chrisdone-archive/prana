@@ -184,6 +184,8 @@ evalExpr index globals locals0 = do
                 _ ->
                   error
                     ("Expected constructor for case, but got: " ++ show whnf)
+            PrimAlts primRep litAlts mdefaultExpr ->
+              error "TODO"
             _ ->
               error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
 
