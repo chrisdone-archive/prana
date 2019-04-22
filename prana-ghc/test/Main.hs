@@ -50,29 +50,28 @@ main =
                liftIO
                  (case lookupGlobalBindingRhsByName index bindings0 name of
                     Just (RhsClosure closure@Closure{closureParams = []}) -> do
-                      -- ghcPrim <- loadLibrary options "ghc-prim"
-                      -- integerGmp <- loadLibrary options "integer-gmp"
-                      -- base <- loadLibrary options "base"
-                      -- let bindings = ghcPrim <> integerGmp <> base <> bindings0
-                      let bindings = bindings0
-                      print (lookupGlobalBindingRhsById bindings (GlobalVarId 56634))
+                      ghcPrim <- loadLibrary options "ghc-prim"
+                      integerGmp <- loadLibrary options "integer-gmp"
+                      base <- loadLibrary options "base"
+                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
+                      -- let bindings = bindings0
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
-
+                      putStr (displayName name ++ " = ")
                       whnf <- evalExpr (reverseIndex index) globals mempty (closureExpr closure)
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
                     Just (RhsCon con) -> do
-                      -- ghcPrim <- loadLibrary options "ghc-prim"
-                      -- integerGmp <- loadLibrary options "integer-gmp"
-                      -- base <- loadLibrary options "base"
-                      -- let bindings = ghcPrim <> integerGmp <> base <> bindings0
-                      let bindings = bindings0
-                      putStrLn ("con = "++ show con)
+                      ghcPrim <- loadLibrary options "ghc-prim"
+                      integerGmp <- loadLibrary options "integer-gmp"
+                      base <- loadLibrary options "base"
+                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
+                      -- let bindings = bindings0
                       globals <- foldM (\globals binding -> bindGlobal binding globals)
                                        mempty bindings
+                      putStrLn (displayName name ++ " = " ++ prettyRhs (reverseIndex index) (RhsCon con))
+                      putStrLn ("> " ++ displayName name)
                       whnf <- evalCon mempty con
-                      putStr (displayName name ++ " = ")
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
                     Just clj -> putStrLn ("The expression should take no arguments: " ++ show clj)
@@ -145,20 +144,38 @@ evalExpr index globals locals0 = go locals0
             _ -> error ("Expected function, but got: " <> show whnf)
         e@CaseExpr {} -> error ("TODO: implement case:\n" <> prettyExpr index e)
 
--- WIP: a printer.
+
+prettyRhs :: ReverseIndex -> Rhs -> String
+prettyRhs index =
+  \case
+    RhsCon con -> node "RhsCon" [prettyCon index con]
+
+prettyCon :: ReverseIndex -> Con -> [Char]
+prettyCon index (Con dataConId args) =
+  node
+    "Con"
+    [prettyDataConId index dataConId, prettyList (map (prettyArg index) args)]
+
 prettyExpr :: ReverseIndex -> Expr -> String
 prettyExpr index =
   \case
     AppExpr someVarId args ->
-      node "AppExpr" (prettySomeVarId someVarId : map prettyArg args)
+      node
+        "AppExpr"
+        (prettySomeVarId index someVarId : map (prettyArg index) args)
     ConAppExpr dataConId args _ty ->
-      node "ConAppExpr" (prettyDataConId dataConId : map prettyArg args)
+      node
+        "ConAppExpr"
+        (prettyDataConId index dataConId : map (prettyArg index) args)
     OpAppExpr {} -> "OpAppExpr"
     CaseExpr expr localVarId alts ->
       node
         "CaseExpr"
-        [prettyExpr index expr, prettyLocalVar localVarId, prettyAlts alts]
-    LetExpr binding expr -> node "LetExpr" [prettyExpr index expr]
+        [ prettyExpr index expr
+        , prettyLocalVar index localVarId
+        , prettyAlts alts
+        ]
+    LetExpr binding expr -> node "LetExpr[TODO]" [prettyExpr index expr]
     LitExpr lit -> show lit
   where
     prettyAlts =
@@ -178,38 +195,55 @@ prettyExpr index =
             , prettyList (map prettyDataAlt dataAlts)
             , maybe "Nothing" (prettyExpr index) mexpr
             ]
-        PrimAlts primRep litAlts mexpr -> node "PrimAlts" []
-    prettyList xs = "[" ++ intercalate "\n, " (map (' ' :) xs) ++ "]"
+        PrimAlts primRep litAlts mexpr -> node "PrimAlts[TODO]" []
     prettyTyCon = show
     prettyDataAlt dataAlt =
       node
         "DataAlt"
-        [ prettyDataConId (dataAltCon dataAlt)
-        , prettyList (map prettyLocalVar (dataAltBinders dataAlt))
+        [ prettyDataConId index (dataAltCon dataAlt)
+        , prettyList (map (prettyLocalVar index) (dataAltBinders dataAlt))
         , prettyExpr index (dataAltExpr dataAlt)
         ]
-    prettyDataConId dataConId =
-      (case M.lookup dataConId (reverseIndexDataCons index) of
+
+prettyLocalVar :: ReverseIndex -> LocalVarId -> String
+prettyLocalVar index localVarId =
+  case M.lookup localVarId (reverseIndexLocals index) of
+    Nothing -> error "Couldn't find name! BUG!"
+    Just name -> show (displayName name)
+
+prettySomeVarId :: ReverseIndex -> SomeVarId -> String
+prettySomeVarId index =
+  \case
+    SomeLocalVarId localVarId -> prettyLocalVar index localVarId
+    SomeGlobalVarId globalVarId ->
+      (case M.lookup globalVarId (reverseIndexGlobals index) of
          Nothing -> error "Couldn't find name! BUG!"
          Just name -> show (displayName name))
-    prettySomeVarId =
-      \case
-        SomeLocalVarId localVarId -> prettyLocalVar localVarId
-        SomeGlobalVarId globalVarId ->
-          (case M.lookup globalVarId (reverseIndexGlobals index) of
-             Nothing -> error "Couldn't find name! BUG!"
-             Just name -> show (displayName name))
-        w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
-    prettyLocalVar localVarId =
-      case M.lookup localVarId (reverseIndexLocals index) of
-        Nothing -> error "Couldn't find name! BUG!"
-        Just name -> show (displayName name)
-    prettyArg =
-      \case
-        VarArg someVarId -> node "VarArg" [prettySomeVarId someVarId]
-        LitArg lit -> node "LitArg" [show lit]
-    node a rest = "(" ++ intercalate "\n" (a : map indent rest) ++ ")"
-    indent = intercalate "\n" . map ("  " ++) . lines
+    w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+
+prettyList :: [[Char]] -> [Char]
+prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
+
+prettyDataConId :: ReverseIndex -> DataConId -> String
+prettyDataConId index dataConId =
+  (case M.lookup dataConId (reverseIndexDataCons index) of
+     Nothing -> error "Couldn't find name! BUG!"
+     Just name -> show (displayName name))
+
+prettyArg :: ReverseIndex -> Arg -> [Char]
+prettyArg index =
+  \case
+    VarArg someVarId -> node "VarArg" [prettySomeVarId index someVarId]
+    LitArg lit -> node "LitArg" [show lit]
+
+node :: [Char] -> [String] -> [Char]
+node a rest = "(" ++ intercalate "\n" (a : map indent rest) ++ ")"
+
+indent :: String -> [Char]
+indent = intercalate "\n" . map ("  " ++) . lines
+
+indent1 :: String -> [Char]
+indent1 = intercalate "\n" . map (" " ++) . lines
 
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do

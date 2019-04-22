@@ -10,4 +10,4 @@ fib n = go 0 1 0
       | otherwise = go acc1 (acc0 + acc1) (i + 1)
 
 it :: Int
-it = 5
+it = -5
