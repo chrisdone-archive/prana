@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 -- | Name indexes.
@@ -14,6 +15,7 @@ import           Data.Binary (Binary)
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import qualified Data.Set as Set
 import           Data.Tuple
 import           GHC.Generics
@@ -36,6 +38,9 @@ data ReverseIndex =
     { reverseIndexDataCons :: Map DataConId Name
     , reverseIndexGlobals :: Map GlobalVarId Name
     , reverseIndexLocals :: Map LocalVarId Name
+    , reverseIndexIndex :: Index
+    , reverseIndexTrue :: DataConId
+    , reverseIndexFalse :: DataConId
     }
 
 updateIndex ::
@@ -73,8 +78,28 @@ reverseIndex index =
   ReverseIndex
     { reverseIndexDataCons =
         M.fromList (map swap (M.toList (indexDataCons index)))
-    , reverseIndexLocals =
-        M.fromList (map swap (M.toList (indexLocals index)))
+    , reverseIndexLocals = M.fromList (map swap (M.toList (indexLocals index)))
     , reverseIndexGlobals =
         M.fromList (map swap (M.toList (indexGlobals index)))
+    , reverseIndexIndex = index
+    , reverseIndexTrue =
+        fromJust
+          (M.lookup
+             (Name
+                { namePackage = "ghc-prim"
+                , nameModule = "GHC.Types"
+                , nameName = "True"
+                , nameUnique = Exported
+                })
+             (indexDataCons index))
+    , reverseIndexFalse =
+        fromJust
+          (M.lookup
+             (Name
+                { namePackage = "ghc-prim"
+                , nameModule = "GHC.Types"
+                , nameName = "False"
+                , nameUnique = Exported
+                })
+             (indexDataCons index))
     }

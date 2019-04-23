@@ -17,12 +17,15 @@ import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import qualified DynFlags
+import           Formatting
+import           Formatting.Clock
 import qualified GHC
 import qualified GHC.Paths
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
+import           System.Clock
 
 main :: IO ()
 main =
@@ -56,20 +59,24 @@ main =
                       base <- loadLibrary options "base"
                       let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       -- let bindings = bindings0
-                      globals <- foldM (\globals binding -> bindGlobal binding globals)
-                                       mempty bindings
+                      !globals <- foldM (\globals binding -> bindGlobal binding globals)
+                                        mempty bindings
                       putStrLn (displayName name ++ " = ")
-                      whnf <- evalExpr (reverseIndex index) globals mempty (closureExpr closure)
+                      start <- getTime Monotonic
+                      let !rev = (reverseIndex index)
+                      whnf <- evalExpr rev globals mempty (closureExpr closure)
+                      end <- getTime Monotonic
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
+                      fprint (timeSpecs % "\n") start end
                     Just (RhsCon con) -> do
                       ghcPrim <- loadLibrary options "ghc-prim"
                       integerGmp <- loadLibrary options "integer-gmp"
                       base <- loadLibrary options "base"
                       let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       -- let bindings = bindings0
-                      globals <- foldM (\globals binding -> bindGlobal binding globals)
-                                       mempty bindings
+                      !globals <- foldM (\globals binding -> bindGlobal binding globals)
+                                        mempty bindings
                       putStrLn (displayName name ++ " = " ++ prettyRhs (reverseIndex index) (RhsCon con))
                       putStrLn ("> " ++ displayName name)
                       whnf <- evalCon mempty con
@@ -95,14 +102,14 @@ printWhnf index globals =
            printWhnf index globals whnf)
         (zip [0 ..] boxes)
       putStr ")"
-    ClosureWhnf closure -> do
-      whnf <- evalExpr index globals mempty (closureExpr closure)
+    ClosureWhnf locals closure -> do
+      whnf <- evalExpr index globals locals (closureExpr closure)
       printWhnf index globals whnf
 
 data Whnf
   = LitWhnf Lit
   | ConWhnf DataConId [Box]
-  | ClosureWhnf Closure
+  | ClosureWhnf (Map LocalVarId Box) Closure
   deriving (Show)
 
 newtype Box = Box { boxIORef :: IORef Thunk }
@@ -133,20 +140,34 @@ evalExpr index globals locals0 = do
                 UnknownPrimOp string ->
                   error
                     ("Unimplemented primop: " ++
-                     string ++ " (type: " ++ show typ ++ "), args were: " ++ show args)
+                     string ++
+                     " (type: " ++ show typ ++ "), args were: " ++ show args)
                 IntEqOp ->
                   case args of
                     [arg1, arg2] -> do
                       i <- evalIntArg index globals locals arg1
                       i2 <- evalIntArg index globals locals arg2
+                      -- print (show i ++ " ==# " ++ show i2)
                       let !r = i == i2
                       pure
                         (LitWhnf
                            (IntLit
                               (if r
-                                 then 0
-                                 else 1)))
+                                 then 1
+                                 else 0)))
                     _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+                IntAddOp ->
+                  case args of
+                    [arg1, arg2] -> do
+                      i <- evalIntArg index globals locals arg1
+                      i2 <- evalIntArg index globals locals arg2
+                      -- print (show i ++ " +# " ++ show i2)
+                      let !r = i + i2
+                      pure
+                        (LitWhnf
+                           (IntLit
+                              r))
+                    _ -> error ("Invalid arguments to IntAddOp: " ++ show args)
                 IntNegOp ->
                   case args of
                     [arg] -> do
@@ -154,6 +175,21 @@ evalExpr index globals locals0 = do
                       let !i' = negate i
                       pure (LitWhnf (IntLit i'))
                     _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+                TagToEnumOp ->
+                  case args of
+                    [arg] -> do
+                      i <- evalIntArg index globals locals arg
+                      case typ of
+                        BoolType ->
+                          pure
+                            (ConWhnf
+                               (case i of
+                                  0 -> reverseIndexFalse index
+                                  _ -> reverseIndexTrue index)
+                               [])
+                        _ -> error "Unknown type for tagToEnum."
+                    _ ->
+                      error ("Invalid arguments to TagToEnumOp: " ++ show args)
             OtherOp ->
               error "Unimplemented op type (either custom primop or FFI)."
         LetExpr localBinding expr -> do
@@ -165,7 +201,7 @@ evalExpr index globals locals0 = do
           let loop [] whnf = pure whnf
               loop args0 whnf = do
                 case whnf of
-                  ClosureWhnf closure -> do
+                  ClosureWhnf localsClosure closure -> do
                     let (closureArgs, remainderArgs) =
                           splitAt (length (closureParams closure)) args0
                     locals' <-
@@ -173,7 +209,7 @@ evalExpr index globals locals0 = do
                         (\locals' (param, arg) -> do
                            box <- boxArg locals arg
                            pure (M.insert param box locals'))
-                        locals
+                        (localsClosure <> locals)
                         (zip (closureParams closure) closureArgs)
                     whnf' <- go locals' (closureExpr closure)
                     loop remainderArgs whnf'
@@ -188,33 +224,28 @@ evalExpr index globals locals0 = do
         CaseExpr expr caseExprVarId dataAlts ->
           case dataAlts of
             DataAlts _tyCon alts mdefaultExpr -> do
-              whnf <- go locals expr
-              caseExprBox <- boxWhnf locals whnf
+              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              caseExprBox <- boxWhnf locals (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
-              case whnf of
-                ConWhnf dataConId boxes ->
-                  let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
-                        if dataConId == altDataConId
-                          then if length boxes == length localVarIds
-                                 then do
-                                   locals' <-
-                                     foldM
-                                       (\locals' (box, localVarId) -> do
-                                          pure (M.insert localVarId box locals'))
-                                       locals1
-                                       (zip boxes localVarIds)
-                                   go locals' rhsExpr
-                                 else error
-                                        "Mismatch between number of slots in constructor and pattern."
-                          else loop rest
-                      loop [] =
-                        case mdefaultExpr of
-                          Nothing -> error "Inexhaustive pattern match!"
-                          Just defaultExpr -> go locals1 defaultExpr
-                   in loop alts
-                _ ->
-                  error
-                    ("Expected constructor for case, but got: " ++ show whnf)
+              let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
+                    if dataConId == altDataConId
+                      then if length boxes == length localVarIds
+                             then do
+                               locals' <-
+                                 foldM
+                                   (\locals' (box, localVarId) -> do
+                                      pure (M.insert localVarId box locals'))
+                                   locals1
+                                   (zip boxes localVarIds)
+                               go locals' rhsExpr
+                             else error
+                                    "Mismatch between number of slots in constructor and pattern."
+                      else loop rest
+                  loop [] =
+                    case mdefaultExpr of
+                      Nothing -> error "Inexhaustive pattern match!"
+                      Just defaultExpr -> go locals1 defaultExpr
+               in loop alts
             PrimAlts primRep litAlts mdefaultExpr -> do
               whnf <- go locals expr
               caseExprBox <- boxWhnf locals whnf
@@ -237,6 +268,16 @@ evalExpr index globals locals0 = do
                      show whnf)
             _ -> error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
 
+evalExprToCon :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
+evalExprToCon index globals locals0 expr = do
+  whnf <- evalExpr index globals locals0 expr
+  case whnf of
+    ConWhnf dataConId boxes -> pure (dataConId, boxes)
+    ClosureWhnf locals closure ->
+      if null (closureParams closure)
+        then evalExprToCon index globals (locals <> locals0 ) (closureExpr closure)
+        else error "Too many arguments to closure in case scrutinee."
+    LitWhnf {} -> error "Unexpected literal for case scrutinee."
 
 prettyRhs :: ReverseIndex -> Rhs -> String
 prettyRhs index =
@@ -427,7 +468,7 @@ boxRhs locals =
     RhsCon (Con dataConId args) -> do
       boxes <- traverse (boxArg locals) args
       fmap Box (newIORef (WhnfThunk (ConWhnf dataConId boxes)))
-    RhsClosure closure -> fmap Box (newIORef (WhnfThunk (ClosureWhnf closure)))
+    RhsClosure closure -> fmap Box (newIORef (WhnfThunk (ClosureWhnf locals closure)))
 
 boxWhnf :: Map LocalVarId Box -> Whnf -> IO Box
 boxWhnf locals whnf =
