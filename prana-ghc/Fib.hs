@@ -27,8 +27,8 @@ xs !! n
 
 
 
--- it :: [Int]
--- it = taker 1 fibs
+it :: Int
+it = fibs Fib.!! 1
 
 
 {-
@@ -40,5 +40,5 @@ Reproducible test case!
 callBinaryFunc :: (t -> t1 -> t2) -> t2
 callBinaryFunc f = f undefined undefined
 
-it :: ()
-it = callBinaryFunc (\_ _ -> \_ -> ()) undefined
+-- it :: ()
+-- it = callBinaryFunc (\_ _ -> \_ -> ()) undefined
