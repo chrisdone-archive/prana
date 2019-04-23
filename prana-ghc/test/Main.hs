@@ -169,7 +169,10 @@ evalExpr index globals locals0 = do
   go locals0
   where
     go locals expr = do
-      go' locals expr
+      print expr
+      whnf <- go' locals expr
+      print ("=>", whnf)
+      pure whnf
     go' locals =
       \case
         OpAppExpr op args typ ->
@@ -253,7 +256,8 @@ evalExpr index globals locals0 = do
                     if null args
                       then pure whnf
                       else error
-                             "Unexpected arguments for already-saturated data constructor."
+                             ("Unexpected arguments for already-saturated data constructor: " ++
+                              show whnf ++ ", args were: " ++ show args)
                   _ -> error ("Expected function, but got: " <> show whnf)
            in do whnf <- evalSomeVarId index globals locals someVarId
                  loop args whnf
@@ -457,7 +461,7 @@ evalSomeVarId index globals locals someVarId = do
                  Just name -> displayName name)
           Just box -> evalBox index globals box
       w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
-  -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+  putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
   pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf

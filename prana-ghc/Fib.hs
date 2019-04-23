@@ -20,5 +20,13 @@ taker count xs = go 0 xs
         go !cur [] = []
         go !cur (x:xs) = x : go (cur+1) xs
 
-it :: [Int]
-it = taker 10 fibs
+xs !! n
+  | otherwise = foldr (\x r k -> case k of
+                                   0 -> x
+                                   _ -> r (k-1)) (error "too large") xs n
+
+it :: Int
+it = foldr (\acc r i -> r i) (const 0) [1::Int] (5 :: Int)
+
+
+     {-fibs Fib.!! 10-}
