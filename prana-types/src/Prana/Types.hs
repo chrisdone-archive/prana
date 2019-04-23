@@ -28,7 +28,7 @@ data LocalBinding
 data Expr
   = AppExpr !SomeVarId ![Arg]
   | ConAppExpr !DataConId ![Arg] ![Type]
-  | OpAppExpr !Op ![Arg] !Type
+  | OpAppExpr !Op ![Arg] !PrimOpType
   | CaseExpr !Expr !LocalVarId !Alts
   | LetExpr !LocalBinding !Expr
   | LitExpr !Lit
@@ -137,6 +137,11 @@ data Type =
   Type
   deriving (Show, Eq, Generic)
 
+data PrimOpType
+  = BoolType
+  | UnknownType
+  deriving (Show, Eq, Generic)
+
 data Arg
   = VarArg !SomeVarId
   | LitArg !Lit
@@ -196,6 +201,7 @@ instance Binary GlobalBinding
 instance Binary Rhs
 instance Binary UpdateFlag
 instance Binary Expr
+instance Binary PrimOpType
 instance Binary Arg
 instance Binary SomeVarId
 instance Binary Type

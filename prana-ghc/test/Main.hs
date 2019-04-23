@@ -133,7 +133,7 @@ evalExpr index globals locals0 = do
                 UnknownPrimOp string ->
                   error
                     ("Unimplemented primop: " ++
-                     string ++ " (type: " ++ show typ ++ ")")
+                     string ++ " (type: " ++ show typ ++ "), args were: " ++ show args)
                 IntEqOp ->
                   case args of
                     [arg1, arg2] -> do

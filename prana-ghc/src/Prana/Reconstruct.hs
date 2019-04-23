@@ -37,7 +37,9 @@ import           Prana.Rename
 import           Prana.Types
 import qualified PrimOp
 import qualified StgSyn
+import qualified TyCoRep
 import qualified TyCon
+import           TysWiredIn
 
 -- | A conversion monad.
 newtype Convert a =
@@ -158,7 +160,7 @@ fromStgGenExpr =
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
       OpAppExpr <$> pure (fromStgOp stgOp) <*> traverse fromStgGenArg arguments <*>
-      pure (const Type typ)
+      pure (opTypeFromType typ)
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
       case altType of
@@ -181,6 +183,13 @@ fromStgGenExpr =
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
     StgSyn.StgLam {} -> failure UnexpectedLambda
+
+opTypeFromType :: TyCoRep.Type -> PrimOpType
+opTypeFromType =
+  \case
+    TyCoRep.TyConApp tyCon []
+      | tyCon == TysWiredIn.boolTyCon -> BoolType
+    _ -> UnknownType
 
 fromStgOp :: StgSyn.StgOp -> Op
 fromStgOp =
