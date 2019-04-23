@@ -141,21 +141,21 @@ printWhnf index globals =
            printWhnf index globals whnf)
         (zip [0 ..] boxes)
       putStr ")"
-    ClosureWhnf locals closure -> do
-      whnf <- evalExpr index globals locals (closureExpr closure)
-      printWhnf index globals whnf
+    FunWhnf locals params expr -> do
+      putStr "<function>"
 
 data Whnf
   = LitWhnf Lit
   | ConWhnf DataConId [Box]
-  | ClosureWhnf (Map LocalVarId Box) Closure
+  | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
   deriving (Show)
 
 newtype Box = Box { boxIORef :: IORef Thunk }
 instance Show Box where show _ = "Box"
 
 data Thunk
-  = UnevaluatedThunk (Map LocalVarId Box) SomeVarId
+  = VariableThunk (Map LocalVarId Box) SomeVarId
+  | ExpressionThunk (Map LocalVarId Box) Expr
   | WhnfThunk Whnf
 
 data Env =
@@ -202,10 +202,7 @@ evalExpr index globals locals0 = do
                       i2 <- evalIntArg index globals locals arg2
                       -- print (show i ++ " +# " ++ show i2)
                       let !r = i + i2
-                      pure
-                        (LitWhnf
-                           (IntLit
-                              r))
+                      pure (LitWhnf (IntLit r))
                     _ -> error ("Invalid arguments to IntAddOp: " ++ show args)
                 IntNegOp ->
                   case args of
@@ -240,17 +237,17 @@ evalExpr index globals locals0 = do
           let loop [] whnf = pure whnf
               loop args0 whnf = do
                 case whnf of
-                  ClosureWhnf localsClosure closure -> do
+                  FunWhnf localsClosure funParams funBody -> do
                     let (closureArgs, remainderArgs) =
-                          splitAt (length (closureParams closure)) args0
+                          splitAt (length funParams) args0
                     locals' <-
                       foldM
                         (\locals' (param, arg) -> do
                            box <- boxArg locals arg
                            pure (M.insert param box locals'))
                         (localsClosure <> locals)
-                        (zip (closureParams closure) closureArgs)
-                    whnf' <- go locals' (closureExpr closure)
+                        (zip funParams closureArgs)
+                    whnf' <- go locals' funBody
                     loop remainderArgs whnf'
                   ConWhnf {} ->
                     if null args
@@ -312,11 +309,9 @@ evalExprToCon index globals locals0 expr = do
   whnf <- evalExpr index globals locals0 expr
   case whnf of
     ConWhnf dataConId boxes -> pure (dataConId, boxes)
-    ClosureWhnf locals closure ->
-      if null (closureParams closure)
-        then evalExprToCon index globals (locals <> locals0 ) (closureExpr closure)
-        else error "Too many arguments to closure in case scrutinee."
-    LitWhnf {} -> error "Unexpected literal for case scrutinee."
+    FunWhnf locals params expr ->
+      error "Unexpected function for data alt case scrutinee."
+    LitWhnf {} -> error "Unexpected literal for data alt case scrutinee."
 
 prettyRhs :: ReverseIndex -> Rhs -> String
 prettyRhs index =
@@ -426,36 +421,44 @@ indent1 = intercalate "\n" . map (" " ++) . lines
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do
   thunk <- readIORef (boxIORef box)
-  case thunk of
-    WhnfThunk whnf -> pure whnf
-    UnevaluatedThunk locals someVarId -> evalSomeVarId index globals locals someVarId
+  whnf <-
+    case thunk of
+      WhnfThunk whnf -> pure whnf
+      VariableThunk locals someVarId ->
+        evalSomeVarId index globals locals someVarId
+      ExpressionThunk locals expr -> evalExpr index globals locals expr
+  writeIORef (boxIORef box) (WhnfThunk whnf)
+  pure whnf
 
 evalSomeVarId ::
      ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> SomeVarId -> IO Whnf
-evalSomeVarId index globals locals someVarId =
-  do whnf <- case someVarId of
-               SomeLocalVarId localVarId ->
-                 case M.lookup localVarId locals of
-                   Nothing ->
-                     error
-                       ("Couldn't find local " ++ show localVarId ++ ", " ++
-                        (case M.lookup localVarId (reverseIndexLocals index) of
-                           Nothing -> error "Couldn't find name! BUG!"
-                           Just name -> displayName name) ++
-                        "\nIn scope: " ++ show locals)
-                   Just box -> evalBox index globals box
-               SomeGlobalVarId globalVarId ->
-                 case M.lookup globalVarId globals of
-                   Nothing ->
-                     error
-                       ("Couldn't find global " ++
-                        case M.lookup globalVarId (reverseIndexGlobals index) of
-                          Nothing -> error "Couldn't find name! BUG!"
-                          Just name -> displayName name)
-                   Just box -> evalBox index globals box
-               w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
-     -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
-     pure whnf
+evalSomeVarId index globals locals someVarId = do
+  whnf <-
+    case someVarId of
+      SomeLocalVarId localVarId ->
+        case M.lookup localVarId locals of
+          Nothing ->
+            error
+              ("Couldn't find local " ++
+               show localVarId ++
+               ", " ++
+               (case M.lookup localVarId (reverseIndexLocals index) of
+                  Nothing -> error "Couldn't find name! BUG!"
+                  Just name -> displayName name) ++
+               "\nIn scope: " ++ show locals)
+          Just box -> evalBox index globals box
+      SomeGlobalVarId globalVarId ->
+        case M.lookup globalVarId globals of
+          Nothing ->
+            error
+              ("Couldn't find global " ++
+               case M.lookup globalVarId (reverseIndexGlobals index) of
+                 Nothing -> error "Couldn't find name! BUG!"
+                 Just name -> displayName name)
+          Just box -> evalBox index globals box
+      w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+  -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+  pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
 evalCon locals (Con dataConId args) =
@@ -498,7 +501,7 @@ bindGlobal globalBinding globals =
 boxArg :: Map LocalVarId Box -> Arg -> IO Box
 boxArg locals =
   \case
-    VarArg someVarId -> fmap Box (newIORef (UnevaluatedThunk locals someVarId))
+    VarArg someVarId -> fmap Box (newIORef (VariableThunk locals someVarId))
     LitArg lit -> fmap Box (newIORef (WhnfThunk (LitWhnf lit)))
 
 boxRhs :: Map LocalVarId Box -> Rhs -> IO Box
@@ -507,7 +510,17 @@ boxRhs locals =
     RhsCon (Con dataConId args) -> do
       boxes <- traverse (boxArg locals) args
       fmap Box (newIORef (WhnfThunk (ConWhnf dataConId boxes)))
-    RhsClosure closure -> fmap Box (newIORef (WhnfThunk (ClosureWhnf locals closure)))
+    RhsClosure closure ->
+      if null (closureParams closure)
+        then fmap Box (newIORef (ExpressionThunk locals (closureExpr closure)))
+        else fmap
+               Box
+               (newIORef
+                  (WhnfThunk
+                     (FunWhnf
+                        locals
+                        (closureParams closure)
+                        (closureExpr closure))))
 
 boxWhnf :: Map LocalVarId Box -> Whnf -> IO Box
 boxWhnf locals whnf =
