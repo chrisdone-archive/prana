@@ -2,12 +2,12 @@
 
 module Fib (it) where
 
--- fib :: Int -> Int
--- fib n = go 0 1 0
---   where
---     go !acc0 !acc1 !i
---       | i == n = acc0
---       | otherwise = go acc1 (acc0 + acc1) (i + 1)
+fib :: Int -> Int
+fib n = go 0 1 0
+  where
+    go !acc0 !acc1 !i
+      | i == n = acc0
+      | otherwise = go acc1 (acc0 + acc1) (i + 1)
 
 -- it :: Int
 -- it = fib 50
@@ -25,8 +25,20 @@ xs !! n
                                    0 -> x
                                    _ -> r (k-1)) (error "too large") xs n
 
-it :: Int
-it = foldr (\acc r i -> r i) (const 0) [1::Int] (5 :: Int)
 
 
-     {-fibs Fib.!! 10-}
+-- it :: [Int]
+-- it = taker 1 fibs
+
+
+{-
+
+Reproducible test case!
+
+-}
+
+callBinaryFunc :: (t -> t1 -> t2) -> t2
+callBinaryFunc f = f undefined undefined
+
+it :: ()
+it = callBinaryFunc (\_ _ -> \_ -> ()) undefined

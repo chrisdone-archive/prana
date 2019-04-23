@@ -169,9 +169,7 @@ evalExpr index globals locals0 = do
   go locals0
   where
     go locals expr = do
-      print expr
       whnf <- go' locals expr
-      print ("=>", whnf)
       pure whnf
     go' locals =
       \case
@@ -233,6 +231,12 @@ evalExpr index globals locals0 = do
               error "Unimplemented op type (either custom primop or FFI)."
         LetExpr localBinding expr -> do
           locals' <- bindLocal localBinding locals
+          putStrLn
+            (unlines
+               [ "Evaluating let form:"
+               , "  Bindings: " ++ show localBinding
+               , "  Expression: " ++ show expr
+               ])
           go locals' expr
         LitExpr lit -> pure (LitWhnf lit)
         ConAppExpr dataConId args _types -> evalCon locals (Con dataConId args)
@@ -241,6 +245,9 @@ evalExpr index globals locals0 = do
               loop args0 whnf = do
                 case whnf of
                   FunWhnf localsClosure funParams funBody -> do
+                    if length args0 < length funParams
+                      then putStrLn "Not enough arguments to function!\n"
+                      else pure ()
                     let (closureArgs, remainderArgs) =
                           splitAt (length funParams) args0
                     locals' <-
@@ -250,8 +257,23 @@ evalExpr index globals locals0 = do
                            pure (M.insert param box locals'))
                         (localsClosure <> locals)
                         (zip funParams closureArgs)
-                    whnf' <- go locals' funBody
-                    loop remainderArgs whnf'
+                    putStrLn
+                      (unlines
+                         [ "Entering function:"
+                         , "  Params: " ++ show funParams
+                         , "  Arguments: " ++ show closureArgs
+                         , "  Body: " ++ show funBody
+                         , "  Scope: " ++ show locals'
+                         ])
+                    if length args0 < length funParams
+                      then pure
+                             (FunWhnf
+                                locals'
+                                (drop (length closureArgs) funParams)
+                                funBody)
+                      else do
+                        whnf' <- go locals' funBody
+                        loop remainderArgs whnf'
                   ConWhnf {} ->
                     if null args
                       then pure whnf
@@ -260,8 +282,15 @@ evalExpr index globals locals0 = do
                               show whnf ++ ", args were: " ++ show args)
                   _ -> error ("Expected function, but got: " <> show whnf)
            in do whnf <- evalSomeVarId index globals locals someVarId
+                 putStrLn
+                   (unlines
+                      [ "Applying function:"
+                      , "  Function: " ++ show whnf
+                      , "  Arguments: " ++ show args
+                      ])
                  loop args whnf
-        CaseExpr expr caseExprVarId dataAlts ->
+        CaseExpr expr caseExprVarId dataAlts -> do
+          putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
           case dataAlts of
             DataAlts _tyCon alts mdefaultExpr -> do
               (dataConId, boxes) <- evalExprToCon index globals locals expr
@@ -461,7 +490,10 @@ evalSomeVarId index globals locals someVarId = do
                  Just name -> displayName name)
           Just box -> evalBox index globals box
       w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
-  putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+  -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
+  putStrLn (unlines ["Looking up id:"
+                    ,"  Id: " ++ show someVarId
+                    ,"  Whnf: " ++ show whnf])
   pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
@@ -471,8 +503,8 @@ evalCon locals (Con dataConId args) =
 bindLocal :: LocalBinding -> Map LocalVarId Box -> IO (Map LocalVarId Box)
 bindLocal localBinding locals =
   case localBinding of
-    LocalNonRec var rhs -> mdo
-      box <- boxRhs locals' rhs
+    LocalNonRec var rhs -> do
+      box <- boxRhs locals rhs
       let locals' = M.insert var box locals
       pure locals'
     LocalRec pairs -> mdo
