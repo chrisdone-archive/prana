@@ -26,6 +26,7 @@ import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import           System.Clock
+import           Weigh
 
 main :: IO ()
 main =
@@ -53,36 +54,74 @@ main =
                        }
                liftIO
                  (case lookupGlobalBindingRhsByName index bindings0 name of
-                    Just (RhsClosure closure@Closure{closureParams = []}) -> do
+                    Just (RhsClosure closure@Closure {closureParams = []}) -> do
                       ghcPrim <- loadLibrary options "ghc-prim"
                       integerGmp <- loadLibrary options "integer-gmp"
                       base <- loadLibrary options "base"
                       let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       -- let bindings = bindings0
-                      !globals <- foldM (\globals binding -> bindGlobal binding globals)
-                                        mempty bindings
+                      !globals <-
+                        foldM
+                          (\globals binding -> bindGlobal binding globals)
+                          mempty
+                          bindings
                       putStrLn (displayName name ++ " = ")
-                      start <- getTime Monotonic
-                      let !rev = (reverseIndex index)
-                      whnf <- evalExpr rev globals mempty (closureExpr closure)
-                      end <- getTime Monotonic
-                      printWhnf (reverseIndex index) globals whnf
-                      putStrLn ""
-                      fprint (timeSpecs % "\n") start end
+
+                      (bytes, gcs, liveBytes, maxByte) <-
+                        weighAction
+                          (const
+                             (do let !rev = (reverseIndex index)
+                                 start <- getTime Monotonic
+                                 whnf <-
+                                   evalExpr
+                                     rev
+                                     globals
+                                     mempty
+                                     (closureExpr closure)
+                                 end <- getTime Monotonic
+                                 fprint (timeSpecs % "\n") start end
+                                 printWhnf (reverseIndex index) globals whnf
+                                 putStrLn ""))
+                          ()
+
+                      putStrLn
+                        (reportGroup
+                           defaultConfig
+                             { configColumns =
+                                 [Case, Allocated, GCs, Max]
+                             }
+                           ""
+                           [ Singleton
+                               ( Weight
+                                   { weightLabel = "Eval"
+                                   , weightAllocatedBytes = bytes
+                                   , weightGCs = gcs
+                                   , weightLiveBytes = liveBytes
+                                   , weightMaxBytes = maxByte
+                                   }
+                               , Nothing)
+                           ])
                     Just (RhsCon con) -> do
                       ghcPrim <- loadLibrary options "ghc-prim"
                       integerGmp <- loadLibrary options "integer-gmp"
                       base <- loadLibrary options "base"
                       let bindings = ghcPrim <> integerGmp <> base <> bindings0
                       -- let bindings = bindings0
-                      !globals <- foldM (\globals binding -> bindGlobal binding globals)
-                                        mempty bindings
-                      putStrLn (displayName name ++ " = " ++ prettyRhs (reverseIndex index) (RhsCon con))
+                      !globals <-
+                        foldM
+                          (\globals binding -> bindGlobal binding globals)
+                          mempty
+                          bindings
+                      putStrLn
+                        (displayName name ++
+                         " = " ++ prettyRhs (reverseIndex index) (RhsCon con))
                       putStrLn ("> " ++ displayName name)
                       whnf <- evalCon mempty con
                       printWhnf (reverseIndex index) globals whnf
                       putStrLn ""
-                    Just clj -> putStrLn ("The expression should take no arguments: " ++ show clj)
+                    Just clj ->
+                      putStrLn
+                        ("The expression should take no arguments: " ++ show clj)
                     Nothing -> putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
 

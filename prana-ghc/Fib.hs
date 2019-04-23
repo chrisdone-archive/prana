@@ -2,12 +2,12 @@
 
 module Fib (it) where
 
-fib :: Int -> Int
-fib n = go 0 1 0
-  where
-    go !acc0 acc1 i
-      | i == n = acc0
-      | otherwise = go acc1 (acc0 + acc1) (i + 1)
+-- fib :: Int -> Int
+-- fib n = go 0 1 0
+--   where
+--     go !acc0 !acc1 !i
+--       | i == n = acc0
+--       | otherwise = go acc1 (acc0 + acc1) (i + 1)
 
 -- it :: Int
 -- it = fib 50
@@ -16,9 +16,9 @@ fibs = 1 : 1 : zipWith (+) fibs (tail fibs)
 
 taker :: Int -> [Int] -> [Int]
 taker count xs = go 0 xs
-  where go cur xs | cur == count = []
-        go cur [] = []
-        go cur (x:xs) = x : go (cur+1) xs
+  where go !cur xs | cur == count = []
+        go !cur [] = []
+        go !cur (x:xs) = x : go (cur+1) xs
 
 it :: [Int]
 it = taker 10 fibs
