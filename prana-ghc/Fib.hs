@@ -12,13 +12,14 @@ fib n = go 0 1 0
 -- it :: Int
 -- it = fib 50
 
+fibs :: [Int]
 fibs = 1 : 1 : zipWith (+) fibs (tail fibs)
 
 taker :: Int -> [Int] -> [Int]
 taker count xs = go 0 xs
-  where go !cur xs | cur == count = []
-        go !cur [] = []
-        go !cur (x:xs) = x : go (cur+1) xs
+  where go !cur  _ | cur == count = []
+        go !_    []     = []
+        go !cur  (x:xs) = x : go (cur+1) xs
 
 xs !! n
   | otherwise = foldr (\x r k -> case k of
@@ -27,8 +28,10 @@ xs !! n
 
 
 
-it :: Int
-it = fibs Fib.!! 1
+it :: [Int]
+it = taker 50 fibs
+-- it :: Int
+-- it = fibs Fib.!! 1
 
 
 {-

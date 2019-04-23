@@ -216,6 +216,9 @@ evalExpr index globals locals0 = do
                   case args of
                     [arg] -> do
                       i <- evalIntArg index globals locals arg
+                      {-print (show i ++ " tagToEnum => " ++ ((case i of
+                                                               0 -> "False"
+                                                               _ -> "True")))-}
                       case typ of
                         BoolType ->
                           pure
@@ -231,12 +234,12 @@ evalExpr index globals locals0 = do
               error "Unimplemented op type (either custom primop or FFI)."
         LetExpr localBinding expr -> do
           locals' <- bindLocal localBinding locals
-          putStrLn
+          {-putStrLn
             (unlines
                [ "Evaluating let form:"
                , "  Bindings: " ++ show localBinding
                , "  Expression: " ++ show expr
-               ])
+               ])-}
           go locals' expr
         LitExpr lit -> pure (LitWhnf lit)
         ConAppExpr dataConId args _types -> evalCon locals (Con dataConId args)
@@ -245,11 +248,13 @@ evalExpr index globals locals0 = do
               loop args0 whnf = do
                 case whnf of
                   FunWhnf localsClosure funParams funBody -> do
-                    if length args0 < length funParams
-                      then putStrLn "Not enough arguments to function!\n"
-                      else pure ()
+
                     let (closureArgs, remainderArgs) =
                           splitAt (length funParams) args0
+                    {-if length args0 < length funParams
+                      then putStrLn (unlines ["Not enough arguments to function:"
+                                             ,"  Putting these in scope: " ++ show (zip funParams closureArgs)])
+                      else pure ()-}
                     locals' <-
                       foldM
                         (\locals' (param, arg) -> do
@@ -257,20 +262,20 @@ evalExpr index globals locals0 = do
                            pure (M.insert param box locals'))
                         (localsClosure <> locals)
                         (zip funParams closureArgs)
-                    putStrLn
+                    {-putStrLn
                       (unlines
                          [ "Entering function:"
                          , "  Params: " ++ show funParams
                          , "  Arguments: " ++ show closureArgs
                          , "  Body: " ++ show funBody
                          , "  Scope: " ++ show locals'
-                         ])
+                         ])-}
                     if length args0 < length funParams
-                      then pure
-                             (FunWhnf
-                                locals'
-                                (drop (length closureArgs) funParams)
-                                funBody)
+                      then do pure
+                                (FunWhnf
+                                   locals'
+                                   (drop (length closureArgs) funParams)
+                                   funBody)
                       else do
                         whnf' <- go locals' funBody
                         loop remainderArgs whnf'
@@ -282,15 +287,15 @@ evalExpr index globals locals0 = do
                               show whnf ++ ", args were: " ++ show args)
                   _ -> error ("Expected function, but got: " <> show whnf)
            in do whnf <- evalSomeVarId index globals locals someVarId
-                 putStrLn
+                 {-putStrLn
                    (unlines
                       [ "Applying function:"
                       , "  Function: " ++ show whnf
                       , "  Arguments: " ++ show args
-                      ])
+                      ])-}
                  loop args whnf
         CaseExpr expr caseExprVarId dataAlts -> do
-          putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
+          -- putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
           case dataAlts of
             DataAlts _tyCon alts mdefaultExpr -> do
               (dataConId, boxes) <- evalExprToCon index globals locals expr
@@ -491,9 +496,9 @@ evalSomeVarId index globals locals someVarId = do
           Just box -> evalBox index globals box
       w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
   -- putStrLn (prettySomeVarId index someVarId ++ " = " ++ show whnf)
-  putStrLn (unlines ["Looking up id:"
+  {-putStrLn (unlines ["Looking up id:"
                     ,"  Id: " ++ show someVarId
-                    ,"  Whnf: " ++ show whnf])
+                    ,"  Whnf: " ++ show whnf])-}
   pure whnf
 
 evalCon :: Map LocalVarId Box -> Con -> IO Whnf
