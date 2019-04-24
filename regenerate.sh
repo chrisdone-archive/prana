@@ -37,3 +37,11 @@ PRANA_DIR=~/Work/chrisdone/prana/prana-dir/ PRANA_MODE=INSTALL time -p -- ./Setu
 cd ../containers-0.5.11.0/
 
 PRANA_DIR=~/Work/chrisdone/prana/prana-dir/ PRANA_MODE=INSTALL time -p -- ./Setup build --ghc-options="-O0"
+
+cd ../bytestring-0.10.8.2
+
+PRANA_DIR=~/Work/chrisdone/prana/prana-dir/ PRANA_MODE=INSTALL time -p -- ./Setup build --ghc-options="-O0"
+
+cd ../binary-0.8.5.1
+
+PRANA_DIR=~/Work/chrisdone/prana/prana-dir/ PRANA_MODE=INSTALL time -p -- ./Setup build --ghc-options="-O0"
