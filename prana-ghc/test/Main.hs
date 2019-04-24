@@ -44,7 +44,7 @@ main =
            result <- compileModuleGraph options
            case result of
              Right (index, bindings0) -> do
-               liftIO (print bindings0)
+               -- liftIO (print bindings0)
                let name =
                      Name
                        { namePackage = "main"
