@@ -390,7 +390,10 @@ prettyExpr index =
         [ prettyDataConId index dataConId
         , prettyList (map (prettyArg index) args)
         ]
-    OpAppExpr {} -> "OpAppExpr"
+    OpAppExpr op args primType ->
+      node
+        "OpAppExpr"
+        [show op, prettyList (map (prettyArg index) args), show primType]
     CaseExpr expr localVarId alts ->
       node
         "CaseExpr"
@@ -412,22 +415,36 @@ prettyAlts index =
         , prettyList (map prettyDataAlt dataAlts)
         , maybe "Nothing" (prettyExpr index) mexpr
         ]
-    MultiValAlts int dataAlts mexpr ->
+    MultiValAlts i dataAlts mexpr ->
       node
         "MultiValAlts"
-        [ show int
+        [ show i
         , prettyList (map prettyDataAlt dataAlts)
         , maybe "Nothing" (prettyExpr index) mexpr
         ]
-    PrimAlts primRep litAlts mexpr -> node "PrimAlts[TODO]" []
-  where prettyTyCon = show
-        prettyDataAlt dataAlt =
-          node
-            "DataAlt"
-            [ prettyDataConId index (dataAltCon dataAlt)
-            , prettyList (map (prettyLocalVar index) (dataAltBinders dataAlt))
-            , prettyExpr index (dataAltExpr dataAlt)
-            ]
+    PrimAlts primRep litAlts mexpr ->
+      node
+        "PrimAlts"
+        [ show primRep
+        , prettyList (map prettyLitAlt litAlts)
+        , maybe "Nothing" (prettyExpr index) mexpr
+        ]
+  where
+    prettyTyCon = show
+    prettyLitAlt litAlt =
+      node
+        "LitAlt"
+        [ show (litAltLit litAlt)
+        , prettyList (map (prettyLocalVar index) (litAltBinders litAlt))
+        , prettyExpr index (litAltExpr litAlt)
+        ]
+    prettyDataAlt dataAlt =
+      node
+        "DataAlt"
+        [ prettyDataConId index (dataAltCon dataAlt)
+        , prettyList (map (prettyLocalVar index) (dataAltBinders dataAlt))
+        , prettyExpr index (dataAltExpr dataAlt)
+        ]
 
 prettyLocalVar :: ReverseIndex -> LocalVarId -> String
 prettyLocalVar index localVarId =
@@ -451,7 +468,9 @@ prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
 prettyDataConId :: ReverseIndex -> DataConId -> String
 prettyDataConId index dataConId =
   (case M.lookup dataConId (reverseIndexDataCons index) of
-     Nothing -> error ("Couldn't find name! BUG!" ++ show dataConId)
+     Nothing -> case dataConId of
+                  WiredInCon wiredIn -> show wiredIn
+                  _ -> error ("Couldn't find name! BUG!" ++ show dataConId)
      Just name -> show (displayName name))
 
 prettyArg :: ReverseIndex -> Arg -> [Char]

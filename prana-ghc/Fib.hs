@@ -21,6 +21,7 @@ taker count xs = go 0 xs
         go !_    []     = []
         go !cur  (x:xs) = x : go (cur+1) xs
 
+(!!) :: [a] -> Int -> a
 xs !! n
   | otherwise = foldr (\x r k -> case k of
                                    0 -> x
