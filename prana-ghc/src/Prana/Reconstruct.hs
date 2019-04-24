@@ -390,6 +390,13 @@ wiredInVals =
           , nameUnique = Exported
           }
       , WiredIn_patError)
+    ,  ( Name
+           { namePackage = "ghc-prim"
+           , nameModule = "GHC.Prim"
+           , nameName = "proxy#"
+           , nameUnique = Exported
+           }
+       , WiredIn_proxy#)
     ]
 
 wiredInCons :: Map Name WiredInCon

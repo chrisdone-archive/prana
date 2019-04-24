@@ -103,6 +103,7 @@ data WiredInVal
   | WiredIn_nullAddr#
   | WiredIn_seq
   | WiredIn_magicDict
+  | WiredIn_proxy#
   | WiredIn_patError
     -- TODO:
     -- Design decision required.

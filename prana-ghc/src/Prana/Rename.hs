@@ -23,9 +23,10 @@ import           Data.Bifunctor.TH
 import           Data.Binary
 import           Data.Bitraversable
 import           Data.ByteString (ByteString)
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
+import           Data.Char
 import           Data.Int
+import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Typeable
 import           Data.Validation
@@ -125,8 +126,9 @@ renameId m thing =
                       }))
   where
     package =
-      FastString.fs_bs
-        (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name)))
+      stripVersionOut
+        (FastString.fs_bs
+           (Module.unitIdFS (Module.moduleUnitId (Name.nameModule name))))
     module' =
       FastString.fs_bs
         (Module.moduleNameFS (Module.moduleName (Name.nameModule name)))
@@ -144,6 +146,17 @@ renameId m thing =
         m
         (Name.nameOccName n)
         (Name.nameSrcSpan n)
+
+stripVersionOut :: ByteString -> ByteString
+stripVersionOut =
+  mconcat . intersperse "-" . reverse . stripOut . reverse . S8.split '-'
+  where
+    stripOut (hash:ver:rest)
+      | S8.all (\c -> isDigit c || c == '.') ver
+      , S8.all isAlphaNum hash = rest
+    stripOut (ver:rest)
+      | S8.all (\c -> isDigit c || c == '.') ver = rest
+    stripOut xs = xs
 
 --------------------------------------------------------------------------------
 -- Predicates
