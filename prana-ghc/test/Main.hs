@@ -80,7 +80,7 @@ main =
                                      (closureExpr closure)
                                  end <- getTime Monotonic
                                  fprint (timeSpecs % "\n") start end
-                                 printWhnf (reverseIndex index) globals whnf
+                                 deepseqWhnf {-printWhnf-} (reverseIndex index) globals whnf
                                  putStrLn ""))
                           ()
 
@@ -143,6 +143,19 @@ printWhnf index globals =
       putStr ")"
     FunWhnf locals params expr -> do
       putStr "<function>"
+
+deepseqWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
+deepseqWhnf index globals =
+  \case
+    LitWhnf lit -> pure ()
+    ConWhnf dataConId boxes -> do
+      mapM_
+        (\box -> do
+           whnf <- evalBox index globals box
+           deepseqWhnf index globals whnf)
+        boxes
+    FunWhnf locals params expr -> do
+      pure ()
 
 data Whnf
   = LitWhnf Lit
