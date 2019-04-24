@@ -32,7 +32,7 @@ xs !! n
 -- it :: [Int]
 -- it = taker 50 fibs
 it :: Int
-it = fibs Fib.!! 1
+it = fibs Fib.!! 49
 
 
 {-

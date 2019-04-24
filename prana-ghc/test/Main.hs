@@ -218,6 +218,15 @@ evalExpr index globals locals0 = do
                       let !r = i + i2
                       pure (LitWhnf (IntLit r))
                     _ -> error ("Invalid arguments to IntAddOp: " ++ show args)
+                IntSubOp ->
+                  case args of
+                    [arg1, arg2] -> do
+                      i <- evalIntArg index globals locals arg1
+                      i2 <- evalIntArg index globals locals arg2
+                      -- print (show i ++ " +# " ++ show i2)
+                      let !r = i - i2
+                      pure (LitWhnf (IntLit r))
+                    _ -> error ("Invalid arguments to IntSubOp: " ++ show args)
                 IntNegOp ->
                   case args of
                     [arg] -> do

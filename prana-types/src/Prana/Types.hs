@@ -192,6 +192,7 @@ data PrimOp
   = UnknownPrimOp String
   | IntNegOp
   | IntAddOp
+  | IntSubOp
   | IntEqOp
   | TagToEnumOp
   deriving (Show, Eq, Generic)

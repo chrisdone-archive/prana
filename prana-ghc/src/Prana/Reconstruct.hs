@@ -206,6 +206,7 @@ fromPrimOp =
     PrimOp.IntNegOp -> IntNegOp
     PrimOp.IntEqOp -> IntEqOp
     PrimOp.IntAddOp -> IntAddOp
+    PrimOp.IntSubOp -> IntSubOp
     PrimOp.TagToEnumOp -> TagToEnumOp
     op -> UnknownPrimOp (show op ++ " aka " ++ Outputable.showSDocUnsafe (Outputable.ppr op))
 
