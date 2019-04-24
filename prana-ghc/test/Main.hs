@@ -80,7 +80,7 @@ main =
                                      (closureExpr closure)
                                  end <- getTime Monotonic
                                  fprint (timeSpecs % "\n") start end
-                                 deepseqWhnf {-printWhnf-} (reverseIndex index) globals whnf
+                                 printWhnf (reverseIndex index) globals whnf
                                  putStrLn ""))
                           ()
 
@@ -451,7 +451,7 @@ prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
 prettyDataConId :: ReverseIndex -> DataConId -> String
 prettyDataConId index dataConId =
   (case M.lookup dataConId (reverseIndexDataCons index) of
-     Nothing -> error "Couldn't find name! BUG!"
+     Nothing -> error ("Couldn't find name! BUG!" ++ show dataConId)
      Just name -> show (displayName name))
 
 prettyArg :: ReverseIndex -> Arg -> [Char]
