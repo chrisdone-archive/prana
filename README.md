@@ -11,7 +11,7 @@ Pure-Haskell goals:
 |Milestone|Status|
 |:---|:---|
 |Clean STG from GHC|  :heavy_check_mark: |
-|Interpreter prototype| :construction: |
+|Interpreter prototype for AST| :construction: |
 |Test suite for interpreter| – |
 |Move interpreter into `prana-interpret` library| – |
 |Get code coverage to near 100%| – |
