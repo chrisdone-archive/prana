@@ -24,6 +24,7 @@ import qualified Data.Map.Strict as M
 import           GHC.Exts
 import           Prana.Ghc
 import           Prana.Index
+import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import           Test.Hspec (runIO, shouldReturn, it, describe, hspec, Spec)
@@ -36,51 +37,72 @@ spec :: Spec
 spec =
   describe
     "Fib"
-    (do (options, std) <-
+    (do (options, std, index) <-
           runIO
             (do options <- getOptions
                 std <- loadStandardPackages options
-                pure (options, std))
+                index <- liftIO (readIndex (optionsIndexPath options))
+                pure (options, std, index))
+        dataConI# <- getDataConI# index
         it
           "Iterative"
           (do steps <-
                 compileAndRun
+                  index
                   options
                   std
                   "test/assets/FibIterative.hs"
                   "FibIterative"
               shouldReturn
                 (runConduit (steps .| CL.consume))
-                [ BeginConStep (DataConId 5)
+                [ BeginConStep dataConI#
                 , LitStep (IntLit 12586269025)
                 , EndConStep
                 ])
         it
           "Codata"
           (do steps <-
-                compileAndRun options std "test/assets/FibCodata.hs" "FibCodata"
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/FibCodata.hs"
+                  "FibCodata"
               shouldReturn
                 (runConduit (steps .| CL.consume))
-                [ BeginConStep (DataConId 5)
+                [ BeginConStep dataConI#
                 , LitStep (IntLit 12586269025)
                 , EndConStep
                 ]))
 
+getDataConI# index =
+  case M.lookup
+         (Name
+            { namePackage = "ghc-prim"
+            , nameModule = "GHC.Types"
+            , nameName = "I#"
+            , nameUnique = Exported
+            })
+         (indexDataCons index) of
+    Nothing -> error "Couldn't find constructor."
+    Just dataConId -> pure dataConId
+
 compileAndRun ::
-     Options
+     Index
+  -> Options
   -> [GlobalBinding]
   -> String
   -> ByteString
   -> IO (ConduitT () Step IO ())
-compileAndRun options std fileName moduleName =
+compileAndRun index0 options std fileName moduleName =
   runGhc
     (do setModuleGraph [fileName]
-
         libraryGlobals <- foldM bindGlobal mempty std
-        result <- compileModuleGraph options
+        result <- compileModuleGraph options index0
         case result of
-          Left err -> do showErrors err
-                         error "Bailign out."
+          Left err -> do
+            showErrors err
+            error "Bailing out."
           Right (index, sourceGlobals) -> do
             let name =
                   Name

@@ -32,7 +32,9 @@ module Prana.Ghc
   , lookupGlobalBindingRhsByName
   , lookupGlobalBindingRhsById
   , loadLibrary
-  , Options
+  , readIndex
+  , optionsIndexPath
+  , Options(..)
   ) where
 
 import           Control.Exception
@@ -127,7 +129,8 @@ optionsPackagesDir options = optionsDir options <> "/packages/"
 compileModuleGraphFromEnv :: GHC.Ghc ()
 compileModuleGraphFromEnv = do
   options <- liftIO getOptions
-  void (compileModuleGraph options)
+  index <- liftIO (readIndex (optionsIndexPath options))
+  void (compileModuleGraph options index)
 
 --------------------------------------------------------------------------------
 -- Convenient wrappers
@@ -171,14 +174,14 @@ loadStandardPackages options = do
 -- 4) Write out the files.
 compileModuleGraph ::
      Options
+  -> Index
   -> GHC.Ghc (Either (Map Module.Module CompileError) (Index, [GlobalBinding]))
-compileModuleGraph options = do
+compileModuleGraph options index0 = do
   liftIO (createDirectoryIfMissing True (optionsPackagesDir options))
   dflags <- GHC.getSessionDynFlags
   GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
-  index0 <- liftIO (readIndex (optionsIndexPath options))
   ((listOfListOfbindings, errors), index') <-
     (runStateT (runWriterT (buildGraph mgraph)) index0)
   if M.null errors
