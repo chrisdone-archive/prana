@@ -19,11 +19,7 @@ import           Data.IORef
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
-import qualified DynFlags
-import qualified GHC
 import           GHC.Exts
-import qualified GHC.Paths
-import           Prana.Ghc
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
@@ -42,8 +38,10 @@ compileAndRun fileName moduleName =
   runGhc
     (do setModuleGraph [fileName]
         options <- getOptions
+        std <- loadStandardPackages options
         result <- compileModuleGraph options
         case result of
+          Left err -> showErrors err
           Right (index, bindings0) -> do
             let name =
                   Name
@@ -53,10 +51,7 @@ compileAndRun fileName moduleName =
                     , nameUnique = Exported
                     }
             liftIO
-              (do ghcPrim <- loadLibrary options "ghc-prim"
-                  integerGmp <- loadLibrary options "integer-gmp"
-                  base <- loadLibrary options "base"
-                  let bindings = ghcPrim <> integerGmp <> base <> bindings0
+              (do let bindings = std <> bindings0
                   !globals <-
                     foldM
                       (\globals binding -> bindGlobal binding globals)
@@ -77,8 +72,7 @@ compileAndRun fileName moduleName =
                     Just clj ->
                       putStrLn
                         ("The expression should take no arguments: " ++ show clj)
-                    Nothing -> putStrLn ("Couldn't find " <> displayName name))
-          Left err -> showErrors err)
+                    Nothing -> putStrLn ("Couldn't find " <> displayName name)))
 
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 printWhnf index globals =

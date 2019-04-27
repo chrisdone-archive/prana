@@ -24,6 +24,7 @@ module Prana.Ghc
   ( compileModuleGraphFromEnv
   , runGhc
   , setModuleGraph
+  , loadStandardPackages
   , compileModSummary
   , compileModuleGraph
   , getOptions
@@ -145,6 +146,14 @@ setModuleGraph filenames = do
   GHC.setTargets targets
   _ <- GHC.load GHC.LoadAllTargets
   pure ()
+
+-- | Load ghc-prim, integer-gmp and base.
+loadStandardPackages :: MonadIO m => Options -> m [GlobalBinding]
+loadStandardPackages options = do
+  ghcPrim <- loadLibrary options "ghc-prim"
+  integerGmp <- loadLibrary options "integer-gmp"
+  base <- loadLibrary options "base"
+  pure (ghcPrim <> integerGmp <> base)
 
 --------------------------------------------------------------------------------
 -- General entry point
