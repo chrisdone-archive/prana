@@ -146,7 +146,7 @@ fromStgGenArg =
 fromLiteral :: Literal.Literal -> Lit
 fromLiteral =
   \case
-    Literal.MachInt integer -> IntLit integer
+    Literal.MachInt integer -> IntLit (fromIntegral integer) -- TODO: Is this cromulent?
     _ -> UnknownLit
 
 fromStgGenExpr :: StgSyn.GenStgExpr Name Name -> Convert Expr
@@ -206,6 +206,7 @@ fromPrimOp =
     PrimOp.IntNegOp -> IntNegOp
     PrimOp.IntEqOp -> IntEqOp
     PrimOp.IntLtOp -> IntLtOp
+    PrimOp.IntSubCOp -> IntSubCOp
     PrimOp.IntAddOp -> IntAddOp
     PrimOp.IntSubOp -> IntSubOp
     PrimOp.TagToEnumOp -> TagToEnumOp
@@ -324,8 +325,8 @@ lookupDataConId dataCon =
        either
          (Failure . pure . RenameDataConError dataCon)
          (\name ->
-            case M.lookup name wiredInCons of
-              Just wiredCon -> pure (WiredInCon wiredCon)
+            case M.lookup name unboxedTupleCons of
+              Just wiredCon -> pure wiredCon
               Nothing ->
                 case M.lookup name (indexDataCons (scopeIndex scope)) of
                   Nothing -> Failure (pure (ConNameNotFound name))
@@ -400,23 +401,48 @@ wiredInVals =
        , WiredIn_proxy#)
     ]
 
-wiredInCons :: Map Name WiredInCon
-wiredInCons =
+-- Notes on tuples.
+-- Copied from the GHC codebase:
+
+-- However the /naming/ of the type/data constructors for one-tuples is a
+-- bit odd:
+--   3-tuples:  (,,)   (,,)#
+--   2-tuples:  (,)    (,)#
+--   1-tuples:  ??
+--   0-tuples:  ()     ()#
+
+-- Zero-tuples have used up the logical name. So we use 'Unit' and 'Unit#'
+-- for one-tuples.  So in ghc-prim:GHC.Tuple we see the declarations:
+--   data ()     = ()
+--   data Unit a = Unit a
+--   data (a,b)  = (a,b)
+
+unboxedTupleCons :: Map Name DataConId
+unboxedTupleCons =
   M.fromList
-    ([ ( Name
-           { namePackage = "ghc-prim"
-           , nameModule = "GHC.Prim"
-           , nameName = "Unit#"
-           , nameUnique = Exported
-           }
-       , WiredIn_Unit#)
-     ] ++
-     [ ( Name
-           { namePackage = "ghc-prim"
-           , nameModule = "GHC.Prim"
-           , nameName = "(#" <> S8.replicate count ',' <> "#)"
-           , nameUnique = Exported
-           }
-       , WiredIn_unboxed_tuple)
-     | count <- [0 .. 64]
-     ])
+    (concat
+       [ [ ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "(##)"
+               , nameUnique = Exported
+               }
+           , UnboxedTupleConId 0)
+         , ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "Unit#"
+               , nameUnique = Exported
+               }
+           , UnboxedTupleConId 1)
+         ]
+       , [ ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "(#" <> S8.replicate (n - 1) ',' <> "#)"
+               , nameUnique = Exported
+               }
+           , UnboxedTupleConId n)
+         | n <- [2 .. 64]
+         ]
+       ])

@@ -117,16 +117,10 @@ data WiredInVal
 
 
 data DataConId
-  = DataConId Int64
-  | WiredInCon WiredInCon
+  = DataConId !Int64
+  | UnboxedTupleConId !Int
   deriving (Show, Eq, Generic, Ord)
 instance Binary DataConId
-
-data WiredInCon
-  = WiredIn_Unit#
-  | WiredIn_unboxed_tuple
-  deriving (Show, Eq, Generic, Ord)
-instance Binary WiredInCon
 
 data UpdateFlag
   = ReEntrant
@@ -149,7 +143,7 @@ data Arg
   deriving (Show, Eq, Generic)
 
 data Lit
-  = IntLit !Integer -- Machine int.
+  = IntLit !Int -- Machine int.
   | UnknownLit
   deriving (Show, Eq, Generic)
 
@@ -196,6 +190,7 @@ data PrimOp
   | IntSubOp
   | IntEqOp
   | IntLtOp
+  | IntSubCOp
   | TagToEnumOp
   deriving (Show, Eq, Generic)
 

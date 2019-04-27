@@ -1,4 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE UnboxedTuples #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE RecursiveDo #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -21,6 +23,7 @@ import           Formatting
 import           Formatting.Clock
 import qualified GHC
 import qualified GHC.Paths
+import           GHC.Exts
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
@@ -147,14 +150,14 @@ printWhnf index globals =
 deepseqWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 deepseqWhnf index globals =
   \case
-    LitWhnf lit -> pure ()
-    ConWhnf dataConId boxes -> do
+    LitWhnf{} -> pure ()
+    ConWhnf _dataConId boxes -> do
       mapM_
         (\box -> do
            whnf <- evalBox index globals box
            deepseqWhnf index globals whnf)
         boxes
-    FunWhnf locals params expr -> do
+    FunWhnf{} -> do
       pure ()
 
 data Whnf
@@ -195,6 +198,20 @@ evalExpr index globals locals0 = do
                     ("Unimplemented primop: " ++
                      string ++
                      " (type: " ++ show typ ++ "), args were: " ++ show args)
+                -- Int# -> Int# -> (# Int#, Int# #)
+                IntSubCOp ->
+                  case args of
+                    [arg1, arg2] -> do
+                      I# i <- fmap fromIntegral (evalIntArg index globals locals arg1)
+                      I# i2 <- fmap fromIntegral (evalIntArg index globals locals arg2)
+                      case subIntC# i i2 of
+                        (# x#, y# #) -> do
+                          xBox <- boxWhnf (LitWhnf (IntLit (I# x#)))
+                          yBox <- boxWhnf (LitWhnf (IntLit (I# y#)))
+                          pure
+                            (ConWhnf (UnboxedTupleConId 2)
+                                     [xBox, yBox])
+                    _ -> error ("Invalid arguments to IntSubCOp: " ++ show args)
                 IntEqOp ->
                   case args of
                     [arg1, arg2] -> do
@@ -284,7 +301,6 @@ evalExpr index globals locals0 = do
               loop args0 whnf = do
                 case whnf of
                   FunWhnf localsClosure funParams funBody -> do
-
                     let (closureArgs, remainderArgs) =
                           splitAt (length funParams) args0
                     {-if length args0 < length funParams
@@ -307,11 +323,12 @@ evalExpr index globals locals0 = do
                          , "  Scope: " ++ show locals'
                          ])-}
                     if length args0 < length funParams
-                      then do pure
-                                (FunWhnf
-                                   locals'
-                                   (drop (length closureArgs) funParams)
-                                   funBody)
+                      then do
+                        pure
+                          (FunWhnf
+                             locals'
+                             (drop (length closureArgs) funParams)
+                             funBody)
                       else do
                         whnf' <- go locals' funBody
                         loop remainderArgs whnf'
@@ -330,12 +347,13 @@ evalExpr index globals locals0 = do
                       , "  Arguments: " ++ show args
                       ])-}
                  loop args whnf
-        CaseExpr expr caseExprVarId dataAlts -> do
+        CaseExpr expr caseExprVarId dataAlts
           -- putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
+         -> do
           case dataAlts of
             DataAlts _tyCon alts mdefaultExpr -> do
               (dataConId, boxes) <- evalExprToCon index globals locals expr
-              caseExprBox <- boxWhnf locals (ConWhnf dataConId boxes)
+              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
               let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
                     if dataConId == altDataConId
@@ -358,7 +376,7 @@ evalExpr index globals locals0 = do
                in loop alts
             PrimAlts primRep litAlts mdefaultExpr -> do
               whnf <- go locals expr
-              caseExprBox <- boxWhnf locals whnf
+              caseExprBox <- boxWhnf whnf
               let locals1 = M.insert caseExprVarId caseExprBox locals
               case whnf of
                 LitWhnf lit ->
@@ -376,6 +394,32 @@ evalExpr index globals locals0 = do
                   error
                     ("Unexpected whnf for PrimAlts (I'm sure ClosureWhnf will come up here): " ++
                      show whnf)
+            MultiValAlts size alts mdefaultExpr -> do
+              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
+              let locals1 = M.insert caseExprVarId caseExprBox locals
+              let loop (DataAlt altDataConId localVarIds rhsExpr:rest) = do
+                    -- putStrLn (unlines ["dataConId:" ++ show dataConId
+                    --                   ,"altDataConId:" ++ show altDataConId
+                    --                   ])
+                    if dataConId == altDataConId
+                      then if length boxes == length localVarIds
+                             then do
+                               locals' <-
+                                 foldM
+                                   (\locals' (box, localVarId) -> do
+                                      pure (M.insert localVarId box locals'))
+                                   locals1
+                                   (zip boxes localVarIds)
+                               go locals' rhsExpr
+                             else error
+                                    "Mismatch between number of slots in constructor and pattern."
+                      else loop rest
+                  loop [] =
+                    case mdefaultExpr of
+                      Nothing -> error "Inexhaustive pattern match!"
+                      Just defaultExpr -> go locals1 defaultExpr
+               in loop alts
             _ -> error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
 
 evalExprToCon :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
@@ -491,9 +535,7 @@ prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
 prettyDataConId :: ReverseIndex -> DataConId -> String
 prettyDataConId index dataConId =
   (case M.lookup dataConId (reverseIndexDataCons index) of
-     Nothing -> case dataConId of
-                  WiredInCon wiredIn -> show wiredIn
-                  _ -> error ("Couldn't find name! BUG!" ++ show dataConId)
+     Nothing -> error ("Couldn't find name! BUG!" ++ show dataConId)
      Just name -> show (displayName name))
 
 prettyArg :: ReverseIndex -> Arg -> [Char]
@@ -618,11 +660,11 @@ boxRhs locals =
                         (closureParams closure)
                         (closureExpr closure))))
 
-boxWhnf :: Map LocalVarId Box -> Whnf -> IO Box
-boxWhnf locals whnf =
+boxWhnf :: Whnf -> IO Box
+boxWhnf whnf =
   fmap Box (newIORef (WhnfThunk whnf))
 
-evalIntArg :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Arg -> IO Integer
+evalIntArg :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Arg -> IO Int
 evalIntArg index globals locals =
   \case
     LitArg (IntLit !i) -> pure i
