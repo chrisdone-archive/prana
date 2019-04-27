@@ -22,6 +22,8 @@
 
 module Prana.Ghc
   ( compileModuleGraphFromEnv
+  , runGhc
+  , setModuleGraph
   , compileModSummary
   , compileModuleGraph
   , getOptions
@@ -31,8 +33,8 @@ module Prana.Ghc
   , loadLibrary
   ) where
 
-import qualified Data.ByteString.Lazy as L
 import           Control.Exception
+import           Control.Monad.IO.Class
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -44,6 +46,7 @@ import qualified CostCentre
 import           Data.Binary (encode, decode, Binary)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
+import qualified Data.ByteString.Lazy as L
 import           Data.Either
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -57,6 +60,7 @@ import qualified Digraph
 import qualified DynFlags
 import qualified FastString
 import qualified GHC
+import qualified GHC.Paths
 import           HscTypes
 import qualified Module
 import qualified Outputable
@@ -92,17 +96,18 @@ data Options =
 --------------------------------------------------------------------------------
 -- Parse options for this compiler mod
 
-getOptions :: IO Options
+getOptions :: MonadIO m => m Options
 getOptions =
-  Options <$> getEnv "PRANA_DIR" <*>
-  (lookupEnv "PRANA_MODE" >>=
-   (\case
-      Just "DEV" -> pure DEV
-      Just "INSTALL" -> pure INSTALL
-      _ ->
-        error
-          ("Please specify a mode via PRANA_MODE: " ++
-           show [minBound .. maxBound :: Mode])))
+  liftIO
+    (Options <$> getEnv "PRANA_DIR" <*>
+     (lookupEnv "PRANA_MODE" >>=
+      (\case
+         Just "DEV" -> pure DEV
+         Just "INSTALL" -> pure INSTALL
+         _ ->
+           error
+             ("Please specify a mode via PRANA_MODE: " ++
+              show [minBound .. maxBound :: Mode]))))
 
 optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
@@ -121,6 +126,25 @@ compileModuleGraphFromEnv :: GHC.Ghc ()
 compileModuleGraphFromEnv = do
   options <- liftIO getOptions
   void (compileModuleGraph options)
+
+--------------------------------------------------------------------------------
+-- Convenient wrappers
+
+-- | Run a GHC action.
+runGhc :: GHC.Ghc a -> IO a
+runGhc action =
+  GHC.defaultErrorHandler
+    DynFlags.defaultFatalMessager
+    DynFlags.defaultFlushOut
+    (GHC.runGhc (Just GHC.Paths.libdir) action)
+
+-- | Try to set the module graph.
+setModuleGraph :: [FilePath] -> GHC.Ghc ()
+setModuleGraph filenames = do
+  targets <- mapM (\fileName -> GHC.guessTarget fileName Nothing) filenames
+  GHC.setTargets targets
+  _ <- GHC.load GHC.LoadAllTargets
+  pure ()
 
 --------------------------------------------------------------------------------
 -- General entry point

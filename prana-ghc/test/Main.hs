@@ -24,6 +24,7 @@ import qualified GHC
 import           GHC.Exts
 import qualified GHC.Paths
 import           Prana.Ghc
+import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
@@ -38,58 +39,46 @@ spec = pure ()
 
 compileAndRun :: String -> ByteString -> IO ()
 compileAndRun fileName moduleName =
-  GHC.defaultErrorHandler
-    DynFlags.defaultFatalMessager
-    DynFlags.defaultFlushOut
-    (GHC.runGhc
-       (Just GHC.Paths.libdir)
-       (do dflags <- GHC.getSessionDynFlags
-           _ <- GHC.setSessionDynFlags dflags
-           target <- GHC.guessTarget fileName Nothing
-           GHC.setTargets [target]
-           _ <- GHC.load GHC.LoadAllTargets
-           options <- liftIO getOptions
-           result <- compileModuleGraph options
-           case result of
-             Right (index, bindings0)
-                             -- liftIO (print bindings0)
-              -> do
-               let name =
-                     Name
-                       { namePackage = "main"
-                       , nameModule = moduleName
-                       , nameName = "it"
-                       , nameUnique = Exported
-                       }
-               liftIO
-                 (do ghcPrim <- loadLibrary options "ghc-prim"
-                     integerGmp <- loadLibrary options "integer-gmp"
-                     base <- loadLibrary options "base"
-                     let bindings = ghcPrim <> integerGmp <> base <> bindings0
-                     !globals <-
-                       foldM
-                         (\globals binding -> bindGlobal binding globals)
-                         mempty
-                         bindings
-                     case lookupGlobalBindingRhsByName index bindings0 name of
-                       Just (RhsClosure closure@Closure {closureParams = []}) -> do
-                         whnf <-
-                           evalExpr
-                             (reverseIndex index)
-                             globals
-                             mempty
-                             (closureExpr closure)
-                         printWhnf (reverseIndex index) globals whnf
-                       Just (RhsCon con) -> do
-                         whnf <- evalCon mempty con
-                         printWhnf (reverseIndex index) globals whnf
-                       Just clj ->
-                         putStrLn
-                           ("The expression should take no arguments: " ++
-                            show clj)
-                       Nothing ->
-                         putStrLn ("Couldn't find " <> displayName name))
-             Left err -> showErrors err))
+  runGhc
+    (do setModuleGraph [fileName]
+        options <- getOptions
+        result <- compileModuleGraph options
+        case result of
+          Right (index, bindings0) -> do
+            let name =
+                  Name
+                    { namePackage = "main"
+                    , nameModule = moduleName
+                    , nameName = "it"
+                    , nameUnique = Exported
+                    }
+            liftIO
+              (do ghcPrim <- loadLibrary options "ghc-prim"
+                  integerGmp <- loadLibrary options "integer-gmp"
+                  base <- loadLibrary options "base"
+                  let bindings = ghcPrim <> integerGmp <> base <> bindings0
+                  !globals <-
+                    foldM
+                      (\globals binding -> bindGlobal binding globals)
+                      mempty
+                      bindings
+                  case lookupGlobalBindingRhsByName index bindings0 name of
+                    Just (RhsClosure closure@Closure {closureParams = []}) -> do
+                      whnf <-
+                        evalExpr
+                          (reverseIndex index)
+                          globals
+                          mempty
+                          (closureExpr closure)
+                      printWhnf (reverseIndex index) globals whnf
+                    Just (RhsCon con) -> do
+                      whnf <- evalCon mempty con
+                      printWhnf (reverseIndex index) globals whnf
+                    Just clj ->
+                      putStrLn
+                        ("The expression should take no arguments: " ++ show clj)
+                    Nothing -> putStrLn ("Couldn't find " <> displayName name))
+          Left err -> showErrors err)
 
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 printWhnf index globals =
