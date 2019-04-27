@@ -32,6 +32,7 @@ module Prana.Ghc
   , lookupGlobalBindingRhsByName
   , lookupGlobalBindingRhsById
   , loadLibrary
+  , Options
   ) where
 
 import           Control.Exception

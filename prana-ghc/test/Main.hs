@@ -26,7 +26,7 @@ import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
-import           Test.Hspec (shouldReturn, it, describe, hspec, Spec)
+import           Test.Hspec (runIO, shouldReturn, it, describe, hspec, Spec)
 
 main :: IO ()
 main =
@@ -36,9 +36,19 @@ spec :: Spec
 spec =
   describe
     "Fib"
-    (do it
+    (do (options, std) <-
+          runIO
+            (do options <- getOptions
+                std <- loadStandardPackages options
+                pure (options, std))
+        it
           "Iterative"
-          (do steps <- compileAndRun "test/assets/FibIterative.hs" "FibIterative"
+          (do steps <-
+                compileAndRun
+                  options
+                  std
+                  "test/assets/FibIterative.hs"
+                  "FibIterative"
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep (DataConId 5)
@@ -47,7 +57,8 @@ spec =
                 ])
         it
           "Codata"
-          (do steps <- compileAndRun "test/assets/FibCodata.hs" "FibCodata"
+          (do steps <-
+                compileAndRun options std "test/assets/FibCodata.hs" "FibCodata"
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep (DataConId 5)
@@ -55,12 +66,16 @@ spec =
                 , EndConStep
                 ]))
 
-compileAndRun :: String -> ByteString -> IO (ConduitT () Step IO ())
-compileAndRun fileName moduleName =
+compileAndRun ::
+     Options
+  -> [GlobalBinding]
+  -> String
+  -> ByteString
+  -> IO (ConduitT () Step IO ())
+compileAndRun options std fileName moduleName =
   runGhc
     (do setModuleGraph [fileName]
-        options <- getOptions
-        std <- loadStandardPackages options
+
         libraryGlobals <- foldM bindGlobal mempty std
         result <- compileModuleGraph options
         case result of
