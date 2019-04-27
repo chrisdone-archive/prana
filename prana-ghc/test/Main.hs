@@ -15,6 +15,8 @@ module Main where
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
 import           Data.ByteString (ByteString)
+import           Data.Conduit
+import qualified Data.Conduit.List as CL
 import           Data.IORef
 import           Data.List
 import           Data.Map.Strict (Map)
@@ -34,9 +36,17 @@ spec :: Spec
 spec =
   describe
     "Fib"
-    (it "Iterative" (shouldReturn (compileAndRun "Fib.hs" "Fib") ()))
+    (it
+       "Iterative"
+       (do steps <- compileAndRun "Fib.hs" "Fib"
+           shouldReturn
+             (runConduit (steps .| CL.consume))
+             [ BeginConStep (DataConId 5)
+             , LitStep (IntLit 20365011074)
+             , EndConStep
+             ]))
 
-compileAndRun :: String -> ByteString -> IO ()
+compileAndRun :: String -> ByteString -> IO (ConduitT () Step IO ())
 compileAndRun fileName moduleName =
   runGhc
     (do setModuleGraph [fileName]
@@ -45,7 +55,8 @@ compileAndRun fileName moduleName =
         libraryGlobals <- foldM bindGlobal mempty std
         result <- compileModuleGraph options
         case result of
-          Left err -> showErrors err
+          Left err -> do showErrors err
+                         error "Bailign out."
           Right (index, sourceGlobals) -> do
             let name =
                   Name
@@ -64,14 +75,40 @@ compileAndRun fileName moduleName =
                           globals
                           mempty
                           (closureExpr closure)
-                      printWhnf (reverseIndex index) globals whnf
+                      pure (stepSource (reverseIndex index) globals whnf)
                     Just (RhsCon con) -> do
                       whnf <- evalCon mempty con
-                      printWhnf (reverseIndex index) globals whnf
+                      pure (stepSource (reverseIndex index) globals whnf)
                     Just clj ->
-                      putStrLn
+                      error
                         ("The expression should take no arguments: " ++ show clj)
-                    Nothing -> putStrLn ("Couldn't find " <> displayName name)))
+                    Nothing -> error ("Couldn't find " <> displayName name)))
+
+data Step
+  = LitStep Lit
+  | BeginConStep DataConId
+  | EndConStep
+  | FunStep (Map LocalVarId Box) [LocalVarId] (Expr)
+  deriving (Show, Eq)
+
+stepSource ::
+     MonadIO m
+  => ReverseIndex
+  -> Map GlobalVarId Box
+  -> Whnf
+  -> ConduitT () Step m ()
+stepSource index globals =
+  \case
+    LitWhnf lit -> yield (LitStep lit)
+    ConWhnf dataConId boxes -> do
+      yield (BeginConStep dataConId)
+      mapM_
+        (\box -> do
+           whnf <- liftIO (evalBox index globals box)
+           stepSource index globals whnf)
+        boxes
+      yield EndConStep
+    FunWhnf locals params expr -> yield (FunStep locals params expr)
 
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 printWhnf index globals =
@@ -109,9 +146,9 @@ data Whnf
   = LitWhnf Lit
   | ConWhnf DataConId [Box]
   | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
-  deriving (Show)
+  deriving (Show, Eq)
 
-newtype Box = Box { boxIORef :: IORef Thunk }
+newtype Box = Box { boxIORef :: IORef Thunk } deriving (Eq)
 instance Show Box where show _ = "Box"
 
 data Thunk
