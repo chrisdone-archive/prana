@@ -209,6 +209,20 @@ evalExpr index globals locals0 = do
                                  then 1
                                  else 0)))
                     _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+                IntLtOp ->
+                  case args of
+                    [arg1, arg2] -> do
+                      i <- evalIntArg index globals locals arg1
+                      i2 <- evalIntArg index globals locals arg2
+                      -- print (show i ++ " <# " ++ show i2)
+                      let !r = i <= i2
+                      pure
+                        (LitWhnf
+                           (IntLit
+                              (if r
+                                 then 1
+                                 else 0)))
+                    _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
                 IntAddOp ->
                   case args of
                     [arg1, arg2] -> do

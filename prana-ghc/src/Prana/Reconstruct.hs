@@ -205,6 +205,7 @@ fromPrimOp =
   \case
     PrimOp.IntNegOp -> IntNegOp
     PrimOp.IntEqOp -> IntEqOp
+    PrimOp.IntLtOp -> IntLtOp
     PrimOp.IntAddOp -> IntAddOp
     PrimOp.IntSubOp -> IntSubOp
     PrimOp.TagToEnumOp -> TagToEnumOp

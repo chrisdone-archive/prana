@@ -195,6 +195,7 @@ data PrimOp
   | IntAddOp
   | IntSubOp
   | IntEqOp
+  | IntLtOp
   | TagToEnumOp
   deriving (Show, Eq, Generic)
 
