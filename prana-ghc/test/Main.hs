@@ -24,14 +24,17 @@ import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
-import           Test.Hspec (hspec, Spec)
+import           Test.Hspec (shouldReturn, it, describe, hspec, Spec)
 
 main :: IO ()
 main =
   hspec spec
 
 spec :: Spec
-spec = pure ()
+spec =
+  describe
+    "Fib"
+    (it "Iterative" (shouldReturn (compileAndRun "Fib.hs" "Fib") ()))
 
 compileAndRun :: String -> ByteString -> IO ()
 compileAndRun fileName moduleName =
@@ -39,10 +42,11 @@ compileAndRun fileName moduleName =
     (do setModuleGraph [fileName]
         options <- getOptions
         std <- loadStandardPackages options
+        libraryGlobals <- foldM bindGlobal mempty std
         result <- compileModuleGraph options
         case result of
           Left err -> showErrors err
-          Right (index, bindings0) -> do
+          Right (index, sourceGlobals) -> do
             let name =
                   Name
                     { namePackage = "main"
@@ -51,13 +55,8 @@ compileAndRun fileName moduleName =
                     , nameUnique = Exported
                     }
             liftIO
-              (do let bindings = std <> bindings0
-                  !globals <-
-                    foldM
-                      (\globals binding -> bindGlobal binding globals)
-                      mempty
-                      bindings
-                  case lookupGlobalBindingRhsByName index bindings0 name of
+              (do globals <- foldM bindGlobal libraryGlobals sourceGlobals
+                  case lookupGlobalBindingRhsByName index sourceGlobals name of
                     Just (RhsClosure closure@Closure {closureParams = []}) -> do
                       whnf <-
                         evalExpr
@@ -569,22 +568,23 @@ bindLocal localBinding locals =
           pairs
       pure locals'
 
-bindGlobal :: GlobalBinding -> Map GlobalVarId Box -> IO (Map GlobalVarId Box)
-bindGlobal globalBinding globals =
-  case globalBinding of
-    GlobalNonRec var rhs -> do
-      box <- boxRhs mempty rhs
-      let globals' = M.insert var box globals
-      pure globals'
-    GlobalRec pairs -> do
-      globals' <-
-        foldM
-          (\acc (var, rhs) -> do
-             box <- boxRhs mempty rhs
-             pure (M.insert var box acc))
-          globals
-          pairs
-      pure globals'
+bindGlobal :: MonadIO m => Map GlobalVarId Box -> GlobalBinding -> m (Map GlobalVarId Box)
+bindGlobal globals globalBinding =
+  liftIO
+    (case globalBinding of
+       GlobalNonRec var rhs -> do
+         box <- boxRhs mempty rhs
+         let globals' = M.insert var box globals
+         pure globals'
+       GlobalRec pairs -> do
+         globals' <-
+           foldM
+             (\acc (var, rhs) -> do
+                box <- boxRhs mempty rhs
+                pure (M.insert var box acc))
+             globals
+             pairs
+         pure globals')
 
 boxArg :: Map LocalVarId Box -> Arg -> IO Box
 boxArg locals =

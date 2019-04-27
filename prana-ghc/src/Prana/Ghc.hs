@@ -137,7 +137,11 @@ runGhc action =
   GHC.defaultErrorHandler
     DynFlags.defaultFatalMessager
     DynFlags.defaultFlushOut
-    (GHC.runGhc (Just GHC.Paths.libdir) action)
+    (GHC.runGhc
+       (Just GHC.Paths.libdir)
+       (do dflags <- GHC.getSessionDynFlags
+           _ <- GHC.setSessionDynFlags dflags
+           action))
 
 -- | Try to set the module graph.
 setModuleGraph :: [FilePath] -> GHC.Ghc ()
