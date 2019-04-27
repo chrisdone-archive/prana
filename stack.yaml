@@ -2,5 +2,6 @@ resolver: lts-12.12
 packages:
 - prana-types
 - prana-ghc
+- prana-interpreter
 extra-deps:
 - weigh-0.0.14
