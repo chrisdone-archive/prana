@@ -24,7 +24,6 @@ import qualified Data.Map.Strict as M
 import           GHC.Exts
 import           Prana.Ghc
 import           Prana.Index
-import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import           Test.Hspec (runIO, shouldReturn, it, describe, hspec, Spec)
@@ -75,6 +74,7 @@ spec =
                 , EndConStep
                 ]))
 
+getDataConI# :: Applicative f => Index -> f DataConId
 getDataConI# index =
   case M.lookup
          (Name
