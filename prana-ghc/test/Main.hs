@@ -36,15 +36,24 @@ spec :: Spec
 spec =
   describe
     "Fib"
-    (it
-       "Iterative"
-       (do steps <- compileAndRun "Fib.hs" "Fib"
-           shouldReturn
-             (runConduit (steps .| CL.consume))
-             [ BeginConStep (DataConId 5)
-             , LitStep (IntLit 20365011074)
-             , EndConStep
-             ]))
+    (do it
+          "Iterative"
+          (do steps <- compileAndRun "test/assets/FibIterative.hs" "FibIterative"
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep (DataConId 5)
+                , LitStep (IntLit 12586269025)
+                , EndConStep
+                ])
+        it
+          "Codata"
+          (do steps <- compileAndRun "test/assets/FibCodata.hs" "FibCodata"
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep (DataConId 5)
+                , LitStep (IntLit 12586269025)
+                , EndConStep
+                ]))
 
 compileAndRun :: String -> ByteString -> IO (ConduitT () Step IO ())
 compileAndRun fileName moduleName =
