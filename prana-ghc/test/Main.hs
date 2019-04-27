@@ -14,25 +14,30 @@ module Main where
 
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
+import           Data.ByteString (ByteString)
 import           Data.IORef
 import           Data.List
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import qualified DynFlags
-import           Formatting
-import           Formatting.Clock
 import qualified GHC
-import qualified GHC.Paths
 import           GHC.Exts
+import qualified GHC.Paths
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
-import           System.Clock
-import           Weigh
+import           Test.Hspec (hspec, Spec)
 
 main :: IO ()
 main =
+  hspec spec
+
+spec :: Spec
+spec = pure ()
+
+compileAndRun :: String -> ByteString -> IO ()
+compileAndRun fileName moduleName =
   GHC.defaultErrorHandler
     DynFlags.defaultFatalMessager
     DynFlags.defaultFlushOut
@@ -40,92 +45,50 @@ main =
        (Just GHC.Paths.libdir)
        (do dflags <- GHC.getSessionDynFlags
            _ <- GHC.setSessionDynFlags dflags
-           target <- GHC.guessTarget "Fib.hs" Nothing
+           target <- GHC.guessTarget fileName Nothing
            GHC.setTargets [target]
            _ <- GHC.load GHC.LoadAllTargets
            options <- liftIO getOptions
            result <- compileModuleGraph options
            case result of
-             Right (index, bindings0) -> do
-               -- liftIO (print bindings0)
+             Right (index, bindings0)
+                             -- liftIO (print bindings0)
+              -> do
                let name =
                      Name
                        { namePackage = "main"
-                       , nameModule = "Fib"
+                       , nameModule = moduleName
                        , nameName = "it"
                        , nameUnique = Exported
                        }
                liftIO
-                 (case lookupGlobalBindingRhsByName index bindings0 name of
-                    Just (RhsClosure closure@Closure {closureParams = []}) -> do
-                      ghcPrim <- loadLibrary options "ghc-prim"
-                      integerGmp <- loadLibrary options "integer-gmp"
-                      base <- loadLibrary options "base"
-                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
-                      -- let bindings = bindings0
-                      !globals <-
-                        foldM
-                          (\globals binding -> bindGlobal binding globals)
-                          mempty
-                          bindings
-                      putStrLn (displayName name ++ " = ")
-
-                      (bytes, gcs, liveBytes, maxByte) <-
-                        weighAction
-                          (const
-                             (do let !rev = (reverseIndex index)
-                                 start <- getTime Monotonic
-                                 whnf <-
-                                   evalExpr
-                                     rev
-                                     globals
-                                     mempty
-                                     (closureExpr closure)
-                                 end <- getTime Monotonic
-                                 fprint (timeSpecs % "\n") start end
-                                 printWhnf (reverseIndex index) globals whnf
-                                 putStrLn ""))
-                          ()
-
-                      putStrLn
-                        (reportGroup
-                           defaultConfig
-                             { configColumns =
-                                 [Case, Allocated, GCs, Max]
-                             }
-                           ""
-                           [ Singleton
-                               ( Weight
-                                   { weightLabel = "Eval"
-                                   , weightAllocatedBytes = bytes
-                                   , weightGCs = gcs
-                                   , weightLiveBytes = liveBytes
-                                   , weightMaxBytes = maxByte
-                                   }
-                               , Nothing)
-                           ])
-                    Just (RhsCon con) -> do
-                      ghcPrim <- loadLibrary options "ghc-prim"
-                      integerGmp <- loadLibrary options "integer-gmp"
-                      base <- loadLibrary options "base"
-                      let bindings = ghcPrim <> integerGmp <> base <> bindings0
-                      -- let bindings = bindings0
-                      !globals <-
-                        foldM
-                          (\globals binding -> bindGlobal binding globals)
-                          mempty
-                          bindings
-                      putStrLn
-                        (displayName name ++
-                         " = " ++ prettyRhs (reverseIndex index) (RhsCon con))
-                      putStrLn ("> " ++ displayName name)
-                      whnf <- evalCon mempty con
-                      printWhnf (reverseIndex index) globals whnf
-                      putStrLn ""
-                    Just clj ->
-                      putStrLn
-                        ("The expression should take no arguments: " ++ show clj)
-                    Nothing -> putStrLn ("Couldn't find " <> displayName name))
+                 (do ghcPrim <- loadLibrary options "ghc-prim"
+                     integerGmp <- loadLibrary options "integer-gmp"
+                     base <- loadLibrary options "base"
+                     let bindings = ghcPrim <> integerGmp <> base <> bindings0
+                     !globals <-
+                       foldM
+                         (\globals binding -> bindGlobal binding globals)
+                         mempty
+                         bindings
+                     case lookupGlobalBindingRhsByName index bindings0 name of
+                       Just (RhsClosure closure@Closure {closureParams = []}) -> do
+                         whnf <-
+                           evalExpr
+                             (reverseIndex index)
+                             globals
+                             mempty
+                             (closureExpr closure)
+                         printWhnf (reverseIndex index) globals whnf
+                       Just (RhsCon con) -> do
+                         whnf <- evalCon mempty con
+                         printWhnf (reverseIndex index) globals whnf
+                       Just clj ->
+                         putStrLn
+                           ("The expression should take no arguments: " ++
+                            show clj)
+                       Nothing ->
+                         putStrLn ("Couldn't find " <> displayName name))
              Left err -> showErrors err))
 
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
