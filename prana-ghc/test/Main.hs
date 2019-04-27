@@ -420,7 +420,11 @@ evalExpr index globals locals0 = do
                       Nothing -> error "Inexhaustive pattern match!"
                       Just defaultExpr -> go locals1 defaultExpr
                in loop alts
-            _ -> error ("TODO: implement alts:\n" <> prettyAlts index dataAlts)
+            PolymorphicAlt rhsExpr -> do
+              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
+              let locals1 = M.insert caseExprVarId caseExprBox locals
+              go locals1 rhsExpr
 
 evalExprToCon :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
 evalExprToCon index globals locals0 expr = do
