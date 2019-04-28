@@ -348,7 +348,7 @@ evalPrimOp index globals locals primOp args typ =
       case args of
         [arg1, arg2] -> do
           I# i <- evalIntArg index globals locals arg1
-          I# i2 <-  evalIntArg index globals locals arg1
+          I# i2 <-  evalIntArg index globals locals arg2
           case subIntC# i i2 of
             (# x#, y# #) -> do
               xBox <- boxWhnf (LitWhnf (IntLit (I# x#)))
