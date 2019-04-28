@@ -33,20 +33,6 @@ library
       async
   default-language: Haskell2010
 
-test-suite prana-test
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Main.hs
-  build-depends:       base
-                     , prana-types
-                     , ghc
-                     , hspec
-                     , ghc-paths, weigh,
-      validation, prana-ghc, containers, mtl,
-     bytestring, formatting, clock, conduit
-  ghc-options:         -Wall -rtsopts -O2
-  default-language:    Haskell2010
-
 executable prana-ghc
   default-language:
     Haskell2010

@@ -24,25 +24,6 @@ import           Prana.Rename
 import           Prana.Types
 import qualified StgSyn
 
-data Index =
-  Index
-    { indexGlobals :: Map Name GlobalVarId
-    , indexLocals :: Map Name LocalVarId
-    , indexDataCons :: Map Name DataConId
-    }
-  deriving (Generic, Show)
-instance Binary Index
-
-data ReverseIndex =
-  ReverseIndex
-    { reverseIndexDataCons :: Map DataConId Name
-    , reverseIndexGlobals :: Map GlobalVarId Name
-    , reverseIndexLocals :: Map LocalVarId Name
-    , reverseIndexIndex :: Index
-    , reverseIndexTrue :: DataConId
-    , reverseIndexFalse :: DataConId
-    }
-
 updateIndex ::
      Monad m
   => [StgSyn.GenStgTopBinding Name Name]

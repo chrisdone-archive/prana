@@ -11,5 +11,6 @@ library
   build-depends:
       base >=4.7 && <5,
       bytestring,
-      binary
+      binary,
+      containers
   default-language: Haskell2010

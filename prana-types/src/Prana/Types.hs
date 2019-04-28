@@ -9,11 +9,12 @@ module Prana.Types where
 
 import           Data.Binary
 import           Data.ByteString (ByteString)
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import           Data.Data (Data, Typeable)
 import           Data.Int
+import           Data.Map.Strict (Map)
+import qualified Data.Map.Strict as M
 import           GHC.Generics
 
 data GlobalBinding
@@ -222,6 +223,25 @@ data Unique
   | Unexported !Int64
   deriving (Show, Ord, Eq, Generic)
 instance Binary Unique
+
+data Index =
+  Index
+    { indexGlobals :: Map Name GlobalVarId
+    , indexLocals :: Map Name LocalVarId
+    , indexDataCons :: Map Name DataConId
+    }
+  deriving (Generic, Show)
+instance Binary Index
+
+data ReverseIndex =
+  ReverseIndex
+    { reverseIndexDataCons :: Map DataConId Name
+    , reverseIndexGlobals :: Map GlobalVarId Name
+    , reverseIndexLocals :: Map LocalVarId Name
+    , reverseIndexIndex :: Index
+    , reverseIndexTrue :: DataConId
+    , reverseIndexFalse :: DataConId
+    }
 
 --------------------------------------------------------------------------------
 -- Binary instances
