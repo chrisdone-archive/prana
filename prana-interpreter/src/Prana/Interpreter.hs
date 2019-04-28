@@ -2,13 +2,25 @@
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE RecursiveDo #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Prana.Interpreter where
+module Prana.Interpreter
+
+  (
+  -- * Setting up the environment
+    bindGlobal
+  -- * Evaluation functions
+  , evalExpr
+  , evalCon
+  , evalBox
+  -- * Data types
+  , Whnf(..)
+  , Thunk(..)
+  , Box(..)
+  ) where
 
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Reader
@@ -32,12 +44,6 @@ data Thunk
   = VariableThunk (Map LocalVarId Box) SomeVarId
   | ExpressionThunk (Map LocalVarId Box) Expr
   | WhnfThunk Whnf
-
-data Env =
-  Env
-    { envLocals :: Map LocalVarId Box
-    , envGlobals :: Map GlobalVarId Box
-    }
 
 evalExpr :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO Whnf
 evalExpr index globals locals0 = do
