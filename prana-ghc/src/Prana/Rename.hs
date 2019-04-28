@@ -20,55 +20,25 @@ module Prana.Rename
 import           Control.Exception
 import qualified CoreSyn
 import           Data.Bifunctor.TH
-import           Data.Binary
 import           Data.Bitraversable
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
 import           Data.Char
-import           Data.Int
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
-import           Debug.Trace
 import qualified FastString
-import           GHC.Generics
 import qualified Id
 import qualified Module
 import qualified Name
 import qualified Outputable
+import           Prana.Types
 import qualified StgSyn
 import qualified TyCon
 import qualified Unique
 import qualified Var
-
-displayName :: Name -> String
-displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)
-  where ext = case u of
-                Exported -> ""
-                Unexported i -> "_" <> S8.pack (show i) <> ""
-
--- | A syntactically globally unique name.
-data Name =
-  Name
-    { namePackage :: {-# UNPACK #-}!ByteString
-    , nameModule :: {-# UNPACK #-}!ByteString
-    , nameName :: {-# UNPACK #-}!ByteString
-    , nameUnique :: !Unique
-    }
-  deriving (Show, Ord, Eq, Generic)
-instance Binary Name
-
--- | Names can be referred to by their package-module-name
--- combination. However, if it's a local name, then we need an extra
--- unique number to differentiate different instances of the same name
--- string in the same module (e.g. @xs@).
-data Unique
-  = Exported
-  | Unexported !Int64
-  deriving (Show, Ord, Eq, Generic)
-instance Binary Unique
 
 -- | Some failure in the rename process.
 data RenameFailure =

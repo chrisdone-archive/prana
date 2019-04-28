@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -7,9 +8,10 @@
 module Prana.Types where
 
 import           Data.Binary
-import           Data.Binary
+import           Data.ByteString (ByteString)
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as S
+import qualified Data.ByteString.Char8 as S8
 import           Data.Data (Data, Typeable)
 import           Data.Int
 import           GHC.Generics
@@ -193,6 +195,33 @@ data PrimOp
   | IntSubCOp
   | TagToEnumOp
   deriving (Show, Eq, Generic)
+
+displayName :: Name -> String
+displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)
+  where ext = case u of
+                Exported -> ""
+                Unexported i -> "_" <> S8.pack (show i) <> ""
+
+-- | A syntactically globally unique name.
+data Name =
+  Name
+    { namePackage :: {-# UNPACK #-}!ByteString
+    , nameModule :: {-# UNPACK #-}!ByteString
+    , nameName :: {-# UNPACK #-}!ByteString
+    , nameUnique :: !Unique
+    }
+  deriving (Show, Ord, Eq, Generic)
+instance Binary Name
+
+-- | Names can be referred to by their package-module-name
+-- combination. However, if it's a local name, then we need an extra
+-- unique number to differentiate different instances of the same name
+-- string in the same module (e.g. @xs@).
+data Unique
+  = Exported
+  | Unexported !Int64
+  deriving (Show, Ord, Eq, Generic)
+instance Binary Unique
 
 --------------------------------------------------------------------------------
 -- Binary instances
