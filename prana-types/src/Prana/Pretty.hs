@@ -112,9 +112,10 @@ prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
 prettyDataConId :: ReverseIndex -> DataConId -> String
 prettyDataConId index dataConId =
   (case M.lookup dataConId (reverseIndexDataCons index) of
-     Nothing -> case dataConId of
-                  UnboxedTupleConId n -> "(#" ++ show (n-1) ++ "#)"
-                  _ -> error ("Couldn't find data con name! BUG!" ++ show dataConId)
+     Nothing ->
+       case dataConId of
+         UnboxedTupleConId n -> "(#" ++ replicate (n - 1) ',' ++ "#)"
+         _ -> error ("Couldn't find data con name! BUG!" ++ show dataConId)
      Just name -> show (displayName name))
 
 prettyArg :: ReverseIndex -> Arg -> [Char]
