@@ -6,6 +6,7 @@ cabal-version:  >= 1.10
 library
   exposed-modules:
       Prana.Interpreter
+      Prana.Interpreter.Types
   hs-source-dirs:
       src
   build-depends:
