@@ -13,8 +13,8 @@ Pure-Haskell goals:
 |Clean STG from GHC|  :heavy_check_mark: |
 |Interpreter prototype for AST| :heavy_check_mark: |
 |Basic test suite for interpreter| :heavy_check_mark: |
-|Move interpreter into `prana-interpret` library| :construction: |
-|Get code coverage to near 100%| – |
+|Move interpreter into `prana-interpret` library| :heavy_check_mark: |
+|Get code coverage to near 100%| :construction: |
 |Automated pure primops derivation| – |
 |Move from `binary` to `persist`| – |
 
