@@ -8,9 +8,9 @@ it = fibs FibCodata.!! 49
 fibs :: [Int]
 fibs = 1 : 1 : zipWith (+) fibs (tail fibs)
 
-(!!) :: [p] -> Int -> p
+-- (!!) :: [p] -> Int -> p
 xs !! n
-  | otherwise =
+  =
     foldr
       (\x r k ->
          case k of
