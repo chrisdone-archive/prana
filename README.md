@@ -8,44 +8,44 @@ An interpreter for GHC STG written in Haskell itself
 
 Pure-Haskell goals:
 
-|Milestone|Status|
-|:---|:---|
-|Clean STG from GHC|  :heavy_check_mark: |
-|Interpreter prototype for AST| :heavy_check_mark: |
-|Basic test suite for interpreter| :heavy_check_mark: |
-|Move interpreter into `prana-interpret` library| :heavy_check_mark: |
-|Get code coverage to near 100%| :construction: |
-|Automated pure primops derivation| – |
-|Move from `binary` to `persist`| – |
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|Clean STG from GHC|  :heavy_check_mark: | Laborious |
+|Interpreter prototype for AST| :heavy_check_mark: | Fairly easy |
+|Basic test suite for interpreter| :heavy_check_mark: | Easy |
+|Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
+|Get code coverage to near 100%| :construction: | Detailed |
+|Automated pure primops derivation| – | Fairly straight-forward |
+|Move from `binary` to `persist`| – | Easy |
 
 GHC Haskell goals:
 
-|Milestone|Status|
-|:---|:---|
-|Add hotswapping support| – |
-|IO primops| – |
-|Runtime exceptions (`raise#`)| – |
-|FFI support| – |
-|Threaded runtime/concurrency| – |
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|Add hotswapping support| – | Requires exploration/experiment |
+|IO primops| – | Fairly straight-forward |
+|Runtime exceptions (`raise#`)| – | Tricky, space for UX design |
+|FFI support| – | Requires learning but should design itself |
+|Threaded runtime/concurrency| – | Tricky |
 
 Parallel goals:
 
-|Milestone|Status|
-|:---|:---|
-|Reproducible (Docker) build of GHC base packages| :construction: |
-|Analysis package `prana-analysis`| – |
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|Reproducible (Docker) build of GHC base packages| :construction: | Takes work |
+|Analysis package `prana-analysis`| – | Fairly straight-forward |
 
 Optional goals:
 
-|Milestone|Status|
-|:---|:---|
-|Optimization of interpreter| – |
-|Allocation tests| – |
-|CPU instruction tests| – |
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|Optimization of interpreter| – | Detailed |
+|Allocation tests| – | Easy |
+|CPU instruction tests| – | Easy |
 
 Dream goals:
 
-|Milestone|Status|
-|:---|:---|
-|Prana web service| – |
-|JavaScript implementation| – |
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|Prana web service| – | Straight-forward |
+|JavaScript implementation| – | Takes some work |
