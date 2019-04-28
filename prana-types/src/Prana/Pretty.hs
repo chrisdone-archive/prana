@@ -93,7 +93,7 @@ prettyAlts index =
 prettyLocalVar :: ReverseIndex -> LocalVarId -> String
 prettyLocalVar index localVarId =
   case M.lookup localVarId (reverseIndexLocals index) of
-    Nothing -> error "Couldn't find name! BUG!"
+    Nothing -> error "Couldn't find local name! BUG!"
     Just name -> show (displayName name)
 
 prettySomeVarId :: ReverseIndex -> SomeVarId -> String
@@ -102,7 +102,7 @@ prettySomeVarId index =
     SomeLocalVarId localVarId -> prettyLocalVar index localVarId
     SomeGlobalVarId globalVarId ->
       (case M.lookup globalVarId (reverseIndexGlobals index) of
-         Nothing -> error "Couldn't find name! BUG!"
+         Nothing -> error "Couldn't find global name! BUG!"
          Just name -> show (displayName name))
     w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
 
@@ -112,7 +112,9 @@ prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
 prettyDataConId :: ReverseIndex -> DataConId -> String
 prettyDataConId index dataConId =
   (case M.lookup dataConId (reverseIndexDataCons index) of
-     Nothing -> error ("Couldn't find name! BUG!" ++ show dataConId)
+     Nothing -> case dataConId of
+                  UnboxedTupleConId n -> "(#" ++ show (n-1) ++ "#)"
+                  _ -> error ("Couldn't find data con name! BUG!" ++ show dataConId)
      Just name -> show (displayName name))
 
 prettyArg :: ReverseIndex -> Arg -> [Char]
