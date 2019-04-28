@@ -236,11 +236,8 @@ evalExpr index globals locals0 = do
               caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
               let loop (DataAlt altDataConId localVarIds rhsExpr:rest) = do
-                    -- putStrLn (unlines ["dataConId:" ++ show dataConId
-                    --                   ,"altDataConId:" ++ show altDataConId
-                    --                   ])
                     if dataConId == altDataConId
-                      then if length boxes == length localVarIds
+                      then if length boxes == length localVarIds && length boxes == size
                              then do
                                locals' <-
                                  foldM
