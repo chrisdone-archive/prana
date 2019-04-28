@@ -1,4 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE MagicHash #-}
@@ -341,21 +340,18 @@ evalPrimOp index globals locals primOp args typ =
     UnknownPrimOp string ->
       error
         ("Unimplemented primop: " ++
-         string ++
-         " (type: " ++ show typ ++ "), args were: " ++ show args)
+         string ++ " (type: " ++ show typ ++ "), args were: " ++ show args)
     -- Int# -> Int# -> (# Int#, Int# #)
     IntSubCOp ->
       case args of
         [arg1, arg2] -> do
           I# i <- evalIntArg index globals locals arg1
-          I# i2 <-  evalIntArg index globals locals arg2
+          I# i2 <- evalIntArg index globals locals arg2
           case subIntC# i i2 of
             (# x#, y# #) -> do
               xBox <- boxWhnf (LitWhnf (IntLit (I# x#)))
               yBox <- boxWhnf (LitWhnf (IntLit (I# y#)))
-              pure
-                (ConWhnf (UnboxedTupleConId 2)
-                         [xBox, yBox])
+              pure (ConWhnf (UnboxedTupleConId 2) [xBox, yBox])
         _ -> error ("Invalid arguments to IntSubCOp: " ++ show args)
     IntEqOp ->
       case args of
@@ -416,15 +412,11 @@ evalPrimOp index globals locals primOp args typ =
           (I# ii) <- evalIntArg index globals locals arg
           case typ of
             BoolType -> do
-              let bool = tagToEnum# @Bool ii
-                  !con = case bool of
-                           False -> reverseIndexFalse index
-                           True -> reverseIndexTrue index
-              -- print (show i ++ " tagToEnum => " ++ show bool)
-              pure
-                (ConWhnf
-                   con
-                   [])
+              let bool = tagToEnum# ii :: Bool
+                  !con =
+                    case bool of
+                      False -> reverseIndexFalse index
+                      True -> reverseIndexTrue index
+              pure (ConWhnf con [])
             _ -> error "Unknown type for tagToEnum."
-        _ ->
-          error ("Invalid arguments to TagToEnumOp: " ++ show args)
+        _ -> error ("Invalid arguments to TagToEnumOp: " ++ show args)
