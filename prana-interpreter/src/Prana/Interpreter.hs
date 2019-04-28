@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE MagicHash #-}
@@ -412,17 +413,17 @@ evalPrimOp index globals locals primOp args typ =
     TagToEnumOp ->
       case args of
         [arg] -> do
-          i <- evalIntArg index globals locals arg
-          {-print (show i ++ " tagToEnum => " ++ ((case i of
-                                                   0 -> "False"
-                                                   _ -> "True")))-}
+          (I# ii) <- evalIntArg index globals locals arg
           case typ of
-            BoolType ->
+            BoolType -> do
+              let bool = tagToEnum# @Bool ii
+                  !con = case bool of
+                           False -> reverseIndexFalse index
+                           True -> reverseIndexTrue index
+              -- print (show i ++ " tagToEnum => " ++ show bool)
               pure
                 (ConWhnf
-                   (case i of
-                      0 -> reverseIndexFalse index
-                      _ -> reverseIndexTrue index)
+                   con
                    [])
             _ -> error "Unknown type for tagToEnum."
         _ ->

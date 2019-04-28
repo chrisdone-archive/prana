@@ -104,7 +104,7 @@ prettySomeVarId index =
       (case M.lookup globalVarId (reverseIndexGlobals index) of
          Nothing -> error "Couldn't find global name! BUG!"
          Just name -> show (displayName name))
-    w@WiredInVal {} -> error ("TODO: Wired in: " ++ show w)
+    w@WiredInVal {} -> show w -- error ("TODO: Wired in: " ++ show w)
 
 prettyList :: [[Char]] -> [Char]
 prettyList xs = "[" ++ intercalate "\n," (map indent1 xs) ++ "]"
