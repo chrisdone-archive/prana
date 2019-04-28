@@ -147,6 +147,7 @@ data Arg
 
 data Lit
   = IntLit !Int -- Machine int.
+  | StringLit !ByteString
   | UnknownLit
   deriving (Show, Eq, Generic)
 

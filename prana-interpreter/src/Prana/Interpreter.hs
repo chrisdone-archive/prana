@@ -66,7 +66,10 @@ bindGlobal globals globalBinding =
                 pure (M.insert var box acc))
              globals
              pairs
-         pure globals')
+         pure globals'
+       GlobalStringLit globalVarId byteString -> do
+         box <- boxWhnf (LitWhnf (StringLit byteString))
+         pure (M.insert globalVarId box globals))
 
 --------------------------------------------------------------------------------
 -- Boxing values
@@ -211,7 +214,7 @@ evalExpr index globals locals0 = do
                       Nothing -> error "Inexhaustive pattern match!"
                       Just defaultExpr -> go locals1 defaultExpr
                in loop alts
-            PrimAlts primRep litAlts mdefaultExpr -> do
+            PrimAlts _primRep litAlts mdefaultExpr -> do
               whnf <- go locals expr
               caseExprBox <- boxWhnf whnf
               let locals1 = M.insert caseExprVarId caseExprBox locals
@@ -265,10 +268,9 @@ evalExprToCon index globals locals0 expr = do
   whnf <- evalExpr index globals locals0 expr
   case whnf of
     ConWhnf dataConId boxes -> pure (dataConId, boxes)
-    FunWhnf locals params expr ->
+    FunWhnf{} ->
       error "Unexpected function for data alt case scrutinee."
     LitWhnf {} -> error "Unexpected literal for data alt case scrutinee."
-
 
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do

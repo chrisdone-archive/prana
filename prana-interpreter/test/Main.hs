@@ -170,7 +170,7 @@ printWhnf index globals =
            printWhnf index globals whnf)
         (zip [0 ..] boxes)
       putStr ")"
-    FunWhnf locals params expr -> do
+    FunWhnf {} -> do
       putStr "<function>"
 
 deepseqWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
