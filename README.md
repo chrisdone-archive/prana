@@ -4,6 +4,10 @@ An interpreter for GHC STG written in Haskell itself
 
 :construction: Prana is under construction.
 
+See
+[test/assets/](https://github.com/chrisdone/prana/tree/master/prana-interpreter/test/assets)
+under `prana-interpreter` for example programs that run with prana.
+
 ## Milestones
 
 Pure-Haskell goals:
