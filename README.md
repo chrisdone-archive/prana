@@ -15,6 +15,7 @@ Pure-Haskell goals:
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
 |Get code coverage to near 100%| :construction: | Detailed |
+|Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
 |Automated pure primops derivation| – | Fairly straight-forward |
 |Move from `binary` to `persist`| – | Easy |
 
