@@ -22,6 +22,7 @@ Pure-Haskell goals:
 |Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
 |Automated pure primops derivation| – | Fairly straight-forward |
 |Move from `binary` to `persist`| – | Easy |
+|Generate warnings about unimplemented primops| – | Straight-forward |
 
 GHC Haskell goals:
 
