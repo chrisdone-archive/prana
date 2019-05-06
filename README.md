@@ -54,3 +54,56 @@ Dream goals:
 |:---|:---|:---|
 |Prana web service| – | Straight-forward |
 |JavaScript implementation| – | Takes some work |
+
+## Primitive types
+
+The following are planned to be implemented as standard:
+
+|Milestone|Status|
+|:---|:---|
+|`Char#`|-|
+|`Int#`|-|
+|`Int8#`|-|
+|`Word8#`|-|
+|`Int16#`|-|
+|`Word16#`|-|
+|`Word#`|-|
+|`Int64#`|-|
+|`Word64#`|-|
+|`Double#`|-|
+|`Float#`|-|
+|`Array# a`|-|
+|`MutableArray# s a`|-|
+|`SmallArray# a`|-|
+|`SmallMutableArray# s a`|-|
+|`ByteArray#`|-|
+|`MutableByteArray# s`|-|
+|`ArrayArray#`|-|
+|`MutableArrayArray# s`|-|
+|`Addr#`|-|
+|`MutVar# s a`|-|
+|`Weak# b`|-|
+|`StablePtr# a`|-|
+|`StableName# a`|-|
+
+The following are needed for IO:
+
+|Milestone|Status|
+|:---|:---|
+|`State# s`|-|
+|`RealWorld`|-|
+|`ThreadId#`|-|
+
+The following are more exotic types to be implemented later:
+
+|Milestone|Status|
+|:---|:---|
+|`TVar# s a`|-|
+|`MVar# s a`|-|
+|`Compact#`|-|
+
+The following don't need implementing or won't be implemented:
+
+* `BCO#`
+* `Proxy# a`
+* `VECTOR`
