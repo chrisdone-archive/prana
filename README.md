@@ -28,10 +28,11 @@ GHC Haskell goals:
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
-|Add hotswapping support| – | Requires exploration/experiment |
 |IO primops| – | Fairly straight-forward |
 |Runtime exceptions (`raise#`)| – | Tricky, space for UX design |
 |FFI support| – | Requires learning but should design itself |
+|Run [base package tests](https://github.com/ghc/packages-base/tree/master/tests) | – | Fairly straight-forward |
+|Add hotswapping support| – | Requires exploration/experiment |
 |Threaded runtime/concurrency| – | Tricky |
 
 Parallel goals:
