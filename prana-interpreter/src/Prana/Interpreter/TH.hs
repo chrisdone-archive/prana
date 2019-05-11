@@ -6,12 +6,14 @@
 module Prana.Interpreter.TH
   (Prim (..)
   ,PrimTy(..)
-  ,primOpAlt)
+  ,primOpAlt
+  ,op)
   where
 
+import Data.Bifunctor
 import Data.List
 import GHC.Exts
-import Language.Haskell.TH
+import Language.Haskell.TH hiding (Prim)
 import Prana.Interpreter.Types (Whnf(..))
 import Prana.Types (Lit(..))
 
@@ -22,23 +24,8 @@ data Prim =
     , primName :: Name
     }
 data PrimTy =
-  PrimTyI#
+  PrimTyInt#
   deriving (Show)
-
-{-
-
-Example:
-
-case args of
-  [arg1, arg2] -> do
-    i <- evalIntArg index globals locals arg1
-    i2 <- evalIntArg index globals locals arg2
-    -- print (show i ++ " +# " ++ show i2)
-    let !r = i - i2
-    pure (LitWhnf (IntLit r))
-  _ -> error ("Invalid arguments to IntSubOp: " ++ show args)
-
--}
 
 primOpAlt :: Prim -> Q Exp
 primOpAlt p =
@@ -52,7 +39,7 @@ primOpAlt p =
                  [ map
                      (\(result, (arg, ty)) ->
                         case ty of
-                          PrimTyI# ->
+                          PrimTyInt# ->
                             bindS
                               (conP 'I# [varP result])
                               [|evalIntArg index globals locals $(varE arg)|])
@@ -68,7 +55,7 @@ primOpAlt p =
                            []
                        ]
                    , case primReturnTy p of
-                       PrimTyI# ->
+                       PrimTyInt# ->
                          noBindS
                            (appE
                               (varE 'pure)
@@ -96,3 +83,24 @@ primOpAlt p =
     argName i _ = mkName ("arg_" ++ show i)
     mkresultName :: Int -> PrimTy -> Name
     mkresultName i ty = mkName ("result_" ++ show i ++ "_" ++ show ty)
+
+op :: Q Exp -> Q Exp
+op q = do
+  e <- q
+  case e of
+    SigE (VarE opName) typ ->
+      let (args, ret) = collect typ
+       in primOpAlt
+            Prim {primName = opName, primArgTys = args, primReturnTy = ret}
+    _ -> error "Form expected: name :: ty"
+  where
+    collect :: Type -> ([PrimTy], PrimTy)
+    collect (AppT (AppT ArrowT arg) result) = first (toPrim arg :) (collect result)
+    collect (ConT ty) = ([],toPrim (ConT ty))
+    collect (InfixT arg1 name arg2) = collect (AppT (AppT (ConT name) arg1) arg2)
+    collect _ = error "Malformed!"
+    toPrim (ConT ty) =
+      if ty == ''Int#
+        then PrimTyInt#
+        else error ("Unknown type: " ++ show ty)
+    toPrim t = error ("Expected type constructor here, but got " ++ show t)

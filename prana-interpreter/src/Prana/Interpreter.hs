@@ -121,8 +121,8 @@ evalExpr index globals locals0 = do
       pure whnf
     go' locals =
       \case
-        OpAppExpr op args typ ->
-          case op of
+        OpAppExpr expOp args typ ->
+          case expOp of
             PrimOp primOp ->
               evalPrimOp index globals locals primOp args typ
             OtherOp ->
@@ -357,41 +357,11 @@ evalPrimOp index globals locals primOp args typ =
               yBox <- boxWhnf (LitWhnf (IntLit (I# y#)))
               pure (ConWhnf (UnboxedTupleConId 2) [xBox, yBox])
         _ -> error ("Invalid arguments to IntSubCOp: " ++ show args)
-    IntEqOp ->
-      $(primOpAlt
-          (Prim
-             { primArgTys = [PrimTyI#, PrimTyI#]
-             , primReturnTy = PrimTyI#
-             , primName = '(==#)
-             }))
-    IntLtOp ->
-      $(primOpAlt
-          (Prim
-             { primArgTys = [PrimTyI#, PrimTyI#]
-             , primReturnTy = PrimTyI#
-             , primName = '(<#)
-             }))
-    IntAddOp ->
-      $(primOpAlt
-          (Prim
-             { primArgTys = [PrimTyI#, PrimTyI#]
-             , primReturnTy = PrimTyI#
-             , primName = '(+#)
-             }))
-    IntSubOp ->
-      $(primOpAlt
-          (Prim
-             { primArgTys = [PrimTyI#, PrimTyI#]
-             , primReturnTy = PrimTyI#
-             , primName = '(-#)
-             }))
-    IntNegOp ->
-      $(primOpAlt
-        (Prim
-           { primArgTys = [PrimTyI#]
-           , primReturnTy = PrimTyI#
-           , primName = 'negateInt#
-           }))
+    IntEqOp -> $(op [| (==#) :: Int# -> Int# -> Int# |])
+    IntLtOp -> $(op [| (<#) :: Int# -> Int# -> Int# |])
+    IntAddOp -> $(op [| (+#) :: Int# -> Int# -> Int# |])
+    IntSubOp -> $(op [| (-#) :: Int# -> Int# -> Int# |])
+    IntNegOp -> $(op [| negateInt# :: Int# -> Int# |])
     TagToEnumOp ->
       case args of
         [arg] -> do
