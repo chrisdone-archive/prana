@@ -108,4 +108,4 @@ The following don't need implementing or won't be implemented:
 
 * `BCO#`
 * `Proxy# a`
-* `VECTOR`
+* The SIMD vector operations
