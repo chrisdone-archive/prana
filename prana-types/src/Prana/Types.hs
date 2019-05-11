@@ -176,7 +176,7 @@ data PrimElemRep
   | Word64ElemRep
   | FloatElemRep
   | DoubleElemRep
-   deriving( Eq, Show, Generic )
+  deriving (Eq, Show, Generic)
 
 data TyCon =
   TyCon
