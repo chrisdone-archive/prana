@@ -24,9 +24,14 @@ Pure-Haskell goals:
 |Get code coverage to near 100%| :construction: | Detailed |
 |Move from `binary` to `persist`| – | Easy |
 
-`*` We'd prefer not to use template-haskell to derive the code because
-that excludes code coverage. It's nice to have code coverage on all
-primops to know that they work. Note to self: look into that more?
+`*` Either we could generate via:
+
+* Template Haskell: But it seems not to give us code coverage. It's
+  nice to have code coverage on all primops to know that they work. Note
+  to self: look into that more?
+* CPP macros
+* GHC preprocessor
+* Compiler plugin
 
 GHC Haskell goals:
 
