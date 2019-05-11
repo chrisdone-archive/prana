@@ -3,5 +3,6 @@ packages:
 - prana-types
 - prana-ghc
 - prana-interpreter
+- prana-primops
 extra-deps:
 - weigh-0.0.14
