@@ -26,7 +26,7 @@ Pure-Haskell goals:
 
 `*` We'd prefer not to use template-haskell to derive the code because
 that excludes code coverage. It's nice to have code coverage on all
-primops to know that they work.
+primops to know that they work. Note to self: look into that more?
 
 GHC Haskell goals:
 
