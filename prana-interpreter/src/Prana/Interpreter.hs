@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE UnboxedTuples #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE RecursiveDo #-}
@@ -27,6 +28,7 @@ import           Data.IORef
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           GHC.Exts
+import           Prana.Interpreter.TH
 import           Prana.Interpreter.Types
 import           Prana.Types
 
@@ -356,58 +358,40 @@ evalPrimOp index globals locals primOp args typ =
               pure (ConWhnf (UnboxedTupleConId 2) [xBox, yBox])
         _ -> error ("Invalid arguments to IntSubCOp: " ++ show args)
     IntEqOp ->
-      case args of
-        [arg1, arg2] -> do
-          i <- evalIntArg index globals locals arg1
-          i2 <- evalIntArg index globals locals arg2
-          -- print (show i ++ " ==# " ++ show i2)
-          let !r = i == i2
-          pure
-            (LitWhnf
-               (IntLit
-                  (if r
-                     then 1
-                     else 0)))
-        _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+      $(primOpAlt
+          (Prim
+             { primArgTys = [PrimTyI#, PrimTyI#]
+             , primReturnTy = PrimTyI#
+             , primName = '(==#)
+             }))
     IntLtOp ->
-      case args of
-        [arg1, arg2] -> do
-          i <- evalIntArg index globals locals arg1
-          i2 <- evalIntArg index globals locals arg2
-          -- print (show i ++ " <# " ++ show i2)
-          let !r = i <= i2
-          pure
-            (LitWhnf
-               (IntLit
-                  (if r
-                     then 1
-                     else 0)))
-        _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+      $(primOpAlt
+          (Prim
+             { primArgTys = [PrimTyI#, PrimTyI#]
+             , primReturnTy = PrimTyI#
+             , primName = '(<#)
+             }))
     IntAddOp ->
-      case args of
-        [arg1, arg2] -> do
-          i <- evalIntArg index globals locals arg1
-          i2 <- evalIntArg index globals locals arg2
-          -- print (show i ++ " +# " ++ show i2)
-          let !r = i + i2
-          pure (LitWhnf (IntLit r))
-        _ -> error ("Invalid arguments to IntAddOp: " ++ show args)
+      $(primOpAlt
+          (Prim
+             { primArgTys = [PrimTyI#, PrimTyI#]
+             , primReturnTy = PrimTyI#
+             , primName = '(+#)
+             }))
     IntSubOp ->
-      case args of
-        [arg1, arg2] -> do
-          i <- evalIntArg index globals locals arg1
-          i2 <- evalIntArg index globals locals arg2
-          -- print (show i ++ " +# " ++ show i2)
-          let !r = i - i2
-          pure (LitWhnf (IntLit r))
-        _ -> error ("Invalid arguments to IntSubOp: " ++ show args)
+      $(primOpAlt
+          (Prim
+             { primArgTys = [PrimTyI#, PrimTyI#]
+             , primReturnTy = PrimTyI#
+             , primName = '(-#)
+             }))
     IntNegOp ->
-      case args of
-        [arg] -> do
-          i <- evalIntArg index globals locals arg
-          let !i' = negate i
-          pure (LitWhnf (IntLit i'))
-        _ -> error ("Invalid arguments to IntNegOp: " ++ show args)
+      $(primOpAlt
+        (Prim
+           { primArgTys = [PrimTyI#]
+           , primReturnTy = PrimTyI#
+           , primName = 'negateInt#
+           }))
     TagToEnumOp ->
       case args of
         [arg] -> do

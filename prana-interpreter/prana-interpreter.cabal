@@ -15,7 +15,8 @@ library
       binary,
       prana-types,
       mtl,
-      containers
+      containers,
+      template-haskell
   default-language: Haskell2010
 
 test-suite prana-interpreter-test
