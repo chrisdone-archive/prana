@@ -18,11 +18,15 @@ Pure-Haskell goals:
 |Interpreter prototype for AST| :heavy_check_mark: | Fairly easy |
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
-|Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
+|Automated primops sourcing via genprimopcode`*`| :construction: | Straight-forward |
 |Report unimplemented primops when compiling| – | Straight-forward |
 |Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
 |Get code coverage to near 100%| :construction: | Detailed |
 |Move from `binary` to `persist`| – | Easy |
+
+`*` We'd prefer not to use template-haskell to derive the code because
+that excludes code coverage. It's nice to have code coverage on all
+primops to know that they work.
 
 GHC Haskell goals:
 
