@@ -19,10 +19,10 @@ Pure-Haskell goals:
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
 |Report unimplemented primops in base packages| – | Straight-forward |
-|Get code coverage to near 100%| :construction: | Detailed |
 |Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
-|Move from `binary` to `persist`| – | Easy |
 |Automated pure primops derivation| :construction: | Straight-forward |
+|Get code coverage to near 100%| :construction: | Detailed |
+|Move from `binary` to `persist`| – | Easy |
 
 GHC Haskell goals:
 
