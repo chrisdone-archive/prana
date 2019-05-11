@@ -18,9 +18,9 @@ Pure-Haskell goals:
 |Interpreter prototype for AST| :heavy_check_mark: | Fairly easy |
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
-|Report unimplemented primops in base packages| – | Straight-forward |
+|Automated primops sourcing| :construction: | Straight-forward |
+|Report unimplemented primops when compiling| – | Straight-forward |
 |Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
-|Automated pure primops derivation| :construction: | Straight-forward |
 |Get code coverage to near 100%| :construction: | Detailed |
 |Move from `binary` to `persist`| – | Easy |
 
