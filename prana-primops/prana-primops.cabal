@@ -19,7 +19,6 @@ cabal-version: >=1.10
 
 library
     Default-Language: Haskell2010
-    Exposed-modules: Prana.Primops
     hs-source-dirs: src
     Other-Modules: Lexer
                    Parser
