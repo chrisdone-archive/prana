@@ -17,12 +17,15 @@ Category: Development
 build-type: Simple
 cabal-version: >=1.10
 
-Executable genprimopcode
+library
     Default-Language: Haskell2010
-    Main-Is: Main.hs
+    Exposed-modules: Prana.Primops
+    hs-source-dirs: src
     Other-Modules: Lexer
                    Parser
                    ParserM
                    Syntax
     Build-Depends: base       >= 4   && < 5,
-                   array
+                   array,
+                   deepseq,
+                   th-lift
