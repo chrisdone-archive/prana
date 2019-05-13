@@ -8,7 +8,7 @@ See
 [test/assets/](https://github.com/chrisdone/prana/tree/master/prana-interpreter/test/assets)
 under `prana-interpreter` for example programs that run with prana.
 
-[WIP slides on Prana](https://docs.google.com/presentation/d/1zPQtcjd5dAXQi5PB5-AaOaTk4QRHaCFdi1dfmOdY5qE/edit#slide=id.p).
+[WIP slides on Prana](https://chrisdone.com/pdfs/prana.pdf).
 
 ## Milestones
 
