@@ -52,6 +52,7 @@ Parallel goals:
 |:---|:---|:---|
 |Reproducible (Docker) build of GHC base packages| :construction: | Takes work |
 |Analysis package `prana-analysis`| – | Fairly straight-forward |
+|Make patched GHC for [standard location outputs](https://github.com/grin-tech/ghc-grin/blob/master/ghc-8.6.2.patch) | - | Straight-forward |
 
 Optional goals:
 
