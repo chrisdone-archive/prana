@@ -44,7 +44,8 @@ derivePrimOpsCase options = do
          (\case
             PrimOpSpec {cons, name, ty} -> do
               case derivePrimOpAlt options name ty of
-                Left {} -> do
+                Left e -> do
+                  reportWarning (cons ++ ": " ++ e)
                   pure Nothing
                 Right expr ->
                   pure (Just (match (conP (mkName cons) []) (normalB expr) []))
