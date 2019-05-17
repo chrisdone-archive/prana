@@ -23,6 +23,7 @@ Pure-Haskell goals:
 |Automated primops sourcing via genprimopcode`*`| :construction: | Straight-forward |
 |Report unimplemented primops when compiling| :construction: | Straight-forward |
 |Support all primitive types (`Char#` etc.)| :construction: | Fairly straight-forward |
+|tagToEnum support| :construction: | Pain in the arse |
 |Get code coverage to near 100%| - | Detailed |
 |Move from `binary` to `persist`| – | Easy |
 |Have a sophisticated inspector| – | Fairly straight-forward |
@@ -126,3 +127,20 @@ The following don't need implementing or won't be implemented:
 ## Notable differences with GHCi
 
 * Handles unboxed tuples as any other type.
+
+## tagToEnum
+
+We need special handling for `tagToEnum`.
+
+``` haskell
+tagToEnum called with unknown type: VecElem
+tagToEnum called with unknown type: VecCount
+tagToEnum called with unknown type: GeneralCategory
+tagToEnum called with unknown type: IOMode
+tagToEnum called with unknown type: DecidedStrictness
+tagToEnum called with unknown type: SourceStrictness
+tagToEnum called with unknown type: SourceUnpackedness
+tagToEnum called with unknown type: Associativity
+tagToEnum called with unknown type: SeekMode
+tagToEnum called with unknown type: ByteOrder
+```
