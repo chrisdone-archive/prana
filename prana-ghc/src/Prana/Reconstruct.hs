@@ -71,15 +71,15 @@ instance Exception ConvertError where
       orelse -> show orelse
 
 instance Show ConvertError where
- show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
- show UnexpectedLambda {} = "UnexpectedLambda"
- show (ConNameNotFound name) = "ConNameNotFound " ++ show name
- show (LocalNameNotFound name) = "LocalNameNotFound " ++ show name
- show (GlobalNameNotFound name) = "GlobalNameNotFound " ++ show name
- show (SomeNameNotFound name) = "SomeNameNotFound " ++ show name
- show RenameDataConError{} = "RenameDataConError"
- show RenameFailure {} = "RenameFailure"
- show (BadOpConversion primop) = "BadOpConversion "++show primop
+  show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
+  show UnexpectedLambda {} = "UnexpectedLambda"
+  show (ConNameNotFound name) = "ConNameNotFound " ++ show name
+  show (LocalNameNotFound name) = "LocalNameNotFound " ++ show name
+  show (GlobalNameNotFound name) = "GlobalNameNotFound " ++ show name
+  show (SomeNameNotFound name) = "SomeNameNotFound " ++ show name
+  show RenameDataConError {} = "RenameDataConError"
+  show RenameFailure {} = "RenameFailure"
+  show (BadOpConversion primop) = "BadOpConversion " ++ show primop
 
 data Scope =
   Scope
