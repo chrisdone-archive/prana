@@ -6,6 +6,10 @@ cabal-version:  >= 1.10
 library
   exposed-modules:
       Prana.Interpreter
+      Prana.Interpreter.Boxing
+      Prana.Interpreter.PrimOps
+      Prana.Interpreter.Binding
+      Prana.Interpreter.Eval
       Prana.Interpreter.Types
   hs-source-dirs:
       src
