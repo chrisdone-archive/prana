@@ -18,6 +18,7 @@ library
       bytestring,
       binary,
       prana-types,
+      prana-primops,
       mtl,
       containers,
       template-haskell
