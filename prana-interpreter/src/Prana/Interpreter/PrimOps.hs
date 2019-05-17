@@ -68,6 +68,12 @@ tagToEnum index typ evalSomeVarId args =
 --------------------------------------------------------------------------------
 -- Evaluating arguments for primops
 
+-- TODO: Generalize these two with to e.g. evalPrimArg.
+
+-- Perhaps using e.g. evalToLit :: Arg -> IO Lit; and then pattern matching off of the Lit.
+
+-- Others to consider: Double#, Word#, Float#, Addr#
+
 evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
 evalIntArg evalSomeVarId =
   \case
