@@ -148,6 +148,7 @@ data Arg
 
 data Lit
   = IntLit !Int -- Machine int.
+  | CharLit !Char
   | StringLit !ByteString
   | UnknownLit
   deriving (Show, Eq, Generic)
@@ -187,17 +188,6 @@ data Op
   = PrimOp PrimOp
   | OtherOp
   deriving (Show, Eq, Generic)
-
-{-data PrimOp
-  = UnknownPrimOp String
-  | IntNegOp
-  | IntAddOp
-  | IntSubOp
-  | IntEqOp
-  | IntLtOp
-  | IntSubCOp
-  | TagToEnumOp
-  deriving (Show, Eq, Generic)-}
 
 displayName :: Name -> String
 displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)

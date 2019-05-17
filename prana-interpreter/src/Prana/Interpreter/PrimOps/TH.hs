@@ -29,6 +29,8 @@ data Options =
     , optionsArgs :: !Name
     , optionsEvalInt :: !Name
     , optionsBoxInt :: !Name
+    , optionsEvalChar :: !Name
+    , optionsBoxChar :: !Name
     , optionsIndex :: !Name
     , optionsType :: !Name
     , optionsEvalSomeVarId :: !Name
@@ -135,6 +137,15 @@ wrapResult options primName resultName ty =
                   (conE 'LitWhnf)
                   (appE (conE 'IntLit) (appE (conE 'I#) (varE resultName)))))
         ]
+    Just (TyApp (TyCon "Char#") []) ->
+      pure
+        [ noBindS
+            (appE
+               (varE 'pure)
+               (appE
+                  (conE 'LitWhnf)
+                  (appE (conE 'CharLit) (appE (conE 'C#) (varE resultName)))))
+        ]
     Just (TyUTup slotTypes) ->
       pure
         [ noBindS
@@ -161,19 +172,20 @@ wrapResult options primName resultName ty =
                             , [ noBindS
                                   (appE
                                      (varE 'pure)
-                                     (appE (appE
-                                              (conE 'ConWhnf)
-                                              (appE
-                                                 (conE 'UnboxedTupleConId)
-                                                 (litE
-                                                    (IntegerL
-                                                       (fromIntegral
-                                                          (length slotTypes))))))
-                                           (listE
-                                              (zipWith
-                                                 (\i _ -> varE (mkSlotNameBoxed i))
-                                                 [0 :: Int ..]
-                                                 slotTypes))))
+                                     (appE
+                                        (appE
+                                           (conE 'ConWhnf)
+                                           (appE
+                                              (conE 'UnboxedTupleConId)
+                                              (litE
+                                                 (IntegerL
+                                                    (fromIntegral
+                                                       (length slotTypes))))))
+                                        (listE
+                                           (zipWith
+                                              (\i _ -> varE (mkSlotNameBoxed i))
+                                              [0 :: Int ..]
+                                              slotTypes))))
                               ]
                             ])))
                    []
@@ -195,6 +207,15 @@ unwrapArg primName options =
              (appE
                 (appE
                    (varE (optionsEvalInt options))
+                   (varE (optionsEvalSomeVarId options)))
+                (varE arg)))
+      TyApp (TyCon "Char#") [] ->
+        pure
+          (bindS
+             (conP 'C# [varP result])
+             (appE
+                (appE
+                   (varE (optionsEvalChar options))
                    (varE (optionsEvalSomeVarId options)))
                 (varE arg)))
       _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)

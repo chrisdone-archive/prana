@@ -70,6 +70,35 @@ spec =
                 [ BeginConStep dataConI#
                 , LitStep (IntLit 12586269025)
                 , EndConStep
+                ])
+        it
+          "CharTest"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/CharTest.hs"
+                  "CharTest"
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep (DataConId 1)
+                , BeginConStep (DataConId 0)
+                , LitStep (CharLit '1')
+                , EndConStep
+                , BeginConStep (DataConId 1)
+                , BeginConStep (DataConId 0)
+                , LitStep (CharLit '2')
+                , EndConStep
+                , BeginConStep (DataConId 1)
+                , BeginConStep (DataConId 0)
+                , LitStep (CharLit '3')
+                , EndConStep
+                , BeginConStep (DataConId 6)
+                , EndConStep
+                , EndConStep
+                , EndConStep
+                , EndConStep
                 ]))
 
 getDataConI# :: Applicative f => Index -> f DataConId

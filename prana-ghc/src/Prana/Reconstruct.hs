@@ -149,6 +149,7 @@ fromLiteral :: Literal.Literal -> Lit
 fromLiteral =
   \case
     Literal.MachInt integer -> IntLit (fromIntegral integer) -- TODO: Is this cromulent?
+    Literal.MachChar chareger -> CharLit (chareger)
     _ -> UnknownLit
 
 fromStgGenExpr :: StgSyn.GenStgExpr Name Name -> Convert Expr

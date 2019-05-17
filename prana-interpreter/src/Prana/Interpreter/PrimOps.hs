@@ -39,6 +39,8 @@ evalPrimOp index evalSomeVarId primOp args typ =
         , optionsIndex = 'index
         , optionsEvalInt = 'evalIntArg
         , optionsBoxInt = 'boxInt
+        , optionsEvalChar = 'evalCharArg
+        , optionsBoxChar = 'boxChar
         })
 
 boxInt :: Int# -> IO Box
@@ -57,6 +59,24 @@ evalIntArg evalSomeVarId =
         _ ->
           error
             ("Unexpected whnf for evalIntArg (I'm sure ClosureWhnf will come up here): " ++
+             show whnf)
+
+boxChar :: Char# -> IO Box
+boxChar x# = boxWhnf (LitWhnf (CharLit (C# x#)))
+
+evalCharArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Char
+evalCharArg evalSomeVarId =
+  \case
+    LitArg (CharLit !i) -> pure i
+    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId someVarId
+      case whnf of
+        LitWhnf (CharLit !i) -> pure i
+        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
+        _ ->
+          error
+            ("Unexpected whnf for evalCharArg (I'm sure ClosureWhnf will come up here): " ++
              show whnf)
 
 tagToEnum :: ReverseIndex -> PrimOpType -> (SomeVarId -> IO Whnf) -> [Arg] -> IO Whnf
