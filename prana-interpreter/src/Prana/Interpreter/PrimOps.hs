@@ -16,6 +16,7 @@ module Prana.Interpreter.PrimOps
   ) where
 
 import GHC.Exts
+import Prana.Interpreter.Boxing
 import Prana.Interpreter.PrimOps.TH
 import Prana.Interpreter.Types
 import Prana.Types
@@ -32,12 +33,16 @@ evalPrimOp index evalSomeVarId primOp args typ =
       Options
         { optionsOp = 'primOp
         , optionsArgs = 'args
-        , optionsEvalInt = 'evalIntArg
         , optionsEvalSomeVarId = 'evalSomeVarId
         , optionsManualImplementations = [('TagToEnumOp, 'tagToEnum)]
         , optionsType = 'typ
         , optionsIndex = 'index
+        , optionsEvalInt = 'evalIntArg
+        , optionsBoxInt = 'boxInt
         })
+
+boxInt :: Int# -> IO Box
+boxInt x# = boxWhnf (LitWhnf (IntLit (I# x#)))
 
 evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
 evalIntArg evalSomeVarId =

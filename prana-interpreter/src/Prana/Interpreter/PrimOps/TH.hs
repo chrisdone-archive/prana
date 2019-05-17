@@ -21,17 +21,18 @@ import GHC.Exts
 import Language.Haskell.TH
 import Prana.Interpreter.Types
 import Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
-import Prana.Types (Lit(..))
+import Prana.Types (DataConId(..), Lit(..))
 
 data Options =
   Options
     { optionsOp :: !Name
     , optionsArgs :: !Name
     , optionsEvalInt :: !Name
+    , optionsBoxInt :: !Name
     , optionsIndex :: !Name
     , optionsType :: !Name
     , optionsEvalSomeVarId :: !Name
-    , optionsManualImplementations :: [(Name, Name)]
+    , optionsManualImplementations :: ![(Name, Name)]
     }
 
 derivePrimOpsCase :: Options -> Q Exp
@@ -44,8 +45,8 @@ derivePrimOpsCase options = do
          (\case
             PrimOpSpec {cons, name, ty} -> do
               case derivePrimOpAlt options name ty of
-                Left e -> do
-                  reportWarning (cons ++ ": " ++ e)
+                Left {} -> do
+                  -- reportWarning (cons ++ ": " ++ e)
                   pure Nothing
                 Right expr ->
                   pure (Just (match (conP (mkName cons) []) (normalB expr) []))
@@ -81,7 +82,7 @@ derivePrimOpAlt options primName ty = do
     mapM
       (unwrapArg primName options)
       (zip resultNames (zip argNames (primArgTys ty)))
-  retExpr <- wrapResult primName resultName ty
+  retStatments <- wrapResult options primName resultName ty
   pure
     (caseE
        (varE (optionsArgs options))
@@ -101,8 +102,8 @@ derivePrimOpAlt options primName ty = do
                                     (map varE resultNames)))
                               []
                           ]
-                      , retExpr
                       ]
+                    , retStatments
                     ])))
            []
        , match
@@ -122,17 +123,63 @@ derivePrimOpAlt options primName ty = do
     mkresultName :: Int -> a -> Name
     mkresultName i _ = mkName ("arg_unwrapped_" ++ show i)
 
-wrapResult :: [Char] -> Name -> Ty -> Either [Char] StmtQ
-wrapResult primName resultName ty =
+wrapResult :: Options -> [Char] -> Name -> Ty -> Either [Char] [Q Stmt]
+wrapResult options primName resultName ty =
   case primReturnTy ty of
     Just (TyApp (TyCon "Int#") []) ->
       pure
-        (noBindS
-           (appE
-              (varE 'pure)
-              (appE
-                 (conE 'LitWhnf)
-                 (appE (conE 'IntLit) (appE (conE 'I#) (varE resultName))))))
+        [ noBindS
+            (appE
+               (varE 'pure)
+               (appE
+                  (conE 'LitWhnf)
+                  (appE (conE 'IntLit) (appE (conE 'I#) (varE resultName)))))
+        ]
+    Just (TyUTup slotTypes) ->
+      pure
+        [ noBindS
+            (caseE
+               (varE resultName)
+               [ match
+                   (unboxedTupP
+                      (zipWith
+                         (\i _ty -> varP (mkSlotName i))
+                         [0 :: Int ..]
+                         slotTypes))
+                   (normalB
+                      (doE
+                         (concat
+                            [ zipWith
+                                (\i _ty ->
+                                   bindS
+                                     (varP (mkSlotName i))
+                                     (appE
+                                        (varE (optionsBoxInt options))
+                                        (varE (mkSlotName i))))
+                                [0 :: Int ..]
+                                slotTypes
+                            , [ noBindS
+                                  (appE
+                                     (varE 'pure)
+                                     (appE (appE
+                                              (conE 'ConWhnf)
+                                              (appE
+                                                 (conE 'UnboxedTupleConId)
+                                                 (litE
+                                                    (IntegerL
+                                                       (fromIntegral
+                                                          (length slotTypes))))))
+                                           (listE
+                                              (zipWith
+                                                 (\i _ -> varE (mkSlotName i))
+                                                 [0 :: Int ..]
+                                                 slotTypes))))
+                              ]
+                            ])))
+                   []
+               ])
+        ]
+      where mkSlotName i = mkName ("slot_" ++ show i)
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> Left (primName ++ ": Couldn't find return type of " ++ show ty)
 

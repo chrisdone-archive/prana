@@ -11,6 +11,7 @@ library
       Prana.Interpreter.Binding
       Prana.Interpreter.Eval
       Prana.Interpreter.Types
+      Prana.Interpreter.PrimOps.TH
   hs-source-dirs:
       src
   build-depends:
