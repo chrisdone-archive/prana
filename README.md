@@ -25,6 +25,7 @@ Pure-Haskell goals:
 |Support all primitive types (`Char#` etc.)| – | Fairly straight-forward |
 |Get code coverage to near 100%| :construction: | Detailed |
 |Move from `binary` to `persist`| – | Easy |
+|Have a sophisticated inspector| – | Fairly straight-forward |
 
 `*` Either we could generate via:
 
@@ -121,3 +122,7 @@ The following don't need implementing or won't be implemented:
 * `BCO#`
 * `Proxy# a`
 * The SIMD vector operations
+
+## Notable differences with GHCi
+
+* Handles unboxed tuples as any other type.
