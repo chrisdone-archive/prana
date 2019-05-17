@@ -1,13 +1,15 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MagicHash #-}
 
 -- |
 
 module Prana.Interpreter.Boxing where
 
-import           Data.IORef
-import           Data.Map.Strict (Map)
-import           Prana.Interpreter.Types
-import           Prana.Types
+import Data.IORef
+import Data.Map.Strict (Map)
+import GHC.Exts
+import Prana.Interpreter.Types
+import Prana.Types
 
 boxArg :: Map LocalVarId Box -> Arg -> IO Box
 boxArg locals =
@@ -36,3 +38,9 @@ boxRhs locals =
 boxWhnf :: Whnf -> IO Box
 boxWhnf whnf =
   fmap Box (newIORef (WhnfThunk whnf))
+
+boxInt :: Int# -> IO Box
+boxInt x# = boxWhnf (LitWhnf (IntLit (I# x#)))
+
+boxChar :: Char# -> IO Box
+boxChar x# = boxWhnf (LitWhnf (CharLit (C# x#)))

@@ -21,6 +21,9 @@ import Prana.Interpreter.PrimOps.TH
 import Prana.Interpreter.Types
 import Prana.Types
 
+--------------------------------------------------------------------------------
+-- Derived primops
+
 evalPrimOp ::
      ReverseIndex
   -> (SomeVarId -> IO Whnf)
@@ -43,41 +46,8 @@ evalPrimOp index evalSomeVarId primOp args typ =
         , optionsBoxChar = 'boxChar
         })
 
-boxInt :: Int# -> IO Box
-boxInt x# = boxWhnf (LitWhnf (IntLit (I# x#)))
-
-evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
-evalIntArg evalSomeVarId =
-  \case
-    LitArg (IntLit !i) -> pure i
-    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
-    VarArg someVarId -> do
-      whnf <- evalSomeVarId someVarId
-      case whnf of
-        LitWhnf (IntLit !i) -> pure i
-        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
-        _ ->
-          error
-            ("Unexpected whnf for evalIntArg (I'm sure ClosureWhnf will come up here): " ++
-             show whnf)
-
-boxChar :: Char# -> IO Box
-boxChar x# = boxWhnf (LitWhnf (CharLit (C# x#)))
-
-evalCharArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Char
-evalCharArg evalSomeVarId =
-  \case
-    LitArg (CharLit !i) -> pure i
-    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
-    VarArg someVarId -> do
-      whnf <- evalSomeVarId someVarId
-      case whnf of
-        LitWhnf (CharLit !i) -> pure i
-        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
-        _ ->
-          error
-            ("Unexpected whnf for evalCharArg (I'm sure ClosureWhnf will come up here): " ++
-             show whnf)
+--------------------------------------------------------------------------------
+-- Special primops with custom implementations
 
 tagToEnum :: ReverseIndex -> PrimOpType -> (SomeVarId -> IO Whnf) -> [Arg] -> IO Whnf
 tagToEnum index typ evalSomeVarId args =
@@ -94,3 +64,36 @@ tagToEnum index typ evalSomeVarId args =
           pure (ConWhnf con [])
         _ -> error "Unknown type for tagToEnum."
     _ -> error ("Invalid arguments to TagToEnumOp: " ++ show args)
+
+--------------------------------------------------------------------------------
+-- Evaluating arguments for primops
+
+evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
+evalIntArg evalSomeVarId =
+  \case
+    LitArg (IntLit !i) -> pure i
+    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId someVarId
+      case whnf of
+        LitWhnf (IntLit !i) -> pure i
+        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
+        _ ->
+          error
+            ("Unexpected whnf for evalIntArg (I'm sure ClosureWhnf will come up here): " ++
+             show whnf)
+
+evalCharArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Char
+evalCharArg evalSomeVarId =
+  \case
+    LitArg (CharLit !i) -> pure i
+    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId someVarId
+      case whnf of
+        LitWhnf (CharLit !i) -> pure i
+        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
+        _ ->
+          error
+            ("Unexpected whnf for evalCharArg (I'm sure ClosureWhnf will come up here): " ++
+             show whnf)
