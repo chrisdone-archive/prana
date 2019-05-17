@@ -47,8 +47,9 @@ derivePrimOpsCase options = do
          (\case
             PrimOpSpec {cons, name, ty} -> do
               case derivePrimOpAlt options name ty of
-                Left {} -> do
+                Left {}
                   -- reportWarning (cons ++ ": " ++ e)
+                 -> do
                   pure Nothing
                 Right expr ->
                   pure (Just (match (conP (mkName cons) []) (normalB expr) []))
@@ -75,7 +76,11 @@ derivePrimOpsCase options = do
       match
         wildP
         (normalB
-           (appE (varE 'error) (appE (varE 'show) (varE (optionsOp options)))))
+           (appE
+              (varE 'error)
+              (appE
+                 (appE (varE '(++)) (stringE "Unimplemented primop: "))
+                 (appE (varE 'show) (varE (optionsOp options))))))
         []
 
 derivePrimOpAlt :: Options -> String -> Ty -> Either String (Q Exp)
