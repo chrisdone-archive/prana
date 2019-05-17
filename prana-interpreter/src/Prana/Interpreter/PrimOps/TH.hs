@@ -152,7 +152,7 @@ wrapResult options primName resultName ty =
                             [ zipWith
                                 (\i _ty ->
                                    bindS
-                                     (varP (mkSlotName i))
+                                     (varP (mkSlotNameBoxed i))
                                      (appE
                                         (varE (optionsBoxInt options))
                                         (varE (mkSlotName i))))
@@ -171,7 +171,7 @@ wrapResult options primName resultName ty =
                                                           (length slotTypes))))))
                                            (listE
                                               (zipWith
-                                                 (\i _ -> varE (mkSlotName i))
+                                                 (\i _ -> varE (mkSlotNameBoxed i))
                                                  [0 :: Int ..]
                                                  slotTypes))))
                               ]
@@ -180,6 +180,7 @@ wrapResult options primName resultName ty =
                ])
         ]
       where mkSlotName i = mkName ("slot_" ++ show i)
+            mkSlotNameBoxed i = mkName ("slot_boxed_" ++ show i)
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> Left (primName ++ ": Couldn't find return type of " ++ show ty)
 
