@@ -5,17 +5,18 @@
 
 -- |
 
-module Prana.Types where
+module Prana.Types
+  ( module Prana.Types
+  , module Prana.PrimOp.Type
+  ) where
 
 import           Data.Binary
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
-import           Data.Data (Data, Typeable)
 import           Data.Int
 import           Data.Map.Strict (Map)
-import qualified Data.Map.Strict as M
 import           GHC.Generics
+import           Prana.PrimOp.Type
 
 data GlobalBinding
   = GlobalStringLit !GlobalVarId !ByteString
@@ -187,7 +188,7 @@ data Op
   | OtherOp
   deriving (Show, Eq, Generic)
 
-data PrimOp
+{-data PrimOp
   = UnknownPrimOp String
   | IntNegOp
   | IntAddOp
@@ -196,7 +197,7 @@ data PrimOp
   | IntLtOp
   | IntSubCOp
   | TagToEnumOp
-  deriving (Show, Eq, Generic)
+  deriving (Show, Eq, Generic)-}
 
 displayName :: Name -> String
 displayName (Name pkg md name u) = S8.unpack (pkg <> ":" <> md <> "." <> name <> ext)

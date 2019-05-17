@@ -31,12 +31,12 @@ import           Data.Validation
 import qualified DataCon
 import qualified Literal
 import qualified Module
-import qualified Outputable
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import qualified PrimOp
 import qualified StgSyn
+import           Text.Read
 import qualified TyCoRep
 import qualified TyCon
 import           TysWiredIn
@@ -58,6 +58,7 @@ data ConvertError
   | SomeNameNotFound !Name
   | RenameDataConError !DataCon.DataCon !RenameFailure
   | RenameFailure !RenameFailure
+  | BadOpConversion !PrimOp.PrimOp
   deriving (Eq, Typeable)
 
 instance Exception ConvertError where
@@ -78,6 +79,7 @@ instance Show ConvertError where
  show (SomeNameNotFound name) = "SomeNameNotFound " ++ show name
  show RenameDataConError{} = "RenameDataConError"
  show RenameFailure {} = "RenameFailure"
+ show (BadOpConversion primop) = "BadOpConversion "++show primop
 
 data Scope =
   Scope
@@ -159,7 +161,7 @@ fromStgGenExpr =
       ConAppExpr <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
-      OpAppExpr <$> pure (fromStgOp stgOp) <*> traverse fromStgGenArg arguments <*>
+      OpAppExpr <$> fromStgOp stgOp <*> traverse fromStgGenArg arguments <*>
       pure (opTypeFromType typ)
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
@@ -191,26 +193,21 @@ opTypeFromType =
       | tyCon == TysWiredIn.boolTyCon -> BoolType
     _ -> UnknownType
 
-fromStgOp :: StgSyn.StgOp -> Op
+fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
   \case
-     StgSyn.StgPrimOp op -> PrimOp (fromPrimOp op)
-     _ -> OtherOp
+     StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
+     _ -> pure OtherOp
 
 deriving instance Show PrimOp.PrimOp
 deriving instance Show PrimOp.PrimOpVecCat
 
-fromPrimOp :: PrimOp.PrimOp -> PrimOp
-fromPrimOp =
-  \case
-    PrimOp.IntNegOp -> IntNegOp
-    PrimOp.IntEqOp -> IntEqOp
-    PrimOp.IntLtOp -> IntLtOp
-    PrimOp.IntSubCOp -> IntSubCOp
-    PrimOp.IntAddOp -> IntAddOp
-    PrimOp.IntSubOp -> IntSubOp
-    PrimOp.TagToEnumOp -> TagToEnumOp
-    op -> UnknownPrimOp (show op ++ " aka " ++ Outputable.showSDocUnsafe (Outputable.ppr op))
+-- | The constructor names are the same.
+fromPrimOp :: PrimOp.PrimOp -> Convert PrimOp
+fromPrimOp op =
+  case readMaybe (show op) of
+    Nothing -> failure (BadOpConversion op)
+    Just pr -> pure pr
 
 fromPrimRep :: TyCon.PrimRep -> PrimRep
 fromPrimRep =

@@ -341,10 +341,7 @@ evalIntArg index globals locals =
 evalPrimOp :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> PrimOp -> [Arg] -> PrimOpType -> IO Whnf
 evalPrimOp index globals locals primOp args typ =
   case primOp of
-    UnknownPrimOp string ->
-      error
-        ("Unimplemented primop: " ++
-         string ++ " (type: " ++ show typ ++ "), args were: " ++ show args)
+
     -- Int# -> Int# -> (# Int#, Int# #)
     IntSubCOp ->
       case args of
@@ -376,3 +373,8 @@ evalPrimOp index globals locals primOp args typ =
               pure (ConWhnf con [])
             _ -> error "Unknown type for tagToEnum."
         _ -> error ("Invalid arguments to TagToEnumOp: " ++ show args)
+
+    _ ->
+      error
+        ("Unimplemented primop: " ++
+         show primOp ++ " (type: " ++ show typ ++ "), args were: " ++ show args)
