@@ -3,7 +3,15 @@
 
 -- | Reading the primops.
 
-module Prana.PrimOp where
+module Prana.PrimOp
+  ( derivePrimOpType
+  , parsePrimops
+  , findProjectFile
+  , Entry(..)
+  , Ty(..)
+  , TyCon(..)
+  , TyVar
+  ) where
 
 import Data.Maybe
 import GHC.Generics
@@ -34,7 +42,14 @@ derivePrimOpType = do
     derivings =
       [ DerivClause
           Nothing
-          [ConT ''Show, ConT ''Generic, ConT ''Eq, ConT ''Ord, ConT ''Read, ConT ''Enum]
+          [ ConT ''Show
+          , ConT ''Generic
+          , ConT ''Eq
+          , ConT ''Ord
+          , ConT ''Read
+          , ConT ''Enum
+          , ConT ''Bounded
+          ]
       ]
 
 --------------------------------------------------------------------------------
