@@ -10,11 +10,12 @@ module Prana.Types
   , module Prana.PrimOp.Type
   ) where
 
-import           Data.Binary
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
+import           Data.Flat
 import           Data.Int
 import           Data.Map.Strict (Map)
+import           Data.Word
 import           GHC.Generics
 import           Prana.PrimOp.Type
 
@@ -88,11 +89,11 @@ data Closure =
 
 newtype GlobalVarId = GlobalVarId Int64
   deriving (Show, Eq, Generic, Ord)
-instance Binary GlobalVarId
+instance Flat GlobalVarId
 
 newtype LocalVarId = LocalVarId Int64
   deriving (Show, Eq, Generic, Ord)
-instance Binary LocalVarId
+instance Flat LocalVarId
 
 data SomeVarId
   = SomeLocalVarId !LocalVarId
@@ -127,7 +128,7 @@ data TypeId
       }
   | WiredInType !WiredInType
   deriving (Show, Eq, Generic, Ord)
-instance Binary TypeId
+instance Flat TypeId
 
 data WiredInType
   = WiredIn_CharPrimTyConName
@@ -166,20 +167,20 @@ data WiredInType
   | WiredIn_VoidPrimTyConName
   | WiredIn_UnboxedTuple !Int
   deriving (Show, Eq, Generic, Ord)
-instance Binary WiredInType
+instance Flat WiredInType
 
 newtype ConIndex =
   ConIndex
     { conIndexInt :: Int64
     }
   deriving (Show, Eq, Generic, Ord)
-instance Binary ConIndex
+instance Flat ConIndex
 
 data DataConId
   = DataConId !TypeId !ConIndex
   | UnboxedTupleConId !Int
   deriving (Show, Eq, Generic, Ord)
-instance Binary DataConId
+instance Flat DataConId
 
 data UpdateFlag
   = ReEntrant
@@ -261,7 +262,7 @@ data Name =
     , nameUnique :: !Unique
     }
   deriving (Show, Ord, Eq, Generic)
-instance Binary Name
+instance Flat Name
 
 -- | Names can be referred to by their package-module-name
 -- combination. However, if it's a local name, then we need an extra
@@ -271,7 +272,7 @@ data Unique
   = Exported
   | Unexported !Int64
   deriving (Show, Ord, Eq, Generic)
-instance Binary Unique
+instance Flat Unique
 
 data Index =
   Index
@@ -281,7 +282,7 @@ data Index =
     , indexTypes :: Map Name TypeId
     }
   deriving (Generic, Show)
-instance Binary Index
+instance Flat Index
 
 data ReverseIndex =
   ReverseIndex
@@ -293,24 +294,24 @@ data ReverseIndex =
     }
 
 --------------------------------------------------------------------------------
--- Binary instances
+-- Flat instances
 
-instance Binary GlobalBinding
-instance Binary Rhs
-instance Binary UpdateFlag
-instance Binary Expr
-instance Binary Arg
-instance Binary SomeVarId
-instance Binary Type
-instance Binary Op
-instance Binary Alts
-instance Binary LocalBinding
-instance Binary Lit
-instance Binary WiredInVal
-instance Binary TyCon
-instance Binary DataAlt
-instance Binary PrimRep
-instance Binary PrimElemRep
-instance Binary LitAlt
-instance Binary Closure
-instance Binary Con
+instance Flat GlobalBinding
+instance Flat Rhs
+instance Flat UpdateFlag
+instance Flat Expr
+instance Flat Arg
+instance Flat SomeVarId
+instance Flat Type
+instance Flat Op
+instance Flat Alts
+instance Flat LocalBinding
+instance Flat Lit
+instance Flat WiredInVal
+instance Flat TyCon
+instance Flat DataAlt
+instance Flat PrimRep
+instance Flat PrimElemRep
+instance Flat LitAlt
+instance Flat Closure
+instance Flat Con

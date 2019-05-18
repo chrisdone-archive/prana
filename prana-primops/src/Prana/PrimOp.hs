@@ -13,6 +13,7 @@ module Prana.PrimOp
   , TyVar
   ) where
 
+import Data.Flat
 import Data.Maybe
 import GHC.Generics
 import Language.Haskell.TH
@@ -49,6 +50,7 @@ derivePrimOpType = do
           , ConT ''Read
           , ConT ''Enum
           , ConT ''Bounded
+          , ConT ''Flat
           ]
       ]
 

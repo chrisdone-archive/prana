@@ -34,4 +34,4 @@ library
                    filepath,
                    template-haskell,
                    directory,
-                   binary
+                   flat

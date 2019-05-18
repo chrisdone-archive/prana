@@ -47,7 +47,7 @@ import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
 import qualified CostCentre
-import           Data.Binary (encode, decode, Binary)
+import           Data.Flat
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
@@ -58,7 +58,6 @@ import qualified Data.List.NonEmpty as NE
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
@@ -196,10 +195,10 @@ compileModuleGraph options index0 = do
 -- | Install package by updating the index and writing the library
 -- to a file in the packages dir.
 installPackage ::
-     (GHC.GhcMonad m, Binary binding)
+     (GHC.GhcMonad m)
   => Options
   -> Index
-  -> [binding]
+  -> [GlobalBinding]
   -> m ()
 installPackage options index' bindings = do
   dflags <- GHC.getSessionDynFlags
@@ -212,10 +211,10 @@ installPackage options index' bindings = do
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO
     (do S8.putStrLn "Updating index ... "
-        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
+        S.writeFile (optionsIndexTmpPath options) (flat (index' :: Index)))
   liftIO
     (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
-        L.writeFile pathTmp (encode bindings))
+        S.writeFile pathTmp (flat bindings))
   liftIO
     (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
         renameFile pathTmp path)
@@ -352,7 +351,10 @@ readIndex :: FilePath -> IO Index
 readIndex fp = do
   exists <- doesFileExist fp
   if exists
-    then fmap (decode . L.fromStrict) (S.readFile fp)
+    then do bytes <- S.readFile fp
+            case unflat bytes of
+              Left ex -> throw ex
+              Right ok -> pure ok
     else pure
            Index
              { indexGlobals = mempty
@@ -370,8 +372,10 @@ loadLibrary options name =
     (do S8.putStrLn (S8.pack ("Loading library " ++ name ++ " ..."))
         bytes <-
           L.readFile (optionsPackagesDir options ++ "/" ++ name ++ ".prana")
-        let !bs = decode bytes
-        pure bs)
+        let !res = unflat bytes
+        case res of
+          Left e -> throw e
+          Right ok -> pure ok)
 
 lookupGlobalBindingRhsByName :: Index -> [GlobalBinding] -> Name -> Maybe Rhs
 lookupGlobalBindingRhsByName index bindings name = do

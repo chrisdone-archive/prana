@@ -17,7 +17,6 @@ library
   build-depends:
       base >=4.7 && <5,
       bytestring,
-      binary,
       prana-types,
       prana-primops,
       mtl,
