@@ -33,4 +33,5 @@ library
                    th-lift,
                    filepath,
                    template-haskell,
-                   directory
+                   directory,
+                   binary

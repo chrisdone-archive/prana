@@ -119,6 +119,12 @@ data WiredInVal
     -- although I'm not exactly sure when.
   deriving (Show, Eq, Generic)
 
+newtype TypeId =
+  TypeId
+    { typeId :: Int64
+    }
+  deriving (Show, Eq, Generic, Ord)
+instance Binary TypeId
 
 data DataConId
   = DataConId !Int64
@@ -247,7 +253,6 @@ instance Binary Arg
 instance Binary SomeVarId
 instance Binary Type
 instance Binary Op
-instance Binary PrimOp
 instance Binary Alts
 instance Binary LocalBinding
 instance Binary Lit
