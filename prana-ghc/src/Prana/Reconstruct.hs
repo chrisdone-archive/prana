@@ -163,9 +163,17 @@ fromStgGenArg =
 fromLiteral :: Literal.Literal -> Lit
 fromLiteral =
   \case
-    Literal.MachInt integer -> IntLit (fromIntegral integer) -- TODO: Is this cromulent?
+    Literal.MachInt integer -> IntLit (fromIntegral integer)
     Literal.MachChar chareger -> CharLit (chareger)
-    _ -> UnknownLit
+    Literal.MachStr x -> StringLit x
+    Literal.MachNullAddr -> NullAddrLit
+    Literal.MachInt64 x -> Int64Lit (fromIntegral x)
+    Literal.MachWord x -> WordLit (fromIntegral x)
+    Literal.MachWord64 x -> Word64Lit (fromIntegral x)
+    Literal.MachFloat x -> FloatLit (realToFrac x)
+    Literal.MachDouble x -> DoubleLit (realToFrac x)
+    Literal.MachLabel _ _ _ -> LabelLit
+    Literal.LitInteger i _ -> IntegerLit i
 
 fromStgGenExpr :: StgSyn.GenStgExpr Name Name -> Convert Expr
 fromStgGenExpr =

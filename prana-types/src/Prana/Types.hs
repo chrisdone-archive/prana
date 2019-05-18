@@ -197,10 +197,17 @@ data Arg
   deriving (Show, Eq, Generic)
 
 data Lit
-  = IntLit !Int -- Machine int.
-  | CharLit !Char
+  = CharLit !Char
   | StringLit !ByteString
-  | UnknownLit
+  | NullAddrLit
+  | IntLit !Int
+  | Int64Lit !Int64
+  | WordLit !Word
+  | Word64Lit !Word64
+  | FloatLit !Float
+  | DoubleLit !Double
+  | IntegerLit !Integer
+  | LabelLit
   deriving (Show, Eq, Generic)
 
 data PrimRep
