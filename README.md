@@ -20,22 +20,13 @@ Pure-Haskell goals:
 |Interpreter prototype for AST| :heavy_check_mark: | Fairly easy |
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
-|Automated primops sourcing via genprimopcode`*`| :construction: | Straight-forward |
+|Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
 |Report unimplemented primops when compiling| :construction: | Straight-forward |
-|Support all primitive types (`Char#` etc.)| :construction: | Fairly straight-forward |
-|tagToEnum support| :construction: | Pain in the arse |
-|Get code coverage to near 100%| - | Detailed |
+|Support all primitive types (`Char#` etc.)| :heavy_check_mark: | Fairly straight-forward |
+|tagToEnum support| :heavy_check_mark: | Pain in the arse |
 |Move from `binary` to `persist`| – | Easy |
 |Have a sophisticated inspector| – | Fairly straight-forward |
-
-`*` Either we could generate via:
-
-* Template Haskell: But it seems not to give us code coverage. It's
-  nice to have code coverage on all primops to know that they work. Note
-  to self: look into that more?
-* CPP macros
-* GHC preprocessor
-* Compiler plugin
+|Get code coverage to near 100%| - | Detailed |
 
 GHC Haskell goals:
 
@@ -127,20 +118,3 @@ The following don't need implementing or won't be implemented:
 ## Notable differences with GHCi
 
 * Handles unboxed tuples as any other type.
-
-## tagToEnum
-
-We need special handling for `tagToEnum`.
-
-``` haskell
-tagToEnum called with unknown type: VecElem
-tagToEnum called with unknown type: VecCount
-tagToEnum called with unknown type: GeneralCategory
-tagToEnum called with unknown type: IOMode
-tagToEnum called with unknown type: DecidedStrictness
-tagToEnum called with unknown type: SourceStrictness
-tagToEnum called with unknown type: SourceUnpackedness
-tagToEnum called with unknown type: Associativity
-tagToEnum called with unknown type: SeekMode
-tagToEnum called with unknown type: ByteOrder
-```
