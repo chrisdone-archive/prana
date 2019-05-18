@@ -96,6 +96,16 @@ data Scope =
 failure :: ConvertError -> Convert a
 failure e = Convert (ReaderT (\_ -> Failure (pure e)))
 
+-- | Monadic-style bind.
+bindConvert :: Convert a -> (a -> Convert b) -> Convert b
+bindConvert m f =
+  Convert
+    (ReaderT
+       (\r ->
+          bindValidation
+            (runReaderT (runConvert m) r)
+            (\v -> runReaderT (runConvert (f v)) r)))
+
 --------------------------------------------------------------------------------
 -- Conversion functions
 
@@ -168,10 +178,16 @@ fromStgGenExpr =
       traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
-      OpAppExpr <$> fromStgOp stgOp <*> traverse fromStgGenArg arguments <*>
-      case Type.tyConAppTyConPicky_maybe typ of
-        Just ty -> fmap Just (lookupTypeId (Name.getName ty))
-        Nothing -> pure Nothing
+      bindConvert
+        (fromStgOp stgOp)
+        (\op ->
+           OpAppExpr <$> pure op <*> traverse fromStgGenArg arguments <*>
+           case op of
+             PrimOp TagToEnumOp ->
+               case Type.tyConAppTyConPicky_maybe typ of
+                 Just ty -> fmap Just (lookupTypeId (Name.getName ty))
+                 Nothing -> pure Nothing
+             _ -> pure Nothing)
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
       case altType of
