@@ -21,7 +21,7 @@ Pure-Haskell goals:
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
 |Support all primitive types (`Char#` etc.)| :heavy_check_mark: | Fairly straight-forward |
-|tagToEnum support| :heavy_check_mark: | Pain in the arse |
+|`tagToEnum` support| :heavy_check_mark: | Pain in the arse |
 |Report unimplemented primops when compiling| :heavy_check_mark: | Straight-forward |
 |Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
 |Move from `binary` to `persist`| – | Easy |
