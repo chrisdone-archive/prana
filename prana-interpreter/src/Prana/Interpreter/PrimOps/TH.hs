@@ -15,6 +15,7 @@
 
 module Prana.Interpreter.PrimOps.TH where
 
+import Control.Monad
 import Data.List
 import Data.Maybe
 import GHC.Exts
@@ -47,9 +48,8 @@ derivePrimOpsCase options = do
          (\case
             PrimOpSpec {cons, name, ty} -> do
               case derivePrimOpAlt options name ty of
-                Left {}
-                  -- reportWarning (cons ++ ": " ++ e)
-                 -> do
+                Left e -> do
+                  when False (reportWarning (cons ++ ": " ++ e))
                   pure Nothing
                 Right expr ->
                   pure (Just (match (conP (mkName cons) []) (normalB expr) []))
