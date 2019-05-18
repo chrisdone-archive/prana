@@ -20,10 +20,10 @@ Pure-Haskell goals:
 |Interpreter prototype for AST| :heavy_check_mark: | Fairly easy |
 |Basic test suite for interpreter| :heavy_check_mark: | Easy |
 |Move interpreter into `prana-interpret` library| :heavy_check_mark: | Easy |
-|Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
-|Report unimplemented primops when compiling| :construction: | Straight-forward |
 |Support all primitive types (`Char#` etc.)| :heavy_check_mark: | Fairly straight-forward |
 |tagToEnum support| :heavy_check_mark: | Pain in the arse |
+|Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
+|Report unimplemented primops when compiling| :construction: | Straight-forward |
 |Move from `binary` to `persist`| – | Easy |
 |Have a sophisticated inspector| – | Fairly straight-forward |
 |Get code coverage to near 100%| - | Detailed |
