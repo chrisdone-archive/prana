@@ -227,6 +227,7 @@ data Index =
     { indexGlobals :: Map Name GlobalVarId
     , indexLocals :: Map Name LocalVarId
     , indexDataCons :: Map Name DataConId
+    , indexTypes :: Map Name TypeId
     }
   deriving (Generic, Show)
 instance Binary Index
@@ -236,6 +237,7 @@ data ReverseIndex =
     { reverseIndexDataCons :: Map DataConId Name
     , reverseIndexGlobals :: Map GlobalVarId Name
     , reverseIndexLocals :: Map LocalVarId Name
+    , reverseIndexTypes :: Map TypeId Name
     , reverseIndexIndex :: Index
     , reverseIndexTrue :: DataConId
     , reverseIndexFalse :: DataConId

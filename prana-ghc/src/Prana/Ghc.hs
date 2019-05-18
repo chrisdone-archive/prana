@@ -307,11 +307,13 @@ compileModSummary modSum = do
   let module' = GHC.ms_mod modSum
       modguts = GHC.dm_core_module dmod
       tyCons = collectDataCons (HscTypes.mg_tcs modguts)
-  case (,) <$> traverse (renameTopBinding module') stg_binds <*>
-       traverse (validationNel . renameId module') (Set.toList tyCons) of
+      dataTypes = collectDataTypes (HscTypes.mg_tcs modguts)
+  case (,,) <$> traverse (renameTopBinding module') stg_binds <*>
+       traverse (validationNel . renameId module') (Set.toList tyCons) <*>
+       traverse (validationNel . renameName module') (Set.toList dataTypes) of
     Failure errors -> pure (Left (RenameErrors errors))
-    Success (bindings, dataCons) -> do
-      void (updateIndex bindings dataCons)
+    Success (bindings, dataCons, types) -> do
+      void (updateIndex bindings dataCons types)
       pure (Right bindings)
 
 -- | Perform core to STG transformation.
@@ -358,6 +360,7 @@ readIndex fp = do
              { indexGlobals = mempty
              , indexLocals = mempty
              , indexDataCons = mempty
+             , indexTypes = mempty
              }
 
 --------------------------------------------------------------------------------

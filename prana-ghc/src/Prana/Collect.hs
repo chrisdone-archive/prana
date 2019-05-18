@@ -5,7 +5,8 @@
 module Prana.Collect
   (collectGlobalBindings
   ,collectLocalBindings
-  ,collectDataCons)
+  ,collectDataCons
+  ,collectDataTypes)
   where
 
 import           Control.Monad.State
@@ -13,6 +14,7 @@ import           Data.Bitraversable
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified DataCon
+import qualified Name
 import           Prana.Rename
 import qualified StgSyn
 import qualified TyCon
@@ -45,3 +47,7 @@ collectLocalBindings =
 collectDataCons :: [TyCon.TyCon] -> Set Var.Id
 collectDataCons =
   Set.fromList . concatMap (map DataCon.dataConWorkId . TyCon.tyConDataCons)
+
+-- | Collect the set of data constructor ids.
+collectDataTypes :: [TyCon.TyCon] -> Set Name.Name
+collectDataTypes = Set.fromList . map Name.getName
