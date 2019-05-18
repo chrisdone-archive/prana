@@ -32,7 +32,7 @@ data LocalBinding
 data Expr
   = AppExpr !SomeVarId ![Arg]
   | ConAppExpr !DataConId ![Arg] ![Type]
-  | OpAppExpr !Op ![Arg] !PrimOpType
+  | OpAppExpr !Op ![Arg] !(Maybe TypeId)
   | CaseExpr !Expr !LocalVarId !Alts
   | LetExpr !LocalBinding !Expr
   | LitExpr !Lit
@@ -119,16 +119,58 @@ data WiredInVal
     -- although I'm not exactly sure when.
   deriving (Show, Eq, Generic)
 
-newtype TypeId =
-  TypeId
-    { typeId :: Int64
-    }
+data SomeTypeId
+
+data TypeId
+  = TypeId
+      { typeIdInt :: !Int64
+      }
+  | WiredInType !WiredInType
   deriving (Show, Eq, Generic, Ord)
 instance Binary TypeId
 
+data WiredInType
+  = WiredIn_CharPrimTyConName
+  | WiredIn_IntPrimTyConName
+  | WiredIn_Int32PrimTyConName
+  | WiredIn_Int64PrimTyConName
+  | WiredIn_WordPrimTyConName
+  | WiredIn_Word32PrimTyConName
+  | WiredIn_Word64PrimTyConName
+  | WiredIn_AddrPrimTyConName
+  | WiredIn_FloatPrimTyConName
+  | WiredIn_DoublePrimTyConName
+  | WiredIn_StatePrimTyConName
+  | WiredIn_ProxyPrimTyConName
+  | WiredIn_RealWorldTyConName
+  | WiredIn_ArrayPrimTyConName
+  | WiredIn_ArrayArrayPrimTyConName
+  | WiredIn_SmallArrayPrimTyConName
+  | WiredIn_ByteArrayPrimTyConName
+  | WiredIn_MutableArrayPrimTyConName
+  | WiredIn_MutableByteArrayPrimTyConName
+  | WiredIn_MutableArrayArrayPrimTyConName
+  | WiredIn_SmallMutableArrayPrimTyConName
+  | WiredIn_MutVarPrimTyConName
+  | WiredIn_MVarPrimTyConName
+  | WiredIn_TVarPrimTyConName
+  | WiredIn_StablePtrPrimTyConName
+  | WiredIn_StableNamePrimTyConName
+  | WiredIn_CompactPrimTyConName
+  | WiredIn_BcoPrimTyConName
+  | WiredIn_WeakPrimTyConName
+  | WiredIn_ThreadIdPrimTyConName
+  | WiredIn_EqPrimTyConName
+  | WiredIn_EqReprPrimTyConName
+  | WiredIn_EqPhantPrimTyConName
+  | WiredIn_VoidPrimTyConName
+  | WiredIn_UnboxedTuple !Int
+  deriving (Show, Eq, Generic, Ord)
+instance Binary WiredInType
+
 newtype ConIndex =
   ConIndex
-    { conIndex :: Int64
+    { conIndexInt :: Int64
     }
   deriving (Show, Eq, Generic, Ord)
 instance Binary ConIndex
@@ -147,11 +189,6 @@ data UpdateFlag
 
 data Type =
   Type
-  deriving (Show, Eq, Generic)
-
-data PrimOpType
-  = BoolType
-  | UnknownType
   deriving (Show, Eq, Generic)
 
 data Arg
@@ -246,8 +283,6 @@ data ReverseIndex =
     , reverseIndexLocals :: Map LocalVarId Name
     , reverseIndexTypes :: Map TypeId Name
     , reverseIndexIndex :: Index
-    , reverseIndexTrue :: DataConId
-    , reverseIndexFalse :: DataConId
     }
 
 --------------------------------------------------------------------------------
@@ -257,7 +292,6 @@ instance Binary GlobalBinding
 instance Binary Rhs
 instance Binary UpdateFlag
 instance Binary Expr
-instance Binary PrimOpType
 instance Binary Arg
 instance Binary SomeVarId
 instance Binary Type

@@ -58,7 +58,11 @@ instance Show RenameFailure where
   show (UnexpectedInternalName _) = "UnexpectedInternalName"
 
 -- | Rename a data type and its constructors.
-
+renameDataType ::
+     Traversable t
+  => Module.Module
+  -> (Name.Name, t Var.Id)
+  -> Validation (NonEmpty RenameFailure) (Name, t Name)
 renameDataType m (typeName, typeConstructors) =
   (,) <$> validationNel (renameName m typeName) <*>
   traverse (validationNel . renameId m) typeConstructors

@@ -21,6 +21,7 @@ module Prana.Reconstruct
 import           Control.Exception
 import           Control.Monad.Reader
 import qualified CoreSyn
+import           Data.Bifunctor
 import qualified Data.ByteString.Char8 as S8
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
@@ -31,15 +32,15 @@ import           Data.Validation
 import qualified DataCon
 import qualified Literal
 import qualified Module
+import qualified Name
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
 import qualified PrimOp
 import qualified StgSyn
 import           Text.Read
-import qualified TyCoRep
 import qualified TyCon
-import           TysWiredIn
+import qualified Type
 
 -- | A conversion monad.
 newtype Convert a =
@@ -59,6 +60,8 @@ data ConvertError
   | RenameDataConError !DataCon.DataCon !RenameFailure
   | RenameFailure !RenameFailure
   | BadOpConversion !PrimOp.PrimOp
+  | TypeNameNotFound !Name
+  | CouldntGetTyConForPrimOp !String
   deriving (Eq, Typeable)
 
 instance Exception ConvertError where
@@ -79,7 +82,9 @@ instance Show ConvertError where
   show (SomeNameNotFound name) = "SomeNameNotFound " ++ show name
   show RenameDataConError {} = "RenameDataConError"
   show RenameFailure {} = "RenameFailure"
+  show (CouldntGetTyConForPrimOp s) = "Couldn'tGetTyConForPrimOp " ++ show s
   show (BadOpConversion primop) = "BadOpConversion " ++ show primop
+  show (TypeNameNotFound primop) = "TypeNameNotFound " ++ show primop
 
 data Scope =
   Scope
@@ -159,11 +164,14 @@ fromStgGenExpr =
       AppExpr <$> lookupSomeVarId occ <*> traverse fromStgGenArg arguments
     StgSyn.StgLit literal -> LitExpr <$> pure (fromLiteral literal)
     StgSyn.StgConApp dataCon arguments types ->
-      ConAppExpr <$> lookupDataConId dataCon <*> traverse fromStgGenArg arguments <*>
+      ConAppExpr <$> lookupDataConId dataCon <*>
+      traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
       OpAppExpr <$> fromStgOp stgOp <*> traverse fromStgGenArg arguments <*>
-      pure (opTypeFromType typ)
+      case Type.tyConAppTyConPicky_maybe typ of
+        Just ty -> fmap Just (lookupTypeId (Name.getName ty))
+        Nothing -> pure Nothing
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
       case altType of
@@ -186,13 +194,6 @@ fromStgGenExpr =
       LetExpr <$> fromGenStgBinding binding <*> fromStgGenExpr expr
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
     StgSyn.StgLam {} -> failure UnexpectedLambda
-
-opTypeFromType :: TyCoRep.Type -> PrimOpType
-opTypeFromType =
-  \case
-    TyCoRep.TyConApp tyCon []
-      | tyCon == TysWiredIn.boolTyCon -> BoolType
-    _ -> UnknownType
 
 fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
@@ -331,6 +332,21 @@ lookupDataConId dataCon =
                   Just g -> pure g)
          (renameId (scopeModule scope) (DataCon.dataConWorkId dataCon)))
 
+lookupTypeId :: Name.Name -> Convert TypeId
+lookupTypeId name =
+  asking
+    (\scope ->
+       either
+         (Failure . pure . RenameFailure)
+         (\ourName ->
+            case M.lookup ourName wiredInTypes of
+              Nothing ->
+                case M.lookup ourName (indexTypes (scopeIndex scope)) of
+                  Nothing -> Failure (pure (TypeNameNotFound ourName))
+                  Just g -> pure g
+              Just wiredInType -> pure (WiredInType wiredInType))
+         (renameName (scopeModule scope) name))
+
 -- | A way of injecting @ask@ into the Applicative.
 asking :: (Scope -> Validation (NonEmpty ConvertError) a) -> Convert a
 asking f = Convert (ReaderT f)
@@ -444,3 +460,81 @@ unboxedTupleCons =
          | n <- [2 .. 64]
          ]
        ])
+
+--------------------------------------------------------------------------------
+-- Wired in types
+
+wiredInTypes :: Map Name WiredInType
+wiredInTypes =
+  M.fromList
+    (concat
+       [ [ ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "(##)"
+               , nameUnique = Exported
+               }
+           , WiredIn_UnboxedTuple 0)
+         , ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "Unit#"
+               , nameUnique = Exported
+               }
+           , WiredIn_UnboxedTuple 1)
+         ]
+       , [ ( Name
+               { namePackage = "ghc-prim"
+               , nameModule = "GHC.Prim"
+               , nameName = "(#" <> S8.replicate (n - 1) ',' <> "#)"
+               , nameUnique = Exported
+               }
+           , WiredIn_UnboxedTuple n)
+         | n <- [2 .. 64]
+         ]
+       ] ++
+     map
+       (first toName)
+       [ ("Char#", WiredIn_CharPrimTyConName)
+       , ("Int#", WiredIn_IntPrimTyConName)
+       , ("Int32#", WiredIn_Int32PrimTyConName)
+       , ("Int64#", WiredIn_Int64PrimTyConName)
+       , ("Word#", WiredIn_WordPrimTyConName)
+       , ("Word32#", WiredIn_Word32PrimTyConName)
+       , ("Word64#", WiredIn_Word64PrimTyConName)
+       , ("Addr#", WiredIn_AddrPrimTyConName)
+       , ("Float#", WiredIn_FloatPrimTyConName)
+       , ("Double#", WiredIn_DoublePrimTyConName)
+       , ("State#", WiredIn_StatePrimTyConName)
+       , ("Void#", WiredIn_VoidPrimTyConName)
+       , ("Proxy#", WiredIn_ProxyPrimTyConName)
+       , ("~#", WiredIn_EqPrimTyConName)
+       , ("~R#", WiredIn_EqReprPrimTyConName)
+       , ("~P#", WiredIn_EqPhantPrimTyConName)
+       , ("RealWorld", WiredIn_RealWorldTyConName)
+       , ("Array#", WiredIn_ArrayPrimTyConName)
+       , ("ByteArray#", WiredIn_ByteArrayPrimTyConName)
+       , ("ArrayArray#", WiredIn_ArrayArrayPrimTyConName)
+       , ("SmallArray#", WiredIn_SmallArrayPrimTyConName)
+       , ("MutableArray#", WiredIn_MutableArrayPrimTyConName)
+       , ("MutableByteArray#", WiredIn_MutableByteArrayPrimTyConName)
+       , ("MutableArrayArray#", WiredIn_MutableArrayArrayPrimTyConName)
+       , ("SmallMutableArray#", WiredIn_SmallMutableArrayPrimTyConName)
+       , ("MutVar#", WiredIn_MutVarPrimTyConName)
+       , ("MVar#", WiredIn_MVarPrimTyConName)
+       , ("TVar#", WiredIn_TVarPrimTyConName)
+       , ("StablePtr#", WiredIn_StablePtrPrimTyConName)
+       , ("StableName#", WiredIn_StableNamePrimTyConName)
+       , ("Compact#", WiredIn_CompactPrimTyConName)
+       , ("BCO#", WiredIn_BcoPrimTyConName)
+       , ("Weak#", WiredIn_WeakPrimTyConName)
+       , ("ThreadId#", WiredIn_ThreadIdPrimTyConName)
+       ])
+  where
+    toName str =
+      Name
+        { namePackage = "ghc-prim"
+        , nameModule = "GHC.Prim"
+        , nameName = str
+        , nameUnique = Exported
+        }

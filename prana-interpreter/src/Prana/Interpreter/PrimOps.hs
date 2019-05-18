@@ -29,16 +29,16 @@ evalPrimOp ::
   -> (SomeVarId -> IO Whnf)
   -> PrimOp
   -> [Arg]
-  -> PrimOpType
+  -> Maybe TypeId
   -> IO Whnf
-evalPrimOp index evalSomeVarId primOp args typ =
+evalPrimOp index evalSomeVarId primOp args mtyp =
   $(derivePrimOpsCase
       Options
         { optionsOp = 'primOp
         , optionsArgs = 'args
         , optionsEvalSomeVarId = 'evalSomeVarId
         , optionsManualImplementations = [('TagToEnumOp, 'tagToEnum)]
-        , optionsType = 'typ
+        , optionsType = 'mtyp
         , optionsIndex = 'index
         , optionsEvalInt = 'evalIntArg
         , optionsBoxInt = 'boxInt
@@ -49,21 +49,16 @@ evalPrimOp index evalSomeVarId primOp args typ =
 --------------------------------------------------------------------------------
 -- Special primops with custom implementations
 
-tagToEnum :: ReverseIndex -> PrimOpType -> (SomeVarId -> IO Whnf) -> [Arg] -> IO Whnf
-tagToEnum index typ evalSomeVarId args =
-  case args of
-    [arg] -> do
-      (I# ii) <- evalIntArg evalSomeVarId arg
-      case typ of
-        BoolType -> do
-          let bool = tagToEnum# ii :: Bool
-              !con =
-                case bool of
-                  False -> reverseIndexFalse index
-                  True -> reverseIndexTrue index
-          pure (ConWhnf con [])
-        _ -> error "Unknown type for tagToEnum."
-    _ -> error ("Invalid arguments to TagToEnumOp: " ++ show args)
+tagToEnum :: ReverseIndex -> Maybe TypeId -> (SomeVarId -> IO Whnf) -> [Arg] -> IO Whnf
+tagToEnum _index mtypeId evalSomeVarId args =
+  case mtypeId of
+    Nothing -> error "TagToEnumOp not given a type!"
+    Just typeId ->
+      case args of
+        [arg] -> do
+          ii <- evalIntArg evalSomeVarId arg
+          pure (ConWhnf (DataConId typeId (ConIndex (fromIntegral ii))) [])
+        _ -> error ("Invalid arguments to TagToEnumOp: " ++ show args)
 
 --------------------------------------------------------------------------------
 -- Evaluating arguments for primops

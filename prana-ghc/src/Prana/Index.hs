@@ -76,24 +76,4 @@ reverseIndex index =
     , reverseIndexGlobals =
         M.fromList (map swap (M.toList (indexGlobals index)))
     , reverseIndexIndex = index
-    , reverseIndexTrue =
-        fromJust
-          (M.lookup
-             (Name
-                { namePackage = "ghc-prim"
-                , nameModule = "GHC.Types"
-                , nameName = "True"
-                , nameUnique = Exported
-                })
-             (indexDataCons index))
-    , reverseIndexFalse =
-        fromJust
-          (M.lookup
-             (Name
-                { namePackage = "ghc-prim"
-                , nameModule = "GHC.Types"
-                , nameName = "False"
-                , nameUnique = Exported
-                })
-             (indexDataCons index))
     }

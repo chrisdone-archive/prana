@@ -83,25 +83,25 @@ spec =
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep
-                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
+                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '1')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
+                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '2')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
+                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '3')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 0}))
+                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 0}))
                 , EndConStep
                 , EndConStep
                 , EndConStep
@@ -121,6 +121,7 @@ getDataConI# index =
     Nothing -> error "Couldn't find constructor."
     Just dataConId -> pure dataConId
 
+-- | Compile and run left-to-right evaluation of the complete data structure.
 compileAndRun ::
      Index
   -> Options
