@@ -24,10 +24,9 @@ import qualified StgSyn
 updateIndex ::
      Monad m
   => [StgSyn.GenStgTopBinding Name Name]
-  -> [Name]
-  -> [Name]
+  -> [(Name, [Name])]
   -> StateT Index m Index
-updateIndex bindings tycons types = do
+updateIndex bindings tycons = do
   modify
     (\idx ->
        idx
@@ -46,15 +45,24 @@ updateIndex bindings tycons types = do
          , indexDataCons =
              let start = fromIntegral (M.size (indexDataCons idx))
               in foldl'
-                   (\m (k, i) -> M.insert k (DataConId i) m)
+                   (\m (typeIdx, (_typeName, constructorNames)) ->
+                      foldl'
+                        (\acc (consIndex, consName) ->
+                           M.insert
+                             consName
+                             (DataConId (TypeId typeIdx) (ConIndex consIndex))
+                             acc)
+                        m
+                        (zip [0 ..] constructorNames))
                    (indexDataCons idx)
-                   (zip tycons [start ..])
+                   (zip [start ..] tycons)
          , indexTypes =
              let start = fromIntegral (M.size (indexTypes idx))
               in foldl'
-                   (\m (k, i) -> M.insert k (TypeId i) m)
+                   (\m ((typeName, _constructorNames), i) ->
+                      M.insert typeName (TypeId i) m)
                    (indexTypes idx)
-                   (zip types [start ..])
+                   (zip tycons [start ..])
          })
   get
 

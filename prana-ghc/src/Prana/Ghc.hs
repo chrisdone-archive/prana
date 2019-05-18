@@ -306,14 +306,12 @@ compileModSummary modSum = do
   (stg_binds, _) <- liftIO (myCoreToStg dflags this_mod prepd_binds)
   let module' = GHC.ms_mod modSum
       modguts = GHC.dm_core_module dmod
-      tyCons = collectDataCons (HscTypes.mg_tcs modguts)
       dataTypes = collectDataTypes (HscTypes.mg_tcs modguts)
-  case (,,) <$> traverse (renameTopBinding module') stg_binds <*>
-       traverse (validationNel . renameId module') (Set.toList tyCons) <*>
-       traverse (validationNel . renameName module') (Set.toList dataTypes) of
+  case (,) <$> traverse (renameTopBinding module') stg_binds <*>
+       traverse (renameDataType module') dataTypes of
     Failure errors -> pure (Left (RenameErrors errors))
-    Success (bindings, dataCons, types) -> do
-      void (updateIndex bindings dataCons types)
+    Success (bindings, dataCons) -> do
+      void (updateIndex bindings dataCons)
       pure (Right bindings)
 
 -- | Perform core to STG transformation.

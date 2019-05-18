@@ -12,6 +12,7 @@ module Prana.Rename
   ( renameTopBinding
   , renameId
   , renameName
+  , renameDataType
   , displayName
   , Name(..)
   , Unique(..)
@@ -55,6 +56,12 @@ instance Exception RenameFailure where
 
 instance Show RenameFailure where
   show (UnexpectedInternalName _) = "UnexpectedInternalName"
+
+-- | Rename a data type and its constructors.
+
+renameDataType m (typeName, typeConstructors) =
+  (,) <$> validationNel (renameName m typeName) <*>
+  traverse (validationNel . renameId m) typeConstructors
 
 -- | Rename the STG AST to have globally unique names.
 renameTopBinding ::

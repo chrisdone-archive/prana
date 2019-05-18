@@ -5,12 +5,12 @@
 module Prana.Collect
   (collectGlobalBindings
   ,collectLocalBindings
-  ,collectDataCons
   ,collectDataTypes)
   where
 
 import           Control.Monad.State
 import           Data.Bitraversable
+import           Data.List
 import           Data.Set (Set)
 import qualified Data.Set as Set
 import qualified DataCon
@@ -43,11 +43,12 @@ collectLocalBindings =
         StgSyn.StgTopLifted (StgSyn.StgRec bndrs) -> map snd bndrs
         StgSyn.StgTopStringLit _ _ -> []
 
--- | Collect the set of data constructor ids.
-collectDataCons :: [TyCon.TyCon] -> Set Var.Id
-collectDataCons =
-  Set.fromList . concatMap (map DataCon.dataConWorkId . TyCon.tyConDataCons)
+-- | Collect the set of data types.
+collectDataTypes :: [TyCon.TyCon] -> [(Name.Name, [Var.Id])]
+collectDataTypes =
+  nub . map (\tyCon -> (Name.getName tyCon, collectDataCons tyCon))
 
 -- | Collect the set of data constructor ids.
-collectDataTypes :: [TyCon.TyCon] -> Set Name.Name
-collectDataTypes = Set.fromList . map Name.getName
+collectDataCons :: TyCon.TyCon -> [Var.Id]
+collectDataCons =
+  nub . map DataCon.dataConWorkId . TyCon.tyConDataCons

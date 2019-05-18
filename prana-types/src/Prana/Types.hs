@@ -126,8 +126,15 @@ newtype TypeId =
   deriving (Show, Eq, Generic, Ord)
 instance Binary TypeId
 
+newtype ConIndex =
+  ConIndex
+    { conIndex :: Int64
+    }
+  deriving (Show, Eq, Generic, Ord)
+instance Binary ConIndex
+
 data DataConId
-  = DataConId !Int64
+  = DataConId !TypeId !ConIndex
   | UnboxedTupleConId !Int
   deriving (Show, Eq, Generic, Ord)
 instance Binary DataConId

@@ -82,19 +82,26 @@ spec =
                   "CharTest"
               shouldReturn
                 (runConduit (steps .| CL.consume))
-                [ BeginConStep (DataConId 1)
-                , BeginConStep (DataConId 0)
+                [ BeginConStep
+                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
                 , LitStep (CharLit '1')
                 , EndConStep
-                , BeginConStep (DataConId 1)
-                , BeginConStep (DataConId 0)
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
                 , LitStep (CharLit '2')
                 , EndConStep
-                , BeginConStep (DataConId 1)
-                , BeginConStep (DataConId 0)
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 1}))
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 21}) (ConIndex {conIndex = 0}))
                 , LitStep (CharLit '3')
                 , EndConStep
-                , BeginConStep (DataConId 6)
+                , BeginConStep
+                    (DataConId (TypeId {typeId = 23}) (ConIndex {conIndex = 0}))
                 , EndConStep
                 , EndConStep
                 , EndConStep
