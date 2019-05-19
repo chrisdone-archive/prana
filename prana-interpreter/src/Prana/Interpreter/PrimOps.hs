@@ -70,31 +70,7 @@ tagToEnum _index mtypeId evalSomeVarId args =
 -- Others to consider: Double#, Word#, Float#, Addr#
 
 evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
-evalIntArg evalSomeVarId =
-  \case
-    LitArg (IntLit !i) -> pure i
-    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
-    VarArg someVarId -> do
-      whnf <- evalSomeVarId someVarId
-      case whnf of
-        LitWhnf (IntLit !i) -> pure i
-        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
-        _ ->
-          error
-            ("Unexpected whnf for evalIntArg (I'm sure ClosureWhnf will come up here): " ++
-             show whnf)
+evalIntArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'IntLit)
 
 evalCharArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Char
-evalCharArg evalSomeVarId =
-  \case
-    LitArg (CharLit !i) -> pure i
-    LitArg lit -> error ("Invalid lit rep: " ++ show lit)
-    VarArg someVarId -> do
-      whnf <- evalSomeVarId someVarId
-      case whnf of
-        LitWhnf (CharLit !i) -> pure i
-        LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
-        _ ->
-          error
-            ("Unexpected whnf for evalCharArg (I'm sure ClosureWhnf will come up here): " ++
-             show whnf)
+evalCharArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'CharLit)

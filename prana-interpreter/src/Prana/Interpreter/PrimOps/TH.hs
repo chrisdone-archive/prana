@@ -1,5 +1,5 @@
 {-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE TemplateHaskellQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE BangPatterns #-}
@@ -22,7 +22,7 @@ import GHC.Exts
 import Language.Haskell.TH
 import Prana.Interpreter.Types
 import Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
-import Prana.Types (DataConId(..), Lit(..))
+import Prana.Types (DataConId(..), Lit(..), Arg(..))
 
 data Options =
   Options
@@ -238,3 +238,15 @@ primReturnTy =
   \case
     TyF _ rest -> primReturnTy rest
     ty -> Just ty
+
+evalArgByType :: Name -> Name -> Q Exp
+evalArgByType evalSomeVarId conName =
+  [|\case
+      LitArg $(conP conName [varP (mkName "i")]) -> pure i
+      LitArg lit -> error ("Invalid lit rep: " ++ show lit)
+      VarArg someVarId -> do
+        whnf <- $(varE evalSomeVarId) someVarId
+        case whnf of
+          LitWhnf $(conP conName [varP (mkName "i")]) -> pure i
+          LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
+          _ -> error ("Unexpected whnf for evaluating a literal")|]
