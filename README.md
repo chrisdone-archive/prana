@@ -69,17 +69,17 @@ The following are planned to be implemented as standard:
 
 |Milestone|Status|
 |:---|:---|
-|`Char#`|-|
-|`Int#`|-|
+|`Char#`|:heavy_check_mark:|
+|`Int#`|:heavy_check_mark:|
 |`Int8#`|-|
 |`Word8#`|-|
 |`Int16#`|-|
 |`Word16#`|-|
-|`Word#`|-|
-|`Int64#`|-|
-|`Word64#`|-|
-|`Double#`|-|
-|`Float#`|-|
+|`Word#`|:heavy_check_mark:|
+|`Int64#`|:heavy_check_mark:|
+|`Word64#`|:heavy_check_mark:|
+|`Double#`|:heavy_check_mark:|
+|`Float#`|:heavy_check_mark:|
 |`Array# a`|-|
 |`MutableArray# s a`|-|
 |`SmallArray# a`|-|
