@@ -166,11 +166,13 @@ wrapResult options primName resultName ty =
                       (doE
                          (concat
                             [ zipWith
-                                (\i _ty ->
+                                (\i slotTy ->
                                    bindS
                                      (varP (mkSlotNameBoxed i))
                                      (appE
-                                        (varE (optionsBoxInt options))
+                                        (case slotTy of
+                                           (TyApp (TyCon "Int#") []) -> varE (optionsBoxInt options)
+                                           _ -> error "Invalid type for unboxed tuple slot.")
                                         (varE (mkSlotName i))))
                                 [0 :: Int ..]
                                 slotTypes
