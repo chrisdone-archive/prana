@@ -88,7 +88,7 @@ The following are planned to be implemented as standard:
 |`MutableByteArray# s`|-|
 |`ArrayArray#`|-|
 |`MutableArrayArray# s`|-|
-|`Addr#`|-|
+|`Addr#`|:heavy_check_mark:|
 |`MutVar# s a`|-|
 |`Weak# b`|-|
 |`StablePtr# a`|-|

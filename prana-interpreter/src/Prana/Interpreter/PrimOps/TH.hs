@@ -38,6 +38,8 @@ data Options =
     , optionsBoxFloat :: !Name
     , optionsEvalWord :: !Name
     , optionsBoxWord :: !Name
+    , optionsEvalAddr :: !Name
+    , optionsBoxAddr :: !Name
     , optionsIndex :: !Name
     , optionsType :: !Name
     , optionsEvalSomeVarId :: !Name
@@ -143,6 +145,7 @@ wrapResult options primName resultName ty =
     Just (TyApp (TyCon "Int#") []) -> wrapLit resultName 'IntLit 'I#
     Just (TyApp (TyCon "Char#") []) -> wrapLit resultName 'CharLit 'C#
     Just (TyApp (TyCon "Word#") []) -> wrapLit resultName 'WordLit 'W#
+    Just (TyApp (TyCon "Addr#") []) -> wrapWhnf resultName 'AddrWhnf (varE 'id) 'Ptr
     Just (TyApp (TyCon "Double#") []) -> wrapLit resultName 'DoubleLit 'D#
     Just (TyApp (TyCon "Float#") []) -> wrapLit resultName 'FloatLit 'F#
     Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName
@@ -151,14 +154,18 @@ wrapResult options primName resultName ty =
 
 -- | Wrap up a value in a literal WHNF.
 wrapLit :: Applicative f => Name -> Name -> Name -> f [StmtQ]
-wrapLit resultName litCon valCon =
+wrapLit resultName litCon valCon = wrapWhnf resultName 'LitWhnf (conE litCon) valCon
+
+-- | Wrap up a value in a WHNF.
+wrapWhnf :: Applicative f => Name -> Name -> ExpQ -> Name -> f [StmtQ]
+wrapWhnf resultName whnfCon litCon valCon =
   pure
     [ noBindS
         (appE
            (varE 'pure)
            (appE
-              (conE 'LitWhnf)
-              (appE (conE litCon) (appE (conE valCon) (varE resultName)))))
+              (conE whnfCon)
+              (appE litCon (appE (conE valCon) (varE resultName)))))
     ]
 
 -- | Wrap up an unboxed tuple, boxing its arguments. That's our design decision.

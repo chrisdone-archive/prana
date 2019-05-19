@@ -16,6 +16,7 @@ module Prana.Interpreter.PrimOps
   ) where
 
 import Data.Word
+import Foreign.Ptr
 import GHC.Exts
 import GHC.Int
 import Prana.Interpreter.Boxing
@@ -52,6 +53,8 @@ evalPrimOp index evalSomeVarId primOp args mtyp =
         , optionsBoxFloat = 'boxFloat
         , optionsEvalWord = 'evalWordArg
         , optionsBoxWord = 'boxWord
+        , optionsEvalAddr = 'evalAddrArg
+        , optionsBoxAddr = 'boxAddr
         })
 
 --------------------------------------------------------------------------------
@@ -85,3 +88,15 @@ evalDoubleArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'DoubleLit)
 
 evalWordArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Word
 evalWordArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'WordLit)
+
+evalAddrArg :: (SomeVarId -> IO Whnf) -> Arg -> IO (Ptr ())
+evalAddrArg evalSomeVarId =
+  \case
+    LitArg NullAddrLit -> pure nullPtr
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId someVarId
+      case whnf of
+        LitWhnf NullAddrLit -> pure nullPtr
+        AddrWhnf ptr -> pure ptr
+        _ -> error ("Unexpected addr evaluating an addr...")
+    _ -> error ("Unexpected addr evaluating an addr...")

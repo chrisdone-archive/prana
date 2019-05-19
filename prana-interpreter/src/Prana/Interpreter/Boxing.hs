@@ -53,3 +53,6 @@ boxDouble x# = boxWhnf (LitWhnf (DoubleLit (D# x#)))
 
 boxFloat :: Float# -> IO Box
 boxFloat x# = boxWhnf (LitWhnf (FloatLit (F# x#)))
+
+boxAddr :: Addr# -> IO Box
+boxAddr x# = boxWhnf (AddrWhnf (Ptr x#))
