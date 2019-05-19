@@ -23,8 +23,7 @@ Pure-Haskell goals:
 |Support all primitive types (`Char#` etc.)| :heavy_check_mark: | Fairly straight-forward |
 |`tagToEnum` support| :heavy_check_mark: | Pain in the arse |
 |Report unimplemented primops when compiling| :heavy_check_mark: | Straight-forward |
-|Automated primops sourcing via genprimopcode| :construction: | Straight-forward |
-|Move from `binary` to `persist`| – | Easy |
+|Automated primops sourcing via genprimopcode| :heavy_check_mark: | Straight-forward |
 |Have a sophisticated inspector| – | Fairly straight-forward |
 |Get code coverage to near 100%| - | Detailed |
 
@@ -51,6 +50,7 @@ Optional goals:
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
+|Move from `binary` something faster [that also works](https://github.com/minad/persist/issues/4)| – | Takes yak shaving |
 |Optimization of interpreter| – | Detailed |
 |Allocation tests| – | Easy |
 |CPU instruction tests| – | Easy |
