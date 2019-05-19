@@ -23,7 +23,8 @@ Pure-Haskell goals:
 |Support all primitive types (`Char#` etc.)| :heavy_check_mark: | Fairly straight-forward |
 |`tagToEnum` support| :heavy_check_mark: | Pain in the arse |
 |Report unimplemented primops when compiling| :heavy_check_mark: | Straight-forward |
-|Automated primops sourcing via genprimopcode| :heavy_check_mark: | Straight-forward |
+|Primops for register types (`Word#`, `Int#`, etc.)| :heavy_check_mark: | Straight-forward |
+|Primops for arrays (`ByteArray#`, etc.)| :construction: | Fairly straight-forward |
 |Have a sophisticated inspector| – | Fairly straight-forward |
 |Get code coverage to near 100%| - | Detailed |
 
