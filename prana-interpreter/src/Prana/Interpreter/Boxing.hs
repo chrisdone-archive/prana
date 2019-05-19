@@ -44,3 +44,12 @@ boxInt x# = boxWhnf (LitWhnf (IntLit (I# x#)))
 
 boxChar :: Char# -> IO Box
 boxChar x# = boxWhnf (LitWhnf (CharLit (C# x#)))
+
+boxWord :: Word# -> IO Box
+boxWord x# = boxWhnf (LitWhnf (WordLit (W# x#)))
+
+boxDouble :: Double# -> IO Box
+boxDouble x# = boxWhnf (LitWhnf (DoubleLit (D# x#)))
+
+boxFloat :: Float# -> IO Box
+boxFloat x# = boxWhnf (LitWhnf (FloatLit (F# x#)))

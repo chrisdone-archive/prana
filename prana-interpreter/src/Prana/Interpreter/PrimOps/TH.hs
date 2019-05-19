@@ -32,6 +32,12 @@ data Options =
     , optionsBoxInt :: !Name
     , optionsEvalChar :: !Name
     , optionsBoxChar :: !Name
+    , optionsEvalDouble :: !Name
+    , optionsBoxDouble :: !Name
+    , optionsEvalFloat :: !Name
+    , optionsBoxFloat :: !Name
+    , optionsEvalWord :: !Name
+    , optionsBoxWord :: !Name
     , optionsIndex :: !Name
     , optionsType :: !Name
     , optionsEvalSomeVarId :: !Name
@@ -130,102 +136,111 @@ derivePrimOpAlt options primName ty = do
     mkresultName :: Int -> a -> Name
     mkresultName i _ = mkName ("arg_unwrapped_" ++ show i)
 
+-- | Wrap up a primop's result back in guest representation.
 wrapResult :: Options -> [Char] -> Name -> Ty -> Either [Char] [Q Stmt]
 wrapResult options primName resultName ty =
   case primReturnTy ty of
-    Just (TyApp (TyCon "Int#") []) ->
-      pure
-        [ noBindS
-            (appE
-               (varE 'pure)
-               (appE
-                  (conE 'LitWhnf)
-                  (appE (conE 'IntLit) (appE (conE 'I#) (varE resultName)))))
-        ]
-    Just (TyApp (TyCon "Char#") []) ->
-      pure
-        [ noBindS
-            (appE
-               (varE 'pure)
-               (appE
-                  (conE 'LitWhnf)
-                  (appE (conE 'CharLit) (appE (conE 'C#) (varE resultName)))))
-        ]
-    Just (TyUTup slotTypes) ->
-      pure
-        [ noBindS
-            (caseE
-               (varE resultName)
-               [ match
-                   (unboxedTupP
-                      (zipWith
-                         (\i _ty -> varP (mkSlotName i))
-                         [0 :: Int ..]
-                         slotTypes))
-                   (normalB
-                      (doE
-                         (concat
-                            [ zipWith
-                                (\i slotTy ->
-                                   bindS
-                                     (varP (mkSlotNameBoxed i))
-                                     (appE
-                                        (case slotTy of
-                                           (TyApp (TyCon "Int#") []) -> varE (optionsBoxInt options)
-                                           _ -> error "Invalid type for unboxed tuple slot.")
-                                        (varE (mkSlotName i))))
-                                [0 :: Int ..]
-                                slotTypes
-                            , [ noBindS
-                                  (appE
-                                     (varE 'pure)
-                                     (appE
-                                        (appE
-                                           (conE 'ConWhnf)
-                                           (appE
-                                              (conE 'UnboxedTupleConId)
-                                              (litE
-                                                 (IntegerL
-                                                    (fromIntegral
-                                                       (length slotTypes))))))
-                                        (listE
-                                           (zipWith
-                                              (\i _ -> varE (mkSlotNameBoxed i))
-                                              [0 :: Int ..]
-                                              slotTypes))))
-                              ]
-                            ])))
-                   []
-               ])
-        ]
-      where mkSlotName i = mkName ("slot_" ++ show i)
-            mkSlotNameBoxed i = mkName ("slot_boxed_" ++ show i)
+    Just (TyApp (TyCon "Int#") []) -> wrapLit resultName 'IntLit 'I#
+    Just (TyApp (TyCon "Char#") []) -> wrapLit resultName 'CharLit 'C#
+    Just (TyApp (TyCon "Word#") []) -> wrapLit resultName 'WordLit 'W#
+    Just (TyApp (TyCon "Double#") []) -> wrapLit resultName 'DoubleLit 'D#
+    Just (TyApp (TyCon "Float#") []) -> wrapLit resultName 'FloatLit 'F#
+    Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> Left (primName ++ ": Couldn't find return type of " ++ show ty)
 
+-- | Wrap up a value in a literal WHNF.
+wrapLit :: Applicative f => Name -> Name -> Name -> f [StmtQ]
+wrapLit resultName litCon valCon =
+  pure
+    [ noBindS
+        (appE
+           (varE 'pure)
+           (appE
+              (conE 'LitWhnf)
+              (appE (conE litCon) (appE (conE valCon) (varE resultName)))))
+    ]
+
+-- | Wrap up an unboxed tuple, boxing its arguments. That's our design decision.
+-- TODO: Re-visit boxing unboxed arguments? Maybe only do polymorphic ones?
+wrapUnboxedTuple :: Applicative f => Options -> [Ty] -> Name -> f [StmtQ]
+wrapUnboxedTuple options slotTypes resultName =
+  pure
+    [ noBindS
+        (caseE
+           (varE resultName)
+           [ match
+               (unboxedTupP
+                  (zipWith
+                     (\i _ty -> varP (mkSlotName i))
+                     [0 :: Int ..]
+                     slotTypes))
+               (normalB
+                  (doE
+                     (concat
+                        [ zipWith
+                            (\i slotTy ->
+                               bindS
+                                 (varP (mkSlotNameBoxed i))
+                                 (appE
+                                    (case slotTy of
+                                       (TyApp (TyCon "Int#") []) ->  varE (optionsBoxInt options)
+                                       (TyApp (TyCon "Word#") []) ->  varE (optionsBoxWord options)
+                                       (TyApp (TyCon "Char#") []) ->  varE (optionsBoxChar options)
+                                       (TyApp (TyCon "Double#") []) ->  varE (optionsBoxDouble options)
+                                       (TyApp (TyCon "Float#") []) ->  varE (optionsBoxFloat options)
+                                       _ ->
+                                         error
+                                           "Invalid type for unboxed tuple slot.")
+                                    (varE (mkSlotName i))))
+                            [0 :: Int ..]
+                            slotTypes
+                        , [ noBindS
+                              (appE
+                                 (varE 'pure)
+                                 (appE
+                                    (appE
+                                       (conE 'ConWhnf)
+                                       (appE
+                                          (conE 'UnboxedTupleConId)
+                                          (litE
+                                             (IntegerL
+                                                (fromIntegral (length slotTypes))))))
+                                    (listE
+                                       (zipWith
+                                          (\i _ -> varE (mkSlotNameBoxed i))
+                                          [0 :: Int ..]
+                                          slotTypes))))
+                          ]
+                        ])))
+               []
+           ])
+    ]
+  where
+    mkSlotName i = mkName ("slot_" ++ show i)
+    mkSlotNameBoxed i = mkName ("slot_boxed_" ++ show i)
+
+-- | Eval and unwrap an argument from our representation to primitive host Haskell.
 unwrapArg :: [Char] -> Options -> (Name, (Name, Ty)) -> Either [Char] StmtQ
-unwrapArg primName options =
-  \(result, (arg, argTy)) ->
-    case argTy of
-      TyApp (TyCon "Int#") [] ->
-        pure
-          (bindS
-             (conP 'I# [varP result])
-             (appE
-                (appE
-                   (varE (optionsEvalInt options))
-                   (varE (optionsEvalSomeVarId options)))
-                (varE arg)))
-      TyApp (TyCon "Char#") [] ->
-        pure
-          (bindS
-             (conP 'C# [varP result])
-             (appE
-                (appE
-                   (varE (optionsEvalChar options))
-                   (varE (optionsEvalSomeVarId options)))
-                (varE arg)))
-      _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
+unwrapArg primName options (result, (arg, argTy)) =
+  case argTy of
+    TyApp (TyCon "Int#") [] -> unwrap 'I# optionsEvalInt
+    TyApp (TyCon "Char#") [] -> unwrap 'C# optionsEvalChar
+    TyApp (TyCon "Word#") [] -> unwrap 'W# optionsEvalWord
+    TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
+    TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
+    _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
+  where
+    unwrap hostCon evaler =
+      pure
+        (bindS
+           (conP hostCon [varP result])
+           (appE
+              (appE
+                 (varE (evaler options))
+                 (varE (optionsEvalSomeVarId options)))
+              (varE arg)))
+
 
 primArgTys :: Ty -> [Ty]
 primArgTys =
@@ -239,6 +254,8 @@ primReturnTy =
     TyF _ rest -> primReturnTy rest
     ty -> Just ty
 
+-- | Given a constructor for WHNF, evaluate or unwrap that for use in
+-- host haskell.
 evalArgByType :: Name -> Name -> Q Exp
 evalArgByType evalSomeVarId conName =
   [|\case

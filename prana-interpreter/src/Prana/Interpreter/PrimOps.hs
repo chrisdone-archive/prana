@@ -15,7 +15,9 @@ module Prana.Interpreter.PrimOps
   ( evalPrimOp
   ) where
 
+import Data.Word
 import GHC.Exts
+import GHC.Int
 import Prana.Interpreter.Boxing
 import Prana.Interpreter.PrimOps.TH
 import Prana.Interpreter.Types
@@ -44,6 +46,12 @@ evalPrimOp index evalSomeVarId primOp args mtyp =
         , optionsBoxInt = 'boxInt
         , optionsEvalChar = 'evalCharArg
         , optionsBoxChar = 'boxChar
+        , optionsEvalDouble = 'evalDoubleArg
+        , optionsBoxDouble = 'boxDouble
+        , optionsEvalFloat = 'evalFloatArg
+        , optionsBoxFloat = 'boxFloat
+        , optionsEvalWord = 'evalWordArg
+        , optionsBoxWord = 'boxWord
         })
 
 --------------------------------------------------------------------------------
@@ -63,14 +71,17 @@ tagToEnum _index mtypeId evalSomeVarId args =
 --------------------------------------------------------------------------------
 -- Evaluating arguments for primops
 
--- TODO: Generalize these two with to e.g. evalPrimArg.
-
--- Perhaps using e.g. evalToLit :: Arg -> IO Lit; and then pattern matching off of the Lit.
-
--- Others to consider: Double#, Word#, Float#, Addr#
-
 evalIntArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Int
 evalIntArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'IntLit)
 
 evalCharArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Char
 evalCharArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'CharLit)
+
+evalFloatArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Float
+evalFloatArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'FloatLit)
+
+evalDoubleArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Double
+evalDoubleArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'DoubleLit)
+
+evalWordArg :: (SomeVarId -> IO Whnf) -> Arg -> IO Word
+evalWordArg evalSomeVarId = $(evalArgByType 'evalSomeVarId 'WordLit)
