@@ -32,12 +32,12 @@ GHC Haskell goals:
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
+|FFI support| – | Requires learning but should design itself |
 |IO primops| – | Fairly straight-forward |
 |Runtime exceptions (`raise#`)| – | Tricky, space for UX design |
-|FFI support| – | Requires learning but should design itself |
 |Run [base package tests](https://github.com/ghc/packages-base/tree/master/tests) | – | Fairly straight-forward |
 |Add hotswapping support (like Emacs)| – | Requires exploration/experiment |
-|Threaded runtime/concurrency| – | Tricky |
+|Threaded runtime/concurrency| – | Tricky, but not required |
 
 Parallel goals:
 
