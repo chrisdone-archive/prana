@@ -42,6 +42,24 @@ spec =
                 pure (options, std, index))
         dataConI# <- getDataConI# index
         it
+          "Double"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/DoubleTest.hs"
+                  "DoubleTest"
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 17})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (DoubleLit 2.302585092994046)
+                , EndConStep
+                ])
+        it
           "Iterative"
           (do steps <-
                 compileAndRun
@@ -83,25 +101,39 @@ spec =
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep
-                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
+                    (DataConId
+                       (TypeId {typeIdInt = 23})
+                       (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '1')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
+                    (DataConId
+                       (TypeId {typeIdInt = 23})
+                       (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '2')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 1}))
+                    (DataConId
+                       (TypeId {typeIdInt = 23})
+                       (ConIndex {conIndexInt = 1}))
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 21}) (ConIndex {conIndexInt = 0}))
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit '3')
                 , EndConStep
                 , BeginConStep
-                    (DataConId (TypeId {typeIdInt = 23}) (ConIndex {conIndexInt = 0}))
+                    (DataConId
+                       (TypeId {typeIdInt = 23})
+                       (ConIndex {conIndexInt = 0}))
                 , EndConStep
                 , EndConStep
                 , EndConStep
