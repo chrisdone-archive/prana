@@ -57,12 +57,12 @@ derivePrimOpsCase options = do
             PrimOpSpec {cons, name, ty} -> do
               case derivePrimOpAlt options name ty of
                 Left e -> do
-                  when False (reportWarning (cons ++ ": " ++ e))
+                  when True (reportWarning (cons ++ ": " ++ e))
                   pure Nothing
                 Right expr ->
                   pure (Just (match (conP (mkName cons) []) (normalB expr) []))
             _ -> pure Nothing)
-         entries)
+         (ignoreSections id entries))
   let manuals =
         map
           (\(conName, funName) ->
@@ -80,6 +80,26 @@ derivePrimOpsCase options = do
           (optionsManualImplementations options)
   caseE (varE (optionsOp options)) (derived <> manuals <> [def])
   where
+    ignoreSections keep entries =
+      case break
+             (\case
+                Section {} -> True
+                _ -> False)
+             entries of
+        (before, Section {title}:after)
+          | elem
+             title
+             [ "Bytecode operations"
+             , "Exceptions"
+             , "STM-accessible Mutable Variables"
+             , "Concurrency primitives"
+             , "Weak pointers"
+             , "Stable pointers and names"
+             , "Compact normal form"
+             , "Parallelism"
+             ] -> ignoreSections (const []) after
+          | otherwise -> keep before <> ignoreSections id after
+        (before, after) -> keep before <> after
     def =
       match
         wildP
@@ -148,7 +168,7 @@ wrapResult options primName resultName ty =
     Just (TyApp (TyCon "Addr#") []) -> wrapWhnf resultName 'AddrWhnf (varE 'id) 'Ptr
     Just (TyApp (TyCon "Double#") []) -> wrapLit resultName 'DoubleLit 'D#
     Just (TyApp (TyCon "Float#") []) -> wrapLit resultName 'FloatLit 'F#
-    Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName
+    Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName primName
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> Left (primName ++ ": Couldn't find return type of " ++ show ty)
 
@@ -170,8 +190,8 @@ wrapWhnf resultName whnfCon litCon valCon =
 
 -- | Wrap up an unboxed tuple, boxing its arguments. That's our design decision.
 -- TODO: Re-visit boxing unboxed arguments? Maybe only do polymorphic ones?
-wrapUnboxedTuple :: Applicative f => Options -> [Ty] -> Name -> f [StmtQ]
-wrapUnboxedTuple options slotTypes resultName =
+wrapUnboxedTuple :: Applicative f => Options -> [Ty] -> Name -> String -> f [StmtQ]
+wrapUnboxedTuple options slotTypes resultName primName =
   pure
     [ noBindS
         (caseE
@@ -196,9 +216,10 @@ wrapUnboxedTuple options slotTypes resultName =
                                        (TyApp (TyCon "Char#") []) ->  varE (optionsBoxChar options)
                                        (TyApp (TyCon "Double#") []) ->  varE (optionsBoxDouble options)
                                        (TyApp (TyCon "Float#") []) ->  varE (optionsBoxFloat options)
+                                       (TyApp (TyCon "Addr#") []) ->  varE (optionsBoxAddr options)
                                        _ ->
                                          error
-                                           "Invalid type for unboxed tuple slot.")
+                                           ("Invalid type for unboxed tuple slot: " ++ show slotTy ++ " in " ++ primName))
                                     (varE (mkSlotName i))))
                             [0 :: Int ..]
                             slotTypes
@@ -236,6 +257,7 @@ unwrapArg primName options (result, (arg, argTy)) =
     TyApp (TyCon "Word#") [] -> unwrap 'W# optionsEvalWord
     TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
     TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
+    TyApp (TyCon "Addr#") [] -> unwrap 'Ptr optionsEvalAddr
     _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
   where
     unwrap hostCon evaler =
