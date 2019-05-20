@@ -15,10 +15,8 @@ module Prana.Interpreter.PrimOps
   ( evalPrimOp
   ) where
 
-import Data.Word
 import Foreign.Ptr
 import GHC.Exts
-import GHC.Int
 import Prana.Interpreter.Boxing
 import Prana.Interpreter.PrimOps.TH
 import Prana.Interpreter.Types
