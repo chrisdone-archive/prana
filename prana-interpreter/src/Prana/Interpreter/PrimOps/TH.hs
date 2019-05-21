@@ -19,6 +19,7 @@ import Control.Monad
 import Data.List
 import Data.Maybe
 import GHC.Exts
+import GHC.Types (IO(..))
 import Language.Haskell.TH
 import Prana.Interpreter.Types
 import Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
@@ -345,3 +346,22 @@ primReturnTy (TyF _ rest) = Just (go rest)
         TyF _ xs -> go xs
         ty -> ty
 primReturnTy _ = Nothing
+
+--------------------------------------------------------------------------------
+-- How to extract unboxed values out of IO
+
+-- readCharOffAddr# :: Addr# -> Int# -> State# s -> (#State# s, Char##)
+foo :: IO (() -> Char#)
+foo =
+  IO
+    (\s ->
+       case readCharOffAddr# nullAddr# 0# s of
+         (# s', v #) -> (# s', \_ -> v #))
+
+-- threadStatus# :: ThreadId# -> State# RealWorld -> (#State# RealWorld, Int#, Int#, Int##)
+bar :: IO (() -> (# Int#, Int#, Int# #))
+bar =
+  IO
+    (\s ->
+       case threadStatus# undefined s of
+         (# s', x, y, z #) -> (# s', \() -> (# x, y, z #) #))
