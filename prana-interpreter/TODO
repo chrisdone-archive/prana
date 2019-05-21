@@ -1,0 +1,46 @@
+Needs more work on State# s actions. WE SHOULD ACTUALLY BE RETURNING
+AN UNBOXED TUPLE AT THE END OF EVERYTHING.
+
+But what do we use for `s` (RealWorld) which is magic? Oh, of course!
+Accept an argument, and box it. Done.
+
+Let's generate a real test suite case for readArray via
+Data.Primtive.Array and see how its result is pattern matched?
+
+Bad result of this is that: The below one is not properly lazy; we end
+up evaluating the box, whereas instead we ought really to be returning
+an unboxed tuple like above.
+
+      ReadArrayOp
+        -> case args_a2sBt of
+             [wrapped_arg_0, wrapped_arg_1]
+               -> do MutableArray arg_unwrapped_0 <- (evalMutableArrayArg
+                                                        evalSomeVarId_a2sBp)
+                                                       wrapped_arg_0
+                     I# arg_unwrapped_1 <- (evalIntArg evalSomeVarId_a2sBp)
+                                             wrapped_arg_1
+                     get_result <- GHC.Types.IO
+                                     (\ s
+                                        -> case
+                                               ((readArray# arg_unwrapped_0) arg_unwrapped_1) s
+                                           of {
+                                             (# s', arg_tmp_0 #) -> (# s', \ _ -> arg_tmp_0 #) })
+                     let !result = get_result ()
+                     evalBox_a2sBq result
+             _ -> error "Invalid arguments to primop: "readArray#""
+
+This one is properly lazy (doesn't force the element):
+
+      IndexArrayOp
+        -> case args_a2sBt of
+             [wrapped_arg_0, wrapped_arg_1]
+               -> do Array arg_unwrapped_0 <- (evalArrayArg evalSomeVarId_a2sBp)
+                                                wrapped_arg_0
+                     I# arg_unwrapped_1 <- (evalIntArg evalSomeVarId_a2sBp)
+                                             wrapped_arg_1
+                     let !result = (indexArray# arg_unwrapped_0) arg_unwrapped_1
+                     case result of {
+                       (# slot_0 #)
+                         -> do slot_boxed_0 <- pure slot_0
+                               pure ((ConWhnf (UnboxedTupleConId 1)) [slot_boxed_0]) }
+             _ -> error "Invalid arguments to primop: "indexArray#""
