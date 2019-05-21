@@ -42,6 +42,7 @@ evalExpr index globals locals0 = do
               evalPrimOp
                 index
                 (evalSomeVarId index globals locals)
+                locals
                 primOp
                 args
                 typ

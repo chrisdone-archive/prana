@@ -17,7 +17,14 @@ data Whnf
   | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
   | EmptyWhnf
   | ArrayWhnf (Array Box)
+  | MutableArrayWhnf (MutableRealWorldArray Box)
   deriving (Show, Eq)
+
+newtype MutableRealWorldArray a =
+  MutableRealWorldArray (MutableArray RealWorld Box)
+  deriving (Eq)
+instance Show (MutableRealWorldArray a) where
+  show _ = "MutableRealWorldArray"
 
 -- | Provides laziness: A boxed value which is not necessarily
 -- evaluated, and when it is evaluated, the thunk inside it is

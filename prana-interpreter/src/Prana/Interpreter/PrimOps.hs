@@ -15,13 +15,14 @@ module Prana.Interpreter.PrimOps
   ( evalPrimOp
   ) where
 
-import Data.Primitive
-import Foreign.Ptr
-import GHC.Exts
-import Prana.Interpreter.Boxing
-import Prana.Interpreter.PrimOps.TH
-import Prana.Interpreter.Types
-import Prana.Types
+import           Data.Map.Strict (Map)
+import           Data.Primitive
+import           Foreign.Ptr
+import           GHC.Exts
+import           Prana.Interpreter.Boxing
+import           Prana.Interpreter.PrimOps.TH
+import           Prana.Interpreter.Types
+import           Prana.Types
 
 --------------------------------------------------------------------------------
 -- Derived primops
@@ -29,14 +30,16 @@ import Prana.Types
 evalPrimOp ::
      ReverseIndex
   -> (SomeVarId -> IO Whnf)
+  -> Map LocalVarId Box
   -> PrimOp
   -> [Arg]
   -> Maybe TypeId
   -> IO Whnf
-evalPrimOp index evalSomeVarId primOp args mtyp =
+evalPrimOp index evalSomeVarId locals primOp args mtyp =
   $(derivePrimOpsCase
       Options
         { optionsOp = 'primOp
+        , optionsLocals = 'locals
         , optionsArgs = 'args
         , optionsEvalSomeVarId = 'evalSomeVarId
         , optionsManualImplementations = [('TagToEnumOp, 'tagToEnum)]
@@ -56,6 +59,8 @@ evalPrimOp index evalSomeVarId primOp args mtyp =
         , optionsBoxAddr = 'boxAddr
         , optionsEvalArray = 'evalArrayArg
         , optionsBoxArray = 'boxArray
+        , optionsEvalMutableArray = 'evalMutableArrayArg
+        , optionsBoxMutableArray = 'boxMutableArray
         })
 
 --------------------------------------------------------------------------------
@@ -111,3 +116,13 @@ evalArrayArg evalSomeVarId =
         ArrayWhnf ptr -> pure ptr
         _ -> error ("Unexpected array evaluating an array...")
     _ -> error ("Unexpected array evaluating an array...")
+
+evalMutableArrayArg :: (SomeVarId -> IO Whnf) -> Arg -> IO (MutableArray RealWorld Box)
+evalMutableArrayArg evalSomeVarId =
+  \case
+    VarArg someVarId -> do
+      whnf <- evalSomeVarId someVarId
+      case whnf of
+        MutableArrayWhnf (MutableRealWorldArray ptr) -> pure ptr
+        _ -> error ("Unexpected MutableArray evaluating an MutableArray...")
+    _ -> error ("Unexpected MutableArray evaluating an MutableArray...")

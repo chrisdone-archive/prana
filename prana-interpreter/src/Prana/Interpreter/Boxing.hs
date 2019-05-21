@@ -60,3 +60,6 @@ boxAddr x# = boxWhnf (AddrWhnf (Ptr x#))
 
 boxArray :: Array# Box -> IO Box
 boxArray x# = boxWhnf (ArrayWhnf (Array x#))
+
+boxMutableArray :: MutableArray# RealWorld Box -> IO Box
+boxMutableArray x# = boxWhnf (MutableArrayWhnf (MutableRealWorldArray (MutableArray x#)))

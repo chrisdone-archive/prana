@@ -15,21 +15,22 @@
 
 module Prana.Interpreter.PrimOps.TH where
 
-import Control.Monad
-import Data.List
-import Data.Maybe
-import Data.Primitive
-import GHC.Exts
-import GHC.Types (IO(..))
-import Language.Haskell.TH
-import Prana.Interpreter.Boxing
-import Prana.Interpreter.Types
-import Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
-import Prana.Types (DataConId(..), Lit(..), Arg(..))
+import           Control.Monad
+import           Data.List
+import           Data.Maybe
+import           Data.Primitive
+import           GHC.Exts
+import           GHC.Types (IO(..))
+import           Language.Haskell.TH
+import           Prana.Interpreter.Boxing
+import           Prana.Interpreter.Types
+import           Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
+import           Prana.Types (DataConId(..), Lit(..), Arg(..))
 
 data Options =
   Options
     { optionsOp :: !Name
+    , optionsLocals :: !Name
     , optionsArgs :: !Name
     , optionsEvalInt :: !Name
     , optionsBoxInt :: !Name
@@ -47,6 +48,8 @@ data Options =
     , optionsType :: !Name
     , optionsEvalArray :: !Name
     , optionsBoxArray :: !Name
+    , optionsEvalMutableArray :: !Name
+    , optionsBoxMutableArray :: !Name
     , optionsEvalSomeVarId :: !Name
     , optionsManualImplementations :: ![(Name, Name)]
     }
@@ -235,6 +238,8 @@ wrapResult options primName resultName ty =
       wrapUnboxedTuple options slotTypes resultName primName
     Just (TyApp (TyCon ("Array#")) [TyVar "a"]) ->
       wrapWhnf resultName 'ArrayWhnf (varE 'id) 'Array
+    Just (TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"]) ->
+      wrapWhnf resultName 'MutableArrayWhnf (conE 'MutableRealWorldArray) 'MutableArray
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> pure [noBindS [|pure EmptyWhnf|]]
 
@@ -325,8 +330,14 @@ unwrapArg primName options (result, (arg, argTy)) =
     TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
     TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
     TyApp (TyCon "Addr#") [] -> unwrap 'Ptr optionsEvalAddr
-    TyVar "a" -> pure (bindS (varP result) (appE (varE 'boxArg) (varE arg)))
+    TyVar "a" ->
+      pure
+        (bindS
+           (varP result)
+           (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
     TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
+    TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
+      unwrap 'MutableArray optionsEvalMutableArray
     _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
   where
     unwrap hostCon evaler =
