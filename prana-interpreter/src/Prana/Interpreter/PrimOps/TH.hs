@@ -52,6 +52,7 @@ data Options =
     , optionsBoxMutableArray :: !Name
     , optionsEvalSomeVarId :: !Name
     , optionsManualImplementations :: ![(Name, Name)]
+    , optionsEvalBox :: !Name
     }
 
 derivePrimOpsCase :: Options -> Q Exp
@@ -239,7 +240,13 @@ wrapResult options primName resultName ty =
     Just (TyApp (TyCon ("Array#")) [TyVar "a"]) ->
       wrapWhnf resultName 'ArrayWhnf (varE 'id) 'Array
     Just (TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"]) ->
-      wrapWhnf resultName 'MutableArrayWhnf (conE 'MutableRealWorldArray) 'MutableArray
+      wrapWhnf
+        resultName
+        'MutableArrayWhnf
+        (conE 'MutableRealWorldArray)
+        'MutableArray
+    Just (TyVar "a") ->
+      pure [noBindS (appE (varE (optionsEvalBox options)) (varE resultName))]
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> pure [noBindS [|pure EmptyWhnf|]]
 

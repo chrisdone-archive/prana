@@ -30,18 +30,20 @@ import           Prana.Types
 evalPrimOp ::
      ReverseIndex
   -> (SomeVarId -> IO Whnf)
+  -> (Box -> IO Whnf)
   -> Map LocalVarId Box
   -> PrimOp
   -> [Arg]
   -> Maybe TypeId
   -> IO Whnf
-evalPrimOp index evalSomeVarId locals primOp args mtyp =
+evalPrimOp index evalSomeVarId evalBox locals primOp args mtyp =
   $(derivePrimOpsCase
       Options
         { optionsOp = 'primOp
         , optionsLocals = 'locals
         , optionsArgs = 'args
         , optionsEvalSomeVarId = 'evalSomeVarId
+        , optionsEvalBox = 'evalBox
         , optionsManualImplementations = [('TagToEnumOp, 'tagToEnum)]
         , optionsType = 'mtyp
         , optionsIndex = 'index
