@@ -98,6 +98,8 @@ derivePrimOpsCase options = do
              , "Compact normal form"
              , "Parallelism"
              , "Prefetch"
+             , "Etc"
+             , "Synchronized Mutable Variables"
              ] -> ignoreSections (const []) after
           | otherwise -> keep before <> ignoreSections id after
         (before, after) -> keep before <> after
