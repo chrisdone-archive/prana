@@ -56,7 +56,7 @@ derivePrimOpsCase options = do
       (mapM
          (\case
             PrimOpSpec {cons, name, ty} -> do
-              case derivePrimOpAlt options name ty of
+              case derivePrimOpAlt options name (tyBehavior ty) of
                 Left e -> do
                   when True (reportWarning (cons ++ ": " ++ e))
                   pure Nothing
@@ -115,13 +115,13 @@ derivePrimOpsCase options = do
                  (appE (varE 'show) (varE (optionsOp options))))))
         []
 
-derivePrimOpAlt :: Options -> String -> Ty -> Either String (Q Exp)
+derivePrimOpAlt :: Options -> String -> Behavior -> Either String (Q Exp)
 derivePrimOpAlt options primName ty = do
   bindings <-
     mapM
       (unwrapArg primName options)
-      (zip resultNames (zip argNames (primArgTys ty)))
-  retStatments <- wrapResult options primName resultName ty
+      (zip resultNames (zip argNames (signatureArgs (behaviorSig ty))))
+  retStatments <- wrapResult options primName resultName (behaviorSig ty)
   pure
     (caseE
        (varE (optionsArgs options))
@@ -155,17 +155,17 @@ derivePrimOpAlt options primName ty = do
        ])
   where
     resultName = mkName "result"
-    argNames = zipWith argName [0 ..] (primArgTys ty)
-    resultNames = zipWith mkresultName [0 ..] (primArgTys ty)
+    argNames = zipWith argName [0 ..] (signatureArgs (behaviorSig ty))
+    resultNames = zipWith mkresultName [0 ..] (signatureArgs (behaviorSig ty))
     argName :: Int -> a -> Name
     argName i _ = mkName ("wrapped_arg_" ++ show i)
     mkresultName :: Int -> a -> Name
     mkresultName i _ = mkName ("arg_unwrapped_" ++ show i)
 
 -- | Wrap up a primop's result back in guest representation.
-wrapResult :: Options -> [Char] -> Name -> Ty -> Either [Char] [Q Stmt]
+wrapResult :: Options -> [Char] -> Name -> Signature -> Either [Char] [Q Stmt]
 wrapResult options primName resultName ty =
-  case primReturnTy ty of
+  case signatureReturn ty of
     Just (TyApp (TyCon "Int#") []) -> wrapLit resultName 'IntLit 'I#
     Just (TyApp (TyCon "Char#") []) -> wrapLit resultName 'CharLit 'C#
     Just (TyApp (TyCon "Word#") []) -> wrapLit resultName 'WordLit 'W#
