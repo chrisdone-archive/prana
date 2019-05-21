@@ -131,17 +131,61 @@ derivePrimOpAlt options primName ty = do
               (doE
                  (concat
                     [ bindings
-                    , [ letS
-                          [ valD
-                              (bangP (varP resultName))
-                              (normalB
-                                 (foldl'
-                                    appE
-                                    (varE (mkName primName))
-                                    (map varE resultNames)))
-                              []
+                    , case ty of
+                        Pure {} ->
+                          [ letS
+                              [ valD
+                                  (bangP (varP resultName))
+                                  (normalB
+                                     (foldl'
+                                        appE
+                                        (varE (mkName primName))
+                                        (map varE resultNames)))
+                                  []
+                              ]
                           ]
-                      ]
+                        Monadic {} ->
+                          [ bindS
+                              (varP getResultName)
+                              (appE
+                                 (conE 'IO)
+                                 (lamE
+                                    [varP stateName]
+                                    (caseE
+                                       (appE
+                                          (foldl'
+                                             appE
+                                             (varE (mkName primName))
+                                             (map varE resultNames))
+                                          (varE stateName))
+                                       [ match
+                                           (if null tupleSlotNames
+                                               then varP newStateName
+                                               else unboxedTupP
+                                                      (varP newStateName :
+                                                       map varP tupleSlotNames))
+                                           (normalB
+                                              (unboxedTupE
+                                                 [ varE newStateName
+                                                 , lamE
+                                                     [wildP]
+                                                     (case tupleSlotNames of
+                                                        [name] -> varE name
+                                                        [] -> tupE []
+                                                        _ -> unboxedTupE
+                                                                 (map varE tupleSlotNames))
+                                                 ]))
+                                           []
+                                       ])))
+                          , letS
+                              [ valD
+                                  (if null tupleSlotNames
+                                      then wildP
+                                      else  bangP (varP resultName))
+                                  (normalB (appE (varE getResultName) (tupE [])))
+                                  []
+                              ]
+                          ]
                     , retStatments
                     ])))
            []
@@ -154,13 +198,23 @@ derivePrimOpAlt options primName ty = do
            []
        ])
   where
+    stateName = mkName "s"
+    newStateName = mkName "s'"
+    getResultName = mkName "get_result"
     resultName = mkName "result"
     argNames = zipWith argName [0 ..] (signatureArgs (behaviorSig ty))
     resultNames = zipWith mkresultName [0 ..] (signatureArgs (behaviorSig ty))
+    tupleSlotNames =
+      zipWith mktupleSlotName [0 ..] (case signatureReturn (behaviorSig ty) of
+                                        Just (TyUTup tys) -> tys
+                                        Just t -> [t]
+                                        _ -> [])
     argName :: Int -> a -> Name
     argName i _ = mkName ("wrapped_arg_" ++ show i)
     mkresultName :: Int -> a -> Name
     mkresultName i _ = mkName ("arg_unwrapped_" ++ show i)
+    mktupleSlotName :: Int -> a -> Name
+    mktupleSlotName i _ = mkName ("arg_tmp_" ++ show i)
 
 -- | Wrap up a primop's result back in guest representation.
 wrapResult :: Options -> [Char] -> Name -> Signature -> Either [Char] [Q Stmt]
@@ -174,7 +228,7 @@ wrapResult options primName resultName ty =
     Just (TyApp (TyCon "Float#") []) -> wrapLit resultName 'FloatLit 'F#
     Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName primName
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
-    Nothing -> Left (primName ++ ": Couldn't find return type of " ++ show ty)
+    Nothing -> pure [noBindS [|pure EmptyWhnf|]]
 
 -- | Wrap up a value in a literal WHNF.
 wrapLit :: Applicative f => Name -> Name -> Name -> f [StmtQ]
