@@ -7,6 +7,7 @@ module Prana.Interpreter.Boxing where
 
 import Data.IORef
 import Data.Map.Strict (Map)
+import Data.Primitive
 import GHC.Exts
 import Prana.Interpreter.Types
 import Prana.Types
@@ -56,3 +57,6 @@ boxFloat x# = boxWhnf (LitWhnf (FloatLit (F# x#)))
 
 boxAddr :: Addr# -> IO Box
 boxAddr x# = boxWhnf (AddrWhnf (Ptr x#))
+
+boxArray :: Array# Box -> IO Box
+boxArray x# = boxWhnf (ArrayWhnf (Array x#))

@@ -1,10 +1,11 @@
-
+{-# LANGUAGE MagicHash #-}
 -- | Types used by the interpreter.
 
 module Prana.Interpreter.Types where
 
 import Data.IORef
 import Data.Map.Strict (Map)
+import Data.Primitive.Array
 import GHC.Exts
 import Prana.Types
 
@@ -15,6 +16,7 @@ data Whnf
   | ConWhnf DataConId [Box]
   | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
   | EmptyWhnf
+  | ArrayWhnf (Array Box)
   deriving (Show, Eq)
 
 -- | Provides laziness: A boxed value which is not necessarily

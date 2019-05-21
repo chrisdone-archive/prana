@@ -23,7 +23,8 @@ library
       mtl,
       containers,
       template-haskell,
-      ghc-prim
+      ghc-prim,
+      primitive
   default-language: Haskell2010
 
 test-suite prana-interpreter-test

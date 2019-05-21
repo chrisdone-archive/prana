@@ -18,9 +18,11 @@ module Prana.Interpreter.PrimOps.TH where
 import Control.Monad
 import Data.List
 import Data.Maybe
+import Data.Primitive
 import GHC.Exts
 import GHC.Types (IO(..))
 import Language.Haskell.TH
+import Prana.Interpreter.Boxing
 import Prana.Interpreter.Types
 import Prana.PrimOp (ty, name, Entry(..), parsePrimops, Ty(..), TyCon(..))
 import Prana.Types (DataConId(..), Lit(..), Arg(..))
@@ -43,6 +45,8 @@ data Options =
     , optionsBoxAddr :: !Name
     , optionsIndex :: !Name
     , optionsType :: !Name
+    , optionsEvalArray :: !Name
+    , optionsBoxArray :: !Name
     , optionsEvalSomeVarId :: !Name
     , optionsManualImplementations :: ![(Name, Name)]
     }
@@ -223,10 +227,14 @@ wrapResult options primName resultName ty =
     Just (TyApp (TyCon "Int#") []) -> wrapLit resultName 'IntLit 'I#
     Just (TyApp (TyCon "Char#") []) -> wrapLit resultName 'CharLit 'C#
     Just (TyApp (TyCon "Word#") []) -> wrapLit resultName 'WordLit 'W#
-    Just (TyApp (TyCon "Addr#") []) -> wrapWhnf resultName 'AddrWhnf (varE 'id) 'Ptr
+    Just (TyApp (TyCon "Addr#") []) ->
+      wrapWhnf resultName 'AddrWhnf (varE 'id) 'Ptr
     Just (TyApp (TyCon "Double#") []) -> wrapLit resultName 'DoubleLit 'D#
     Just (TyApp (TyCon "Float#") []) -> wrapLit resultName 'FloatLit 'F#
-    Just (TyUTup slotTypes) -> wrapUnboxedTuple options slotTypes resultName primName
+    Just (TyUTup slotTypes) ->
+      wrapUnboxedTuple options slotTypes resultName primName
+    Just (TyApp (TyCon ("Array#")) [TyVar "a"]) ->
+      wrapWhnf resultName 'ArrayWhnf (varE 'id) 'Array
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> pure [noBindS [|pure EmptyWhnf|]]
 
@@ -275,6 +283,7 @@ wrapUnboxedTuple options slotTypes resultName primName =
                                        (TyApp (TyCon "Double#") []) ->  varE (optionsBoxDouble options)
                                        (TyApp (TyCon "Float#") []) ->  varE (optionsBoxFloat options)
                                        (TyApp (TyCon "Addr#") []) ->  varE (optionsBoxAddr options)
+                                       TyVar "a" -> varE 'pure
                                        _ ->
                                          error
                                            ("Invalid type for unboxed tuple slot: " ++ show slotTy ++ " in " ++ primName))
@@ -316,6 +325,8 @@ unwrapArg primName options (result, (arg, argTy)) =
     TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
     TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
     TyApp (TyCon "Addr#") [] -> unwrap 'Ptr optionsEvalAddr
+    TyVar "a" -> pure (bindS (varP result) (appE (varE 'boxArg) (varE arg)))
+    TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
     _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
   where
     unwrap hostCon evaler =
