@@ -22,7 +22,8 @@ library
       prana-primops,
       mtl,
       containers,
-      template-haskell
+      template-haskell,
+      ghc-prim
   default-language: Haskell2010
 
 test-suite prana-interpreter-test

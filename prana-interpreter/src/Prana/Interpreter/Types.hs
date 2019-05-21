@@ -14,6 +14,7 @@ data Whnf
   | AddrWhnf (Ptr ())
   | ConWhnf DataConId [Box]
   | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
+  | EmptyWhnf
   deriving (Show, Eq)
 
 -- | Provides laziness: A boxed value which is not necessarily

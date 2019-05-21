@@ -273,19 +273,6 @@ unwrapArg primName options (result, (arg, argTy)) =
                  (varE (optionsEvalSomeVarId options)))
               (varE arg)))
 
-
-primArgTys :: Ty -> [Ty]
-primArgTys =
-  \case
-    TyF arg rest -> arg : primArgTys rest
-    _ -> []
-
-primReturnTy :: Ty -> Maybe Ty
-primReturnTy =
-  \case
-    TyF _ rest -> primReturnTy rest
-    ty -> Just ty
-
 -- | Given a constructor for WHNF, evaluate or unwrap that for use in
 -- host haskell.
 evalArgByType :: Name -> Name -> Q Exp
@@ -299,3 +286,62 @@ evalArgByType evalSomeVarId conName =
           LitWhnf $(conP conName [varP (mkName "i")]) -> pure i
           LitWhnf lit -> error ("Invalid lit rep: " ++ show lit)
           _ -> error ("Unexpected whnf for evaluating a literal")|]
+
+
+--------------------------------------------------------------------------------
+-- Type deconstruction
+
+data Signature =
+  Signature
+    { signatureArgs :: [Ty]
+    , signatureReturn :: Maybe Ty
+    }
+  deriving (Show)
+
+data Behavior
+  = Monadic
+      { behaviorSig :: !Signature
+      }
+  | Pure
+      { behaviorSig :: !Signature
+      }
+  deriving (Show)
+
+tyBehavior :: Ty -> Behavior
+tyBehavior ty =
+  case returnTy of
+    Just (TyUTup (TyApp (TyCon ("State#")) [TyVar "s"]:rest)) ->
+      Monadic
+        Signature
+          { signatureArgs = argTys
+          , signatureReturn =
+              if null rest
+                then Nothing
+                else case rest of
+                       [rty] -> Just rty
+                       _ -> Just (TyUTup rest)
+          }
+    Just (TyApp (TyCon ("State#")) [TyVar "s"]) ->
+      Monadic Signature {signatureArgs = argTys, signatureReturn = Nothing}
+    Nothing -> error ("No return type for type: " ++ show ty)
+    _ -> Pure (Signature {signatureArgs = argTys, signatureReturn = returnTy})
+  where
+    argTys = filter ignoreState (primArgTys ty)
+    returnTy = primReturnTy ty
+    ignoreState (TyApp (TyCon ("State#")) [TyVar "s"]) = False
+    ignoreState _ = True
+
+primArgTys :: Ty -> [Ty]
+primArgTys =
+  \case
+    TyF arg rest -> arg : primArgTys rest
+    _ -> []
+
+primReturnTy :: Ty -> Maybe Ty
+primReturnTy (TyF _ rest) = Just (go rest)
+  where
+    go =
+      \case
+        TyF _ xs -> go xs
+        ty -> ty
+primReturnTy _ = Nothing
