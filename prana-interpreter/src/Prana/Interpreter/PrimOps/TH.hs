@@ -97,6 +97,7 @@ derivePrimOpsCase options = do
              , "Stable pointers and names"
              , "Compact normal form"
              , "Parallelism"
+             , "Prefetch"
              ] -> ignoreSections (const []) after
           | otherwise -> keep before <> ignoreSections id after
         (before, after) -> keep before <> after
