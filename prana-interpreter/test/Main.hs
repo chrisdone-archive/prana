@@ -159,9 +159,64 @@ spec =
                 [ BeginConStep (UnboxedTupleConId 1)
                 , BeginConStep
                     (DataConId
+                       (TypeId {typeIdInt = 117})
+                       (ConIndex {conIndexInt = 0}))
+                , BeginConStep
+                    (DataConId
                        (TypeId {typeIdInt = 21})
                        (ConIndex {conIndexInt = 0}))
                 , LitStep (CharLit 'a')
+                , EndConStep
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 20})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (IntLit 22)
+                , EndConStep
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (CharLit 'a')
+                , EndConStep
+                , EndConStep
+                , EndConStep
+                ])
+        it
+          "ArrayLoopTest"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/ArrayLoopTest.hs"
+                  "ArrayLoopTest"
+                  IOMode
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep (UnboxedTupleConId 1)
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 117})
+                       (ConIndex {conIndexInt = 0}))
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (CharLit 'a')
+                , EndConStep
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 20})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (IntLit 22)
+                , EndConStep
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (CharLit 'a')
+                , EndConStep
                 , EndConStep
                 , EndConStep
                 ]))
