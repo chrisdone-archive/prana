@@ -24,7 +24,7 @@ Pure-Haskell goals:
 |`tagToEnum` support| :heavy_check_mark: | Pain in the arse |
 |Report unimplemented primops when compiling| :heavy_check_mark: | Straight-forward |
 |Primops for register types (`Word#`, `Int#`, etc.)| :heavy_check_mark: | Straight-forward |
-|Primops for arrays (`ByteArray#`, etc.)| :construction: | Fairly straight-forward |
+|Primops for arrays (`ByteArray#`, etc.)| :heavy_check_mark: | Fairly straight-forward |
 |Have a sophisticated inspector| – | Fairly straight-forward |
 |Get code coverage to near 100%| - | Detailed |
 
@@ -32,8 +32,8 @@ GHC Haskell goals:
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
-|FFI support| – | Requires learning but should design itself |
-|IO primops| – | Fairly straight-forward |
+|FFI support| :construction: | Requires learning but should design itself |
+|IO primops| :heavy_check_mark: | Fairly straight-forward |
 |Runtime exceptions (`raise#`)| – | Tricky, space for UX design |
 |Run [base package tests](https://github.com/ghc/packages-base/tree/master/tests) | – | Fairly straight-forward |
 |Add hotswapping support (like Emacs)| – | Requires exploration/experiment |
