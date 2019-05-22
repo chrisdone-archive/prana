@@ -112,90 +112,100 @@ evalExpr index globals locals0 toplevelexpr = do
                       , "  Arguments: " ++ show args
                       ])-}
                  loop args whnf
-        CaseExpr expr caseExprVarId dataAlts
-          -- putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
-         -> do
-          case dataAlts of
-            DataAlts _tyCon alts mdefaultExpr -> do
-              (dataConId, boxes) <- evalExprToCon "DataAlts" index globals locals expr
-              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
-              let locals1 = M.insert caseExprVarId caseExprBox locals
-              let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
-                    if dataConId == altDataConId
-                      then if length boxes == length localVarIds
-                             then do
-                               locals' <-
-                                 foldM
-                                   (\locals' (box, localVarId) -> do
-                                      pure (M.insert localVarId box locals'))
-                                   locals1
-                                   (zip boxes localVarIds)
-                               go locals' rhsExpr
-                             else error
-                                    "Mismatch between number of slots in constructor and pattern."
-                      else loop rest
-                  loop [] =
-                    case mdefaultExpr of
-                      Nothing ->
+        caseE@(CaseExpr expr caseExprVarId dataAlts)
+                -- putStrLn (unlines ["Case expression", "  Scrutinee: " ++ show expr])
+               -> do
+                case dataAlts of
+                  DataAlts _tyCon alts mdefaultExpr -> do
+                    (dataConId, boxes) <- evalExprToCon "DataAlts" index globals locals expr
+                    caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
+                    let locals1 = M.insert caseExprVarId caseExprBox locals
+                    let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
+                          if dataConId == altDataConId
+                            then if length boxes == length localVarIds
+                                   then do
+                                     locals' <-
+                                       foldM
+                                         (\locals' (box, localVarId) -> do
+                                            pure (M.insert localVarId box locals'))
+                                         locals1
+                                         (zip boxes localVarIds)
+                                     go locals' rhsExpr
+                                   else error
+                                          "Mismatch between number of slots in constructor and pattern."
+                            else loop rest
+                        loop [] =
+                          case mdefaultExpr of
+                            Nothing ->
+                              error
+                                ("(DataAlts) Inexhaustive pattern match: " ++
+                                 show alts)
+                            Just defaultExpr -> go locals1 defaultExpr
+                     in loop alts
+                  PrimAlts _primRep litAlts mdefaultExpr -> do
+                    whnf <- go locals expr
+                    caseExprBox <- boxWhnf whnf
+                    let locals1 = M.insert caseExprVarId caseExprBox locals
+                    case whnf of
+                      LitWhnf lit ->
+                        let loop [] =
+                              case mdefaultExpr of
+                                Nothing ->
+                                  error "Inexhaustive primitive pattern match..."
+                                Just defaultExpr -> go locals1 defaultExpr
+                            loop (litAlt:rest) =
+                              if litAltLit litAlt == lit
+                                then go locals1 (litAltExpr litAlt)
+                                else loop rest
+                         in loop litAlts
+                      _ ->
                         error
-                          ("(DataAlts) Inexhaustive pattern match: " ++
-                           show alts)
-                      Just defaultExpr -> go locals1 defaultExpr
-               in loop alts
-            PrimAlts _primRep litAlts mdefaultExpr -> do
-              whnf <- go locals expr
-              caseExprBox <- boxWhnf whnf
-              let locals1 = M.insert caseExprVarId caseExprBox locals
-              case whnf of
-                LitWhnf lit ->
-                  let loop [] =
-                        case mdefaultExpr of
-                          Nothing ->
-                            error "Inexhaustive primitive pattern match..."
-                          Just defaultExpr -> go locals1 defaultExpr
-                      loop (litAlt:rest) =
-                        if litAltLit litAlt == lit
-                          then go locals1 (litAltExpr litAlt)
-                          else loop rest
-                   in loop litAlts
-                _ ->
-                  error
-                    ("Unexpected whnf for PrimAlts (I'm sure ClosureWhnf will come up here): " ++
-                     show whnf)
-            MultiValAlts size alts mdefaultExpr -> do
-              (dataConId, boxes) <- evalExprToCon ("MultiValAlts:\n"++prettyExpr index toplevelexpr) index globals locals expr
-              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
-              let locals1 = M.insert caseExprVarId caseExprBox locals
-              let loop (DataAlt altDataConId localVarIds rhsExpr:rest) = do
-                    if dataConId == altDataConId
-                      then if length boxes == length localVarIds &&
-                              length boxes == size
-                             then do
-                               locals' <-
-                                 foldM
-                                   (\locals' (box, localVarId) -> do
-                                      pure (M.insert localVarId box locals'))
-                                   locals1
-                                   (zip boxes localVarIds)
-                               go locals' rhsExpr
-                             else error
-                                    "Mismatch between number of slots in constructor and pattern."
-                      else loop rest
-                  loop [] =
-                    case mdefaultExpr of
-                      Nothing ->
-                        error
-                          ("(MultiValAlts) Inexhaustive pattern match! " ++
-                           show size ++
-                           " " ++
-                           show alts ++ "\n" ++ prettyExpr index toplevelexpr)
-                      Just defaultExpr -> go locals1 defaultExpr
-               in loop alts
-            PolymorphicAlt rhsExpr -> do
-              (dataConId, boxes) <- evalExprToCon "PolymorphicAlt" index globals locals expr
-              caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
-              let locals1 = M.insert caseExprVarId caseExprBox locals
-              go locals1 rhsExpr
+                          ("Unexpected whnf for PrimAlts (I'm sure ClosureWhnf will come up here): " ++
+                           show whnf)
+                  MultiValAlts size alts mdefaultExpr -> do
+                    (dataConId, boxes) <- evalExprToCon ("MultiValAlts:\n"++prettyExpr index toplevelexpr) index globals locals expr
+                    putStrLn ("Scrutinee: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))
+                    caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
+                    -- Yes, this is a function, and it's weird.  I've
+                    -- observed a case where the scrutinee binding is
+                    -- shadowed by a pattern binding. Weird, but
+                    -- perhaps GHC uses this some kind of correctness
+                    -- guarantee. In any case, rewrite this
+                    -- later. There is now a test case for this code,
+                    -- so that's OK.
+                    let locals1 :: Map LocalVarId Box -> Map LocalVarId Box
+                        locals1 = M.insert caseExprVarId caseExprBox
+                    let loop (DataAlt altDataConId localVarIds rhsExpr:rest) = do
+                          if dataConId == altDataConId
+                            then if length boxes == length localVarIds &&
+                                    length boxes == size
+                                   then do
+                                     locals' <-
+                                       foldM
+                                         (\locals' (box, localVarId) -> do
+                                            do putStrLn ("Pattern: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))
+                                               pure (M.insert localVarId box locals'))
+                                         locals
+                                         (zip boxes localVarIds)
+                                     go (locals1 locals') rhsExpr
+                                   else error
+                                          "Mismatch between number of slots in constructor and pattern."
+                            else do loop rest
+                        loop [] =
+                          case mdefaultExpr of
+                            Nothing ->
+                              error
+                                ("(MultiValAlts) Inexhaustive pattern match! " ++
+                                 show size ++
+                                 " \n" ++
+                                 prettyAlts index dataAlts ++ "\nFrom:\n" ++ prettyExpr index caseE)
+                            Just defaultExpr -> go (locals1 locals) defaultExpr
+                     in loop alts
+                  PolymorphicAlt rhsExpr -> do
+                    (dataConId, boxes) <- evalExprToCon "PolymorphicAlt" index globals locals expr
+                    caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
+                    let locals1 = M.insert caseExprVarId caseExprBox locals
+                    go locals1 rhsExpr
 
 evalExprToCon :: String -> ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
 evalExprToCon label index globals locals0 expr = do

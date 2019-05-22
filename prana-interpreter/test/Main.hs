@@ -154,7 +154,17 @@ spec =
                   "test/assets/ArrayTest.hs"
                   "ArrayTest"
                   IOMode
-              shouldReturn (runConduit (steps .| CL.consume)) []))
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep (UnboxedTupleConId 1)
+                , BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 21})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (CharLit 'a')
+                , EndConStep
+                , EndConStep
+                ]))
 
 getDataConI# :: Applicative f => Index -> f DataConId
 getDataConI# index =

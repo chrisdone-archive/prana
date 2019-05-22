@@ -209,7 +209,7 @@ derivePrimOpAlt options primName ty = do
            []
        ])
   where
-    stateS = TyApp (TyCon ("State#")) [TyVar "s"]
+
     stateName = mkName "s"
     getResultName = mkName "get_result"
     resultName = mkName "result"
@@ -319,11 +319,16 @@ wrapUnboxedTuple options slotTypes resultName primName = do
             boxer <-
               case slotTy of
                 (TyApp (TyCon "Int#") []) -> pure (varE (optionsBoxInt options))
-                (TyApp (TyCon "Word#") []) -> pure (varE (optionsBoxWord options))
-                (TyApp (TyCon "Char#") []) -> pure (varE (optionsBoxChar options))
-                (TyApp (TyCon "Double#") []) -> pure (varE (optionsBoxDouble options))
-                (TyApp (TyCon "Float#") []) -> pure (varE (optionsBoxFloat options))
-                (TyApp (TyCon "Addr#") []) -> pure (varE (optionsBoxAddr options))
+                (TyApp (TyCon "Word#") []) ->
+                  pure (varE (optionsBoxWord options))
+                (TyApp (TyCon "Char#") []) ->
+                  pure (varE (optionsBoxChar options))
+                (TyApp (TyCon "Double#") []) ->
+                  pure (varE (optionsBoxDouble options))
+                (TyApp (TyCon "Float#") []) ->
+                  pure (varE (optionsBoxFloat options))
+                (TyApp (TyCon "Addr#") []) ->
+                  pure (varE (optionsBoxAddr options))
                 TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
                   pure (varE (optionsBoxMutableArray options))
                 TyApp (TyCon ("MutableByteArray#")) [TyVar "s"] ->
@@ -361,19 +366,26 @@ wrapUnboxedTuple options slotTypes resultName primName = do
                         , [ noBindS
                               (appE
                                  (varE 'pure)
-                                 (appE
-                                    (appE
-                                       (conE 'ConWhnf)
-                                       (appE
-                                          (conE 'UnboxedTupleConId)
-                                          (litE
-                                             (IntegerL
-                                                (fromIntegral (length slotTypes))))))
-                                    (listE
-                                       (zipWith
-                                          (\i _ -> varE (mkSlotNameBoxed i))
-                                          [0 :: Int ..]
-                                          slotTypes))))
+                                 (let slots =
+                                        catMaybes
+                                          (zipWith
+                                             (\i ty ->
+                                                if ty == stateS
+                                                  then Nothing
+                                                  else Just
+                                                         (varE
+                                                            (mkSlotNameBoxed i)))
+                                             [0 :: Int ..]
+                                             slotTypes)
+                                   in appE
+                                        (appE
+                                           (conE 'ConWhnf)
+                                           (appE
+                                              (conE 'UnboxedTupleConId)
+                                              (litE
+                                                 (IntegerL
+                                                    (fromIntegral (length slots))))))
+                                        (listE slots)))
                           ]
                         ])))
                []
@@ -382,6 +394,9 @@ wrapUnboxedTuple options slotTypes resultName primName = do
   where
     mkSlotName i = mkName ("slot_" ++ show i)
     mkSlotNameBoxed i = mkName ("slot_boxed_" ++ show i)
+
+stateS :: Ty
+stateS = TyApp (TyCon ("State#")) [TyVar "s"]
 
 -- | Given a constructor for WHNF, evaluate or unwrap that for use in
 -- host haskell.
