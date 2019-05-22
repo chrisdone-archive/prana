@@ -50,6 +50,10 @@ data Options =
     , optionsBoxArray :: !Name
     , optionsEvalMutableArray :: !Name
     , optionsBoxMutableArray :: !Name
+    , optionsEvalSmallMutableArray :: !Name
+    , optionsBoxSmallMutableArray :: !Name
+    , optionsEvalMutableByteArray :: !Name
+    , optionsBoxMutableByteArray :: !Name
     , optionsEvalSomeVarId :: !Name
     , optionsManualImplementations :: ![(Name, Name)]
     , optionsEvalBox :: !Name
@@ -230,6 +234,11 @@ unwrapArg primName options (result, (arg, argTy)) =
         (bindS
            (varP result)
            (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
+    TyApp (TyCon ("State#")) [TyVar "s"] ->
+      pure
+        (bindS
+           (varP result)
+           (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
     TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
     TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
       unwrap 'MutableArray optionsEvalMutableArray
@@ -263,8 +272,40 @@ wrapWhnf resultName whnfCon litCon valCon =
 
 -- | Wrap up an unboxed tuple, boxing its arguments. That's our design decision.
 -- TODO: Re-visit boxing unboxed arguments? Maybe only do polymorphic ones?
-wrapUnboxedTuple :: Applicative f => Options -> [Ty] -> Name -> String -> f [StmtQ]
-wrapUnboxedTuple options slotTypes resultName primName =
+wrapUnboxedTuple :: Options -> [Ty] -> Name -> String -> Either String [StmtQ]
+wrapUnboxedTuple options slotTypes resultName primName = do
+  binds <-
+    sequence
+      (zipWith
+         (\i slotTy -> do
+            boxer <-
+              case slotTy of
+                (TyApp (TyCon "Int#") []) -> pure (varE (optionsBoxInt options))
+                (TyApp (TyCon "Word#") []) -> pure (varE (optionsBoxWord options))
+                (TyApp (TyCon "Char#") []) -> pure (varE (optionsBoxChar options))
+                (TyApp (TyCon "Double#") []) -> pure (varE (optionsBoxDouble options))
+                (TyApp (TyCon "Float#") []) -> pure (varE (optionsBoxFloat options))
+                (TyApp (TyCon "Addr#") []) -> pure (varE (optionsBoxAddr options))
+                TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
+                  pure (varE (optionsBoxMutableArray options))
+                TyApp (TyCon ("MutableByteArray#")) [TyVar "s"] ->
+                  pure (varE (optionsBoxMutableByteArray options))
+                TyApp (TyCon ("SmallMutableArray#")) [TyVar "s", TyVar "a"] ->
+                  pure (varE (optionsBoxMutableArray options))
+                TyApp (TyCon ("Array#")) [TyVar "a"] ->
+                  pure (varE (optionsBoxArray options))
+                TyVar "a" -> pure (varE 'pure)
+                TyApp (TyCon ("State#")) [TyVar "s"] -> pure (varE 'pure)
+                _ ->
+                  Left
+                    ("Invalid type for unboxed tuple slot: " ++
+                     show slotTy ++ " in " ++ primName)
+            pure
+              (bindS
+                 (varP (mkSlotNameBoxed i))
+                 (appE boxer (varE (mkSlotName i)))))
+         [0 :: Int ..]
+         slotTypes)
   pure
     [ noBindS
         (caseE
@@ -278,25 +319,7 @@ wrapUnboxedTuple options slotTypes resultName primName =
                (normalB
                   (doE
                      (concat
-                        [ zipWith
-                            (\i slotTy ->
-                               bindS
-                                 (varP (mkSlotNameBoxed i))
-                                 (appE
-                                    (case slotTy of
-                                       (TyApp (TyCon "Int#") []) ->  varE (optionsBoxInt options)
-                                       (TyApp (TyCon "Word#") []) ->  varE (optionsBoxWord options)
-                                       (TyApp (TyCon "Char#") []) ->  varE (optionsBoxChar options)
-                                       (TyApp (TyCon "Double#") []) ->  varE (optionsBoxDouble options)
-                                       (TyApp (TyCon "Float#") []) ->  varE (optionsBoxFloat options)
-                                       (TyApp (TyCon "Addr#") []) ->  varE (optionsBoxAddr options)
-                                       TyVar "a" -> varE 'pure
-                                       _ ->
-                                         error
-                                           ("Invalid type for unboxed tuple slot: " ++ show slotTy ++ " in " ++ primName))
-                                    (varE (mkSlotName i))))
-                            [0 :: Int ..]
-                            slotTypes
+                        [ binds
                         , [ noBindS
                               (appE
                                  (varE 'pure)

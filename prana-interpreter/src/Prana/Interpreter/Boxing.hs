@@ -8,6 +8,7 @@ module Prana.Interpreter.Boxing where
 import Data.IORef
 import Data.Map.Strict (Map)
 import Data.Primitive
+import Data.Primitive.SmallArray
 import GHC.Exts
 import Prana.Interpreter.Types
 import Prana.Types
@@ -63,3 +64,13 @@ boxArray x# = boxWhnf (ArrayWhnf (Array x#))
 
 boxMutableArray :: MutableArray# RealWorld Box -> IO Box
 boxMutableArray x# = boxWhnf (MutableArrayWhnf (MutableRealWorldArray (MutableArray x#)))
+
+boxSmallMutableArray :: SmallMutableArray# RealWorld Box -> IO Box
+boxSmallMutableArray x# =
+  boxWhnf
+    (SmallMutableArrayWhnf (SmallMutableRealWorldArray (SmallMutableArray x#)))
+
+boxMutableByteArray :: MutableByteArray# RealWorld -> IO Box
+boxMutableByteArray x# =
+  boxWhnf
+    (MutableByteArrayWhnf (MutableRealWorldByteArray (MutableByteArray x#)))
