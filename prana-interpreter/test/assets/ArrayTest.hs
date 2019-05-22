@@ -1,6 +1,6 @@
 {-# LANGUAGE MagicHash, UnboxedTuples #-}
 
--- |
+-- | Test some of the ops for Array# and MutableArray#.
 
 module ArrayTest where
 
