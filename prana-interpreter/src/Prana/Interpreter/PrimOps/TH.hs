@@ -138,7 +138,7 @@ derivePrimOpAlt options primName ty = do
     (caseE
        (varE (optionsArgs options))
        [ match
-           (listP (map varP argNames))
+           (listP (map varP patNames))
            (normalB
               (doE
                  (concat
@@ -159,8 +159,9 @@ derivePrimOpAlt options primName ty = do
                                           [ match
                                               (case tupleSlotNames of
                                                  [slot] -> varP slot
-                                                 _ -> unboxedTupP
-                                                        (map varP tupleSlotNames))
+                                                 _ ->
+                                                   unboxedTupP
+                                                     (map varP tupleSlotNames))
                                               (normalB
                                                  (unboxedTupE
                                                     [ varE (head tupleSlotNames)
@@ -184,8 +185,8 @@ derivePrimOpAlt options primName ty = do
                       , letS
                           [ valD
                               (if primReturnTy ty == Just stateS
-                                  then wildP
-                                  else varP resultName)
+                                 then wildP
+                                 else varP resultName)
                               (normalB (appE (varE getResultName) (tupE [])))
                               []
                           ]
@@ -198,7 +199,13 @@ derivePrimOpAlt options primName ty = do
            (normalB
               (appE
                  (varE 'error)
-                 (stringE ("Invalid arguments to primop: " ++ show primName))))
+                 (appE
+                    (varE 'concat)
+                    (listE
+                       [ stringE
+                           ("Invalid arguments to primop " ++ show primName ++ ": ")
+                       , appE (varE 'show) (varE (optionsArgs options))
+                       ]))))
            []
        ])
   where
@@ -206,6 +213,7 @@ derivePrimOpAlt options primName ty = do
     stateName = mkName "s"
     getResultName = mkName "get_result"
     resultName = mkName "result"
+    patNames = zipWith argName [0 ..] (primArgTys ty)
     argNames = zipWith argName [0 ..] (filter (/= stateS) (primArgTys ty))
     resultNames =
       zipWith mkresultName [0 ..] (filter (/= stateS) (primArgTys ty))

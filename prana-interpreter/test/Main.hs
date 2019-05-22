@@ -22,6 +22,7 @@ import qualified Data.Map.Strict as M
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Interpreter
+import           Prana.Interpreter.Boxing
 import           Prana.Rename
 import           Prana.Types
 import           Test.Hspec (runIO, shouldReturn, it, describe, hspec, Spec)
@@ -50,6 +51,7 @@ spec =
                   std
                   "test/assets/DoubleTest.hs"
                   "DoubleTest"
+                  PureMode
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep
@@ -68,6 +70,7 @@ spec =
                   std
                   "test/assets/FibIterative.hs"
                   "FibIterative"
+                  PureMode
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep dataConI#
@@ -83,6 +86,7 @@ spec =
                   std
                   "test/assets/FibCodata.hs"
                   "FibCodata"
+                  PureMode
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep dataConI#
@@ -98,6 +102,7 @@ spec =
                   std
                   "test/assets/CharTest.hs"
                   "CharTest"
+                  PureMode
               shouldReturn
                 (runConduit (steps .| CL.consume))
                 [ BeginConStep
@@ -138,7 +143,18 @@ spec =
                 , EndConStep
                 , EndConStep
                 , EndConStep
-                ]))
+                ])
+        it
+          "ArrayTest"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/ArrayTest.hs"
+                  "ArrayTest"
+                  IOMode
+              shouldReturn (runConduit (steps .| CL.consume)) []))
 
 getDataConI# :: Applicative f => Index -> f DataConId
 getDataConI# index =
@@ -153,6 +169,8 @@ getDataConI# index =
     Nothing -> error "Couldn't find constructor."
     Just dataConId -> pure dataConId
 
+data RunMode = PureMode | IOMode
+
 -- | Compile and run left-to-right evaluation of the complete data structure.
 compileAndRun ::
      Index
@@ -160,8 +178,9 @@ compileAndRun ::
   -> [GlobalBinding]
   -> String
   -> ByteString
+  -> RunMode
   -> IO (ConduitT () Step IO ())
-compileAndRun index0 options std fileName moduleName =
+compileAndRun index0 options std fileName moduleName runMode =
   runGhc
     (do setModuleGraph [fileName]
         libraryGlobals <- foldM bindGlobal mempty std
@@ -192,10 +211,21 @@ compileAndRun index0 options std fileName moduleName =
                     Just (RhsCon con) -> do
                       whnf <- evalCon mempty con
                       pure (stepSource (reverseIndex index) globals whnf)
-                    Just clj ->
-                      error
-                        ("The expression should take no arguments: " ++ show clj)
-                    Nothing -> error ("Couldn't find " <> displayName name)))
+                    Just clj@(RhsClosure closure@Closure{closureParams = [stateS]}) ->
+                      case runMode of
+                        PureMode -> error
+                                       ("The expression should take no arguments: " ++ show clj)
+                        IOMode -> do
+                          stateBox <- boxWhnf StateWhnf
+                          whnf <-
+                            evalExpr
+                              (reverseIndex index)
+                              globals
+                              (M.singleton stateS stateBox)
+                              (closureExpr closure)
+                          pure (stepSource (reverseIndex index) globals whnf)
+                    Nothing -> error ("Couldn't find " <> displayName name)
+                    _ -> error "Unexpected top-level format."))
 
 data Step
   = LitStep Lit
