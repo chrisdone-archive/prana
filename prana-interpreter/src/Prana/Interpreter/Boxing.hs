@@ -74,3 +74,6 @@ boxMutableByteArray :: MutableByteArray# RealWorld -> IO Box
 boxMutableByteArray x# =
   boxWhnf
     (MutableByteArrayWhnf (MutableRealWorldByteArray (MutableByteArray x#)))
+
+boxState :: State# RealWorld -> IO Box
+boxState _ = boxWhnf StateWhnf

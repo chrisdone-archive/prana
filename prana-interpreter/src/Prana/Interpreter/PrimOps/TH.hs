@@ -145,17 +145,47 @@ derivePrimOpAlt options primName ty = do
                     [ bindings
                     , [ bindS
                           (bangP (varP getResultName))
-                          (appE
-                             (varE 'pure)
-                             (lamE
-                                [wildP]
-                                (foldl'
-                                   appE
-                                   (varE (mkName primName))
-                                   (map varE resultNames))))
+                          (if any (== stateS) (primArgTys ty)
+                             then appE
+                                    (conE 'IO)
+                                    (lamE
+                                       [varP stateName]
+                                       (caseE
+                                          (foldl'
+                                             appE
+                                             (varE (mkName primName))
+                                             (map varE resultNames ++
+                                              [varE stateName]))
+                                          [ match
+                                              (case tupleSlotNames of
+                                                 [slot] -> varP slot
+                                                 _ -> unboxedTupP
+                                                        (map varP tupleSlotNames))
+                                              (normalB
+                                                 (unboxedTupE
+                                                    [ varE (head tupleSlotNames)
+                                                    , lamE
+                                                        [wildP]
+                                                        (unboxedTupE
+                                                           (map
+                                                              varE
+                                                              tupleSlotNames))
+                                                    ]))
+                                              []
+                                          ]))
+                             else appE
+                                    (varE 'pure)
+                                    (lamE
+                                       [wildP]
+                                       (foldl'
+                                          appE
+                                          (varE (mkName primName))
+                                          (map varE resultNames))))
                       , letS
                           [ valD
-                              (varP resultName)
+                              (if primReturnTy ty == Just stateS
+                                  then wildP
+                                  else varP resultName)
                               (normalB (appE (varE getResultName) (tupE [])))
                               []
                           ]
@@ -172,12 +202,13 @@ derivePrimOpAlt options primName ty = do
            []
        ])
   where
+    stateS = TyApp (TyCon ("State#")) [TyVar "s"]
     stateName = mkName "s"
-    newStateName = mkName "s'"
     getResultName = mkName "get_result"
     resultName = mkName "result"
-    argNames = zipWith argName [0 ..] (primArgTys ty)
-    resultNames = zipWith mkresultName [0 ..] (primArgTys ty)
+    argNames = zipWith argName [0 ..] (filter (/= stateS) (primArgTys ty))
+    resultNames =
+      zipWith mkresultName [0 ..] (filter (/= stateS) (primArgTys ty))
     tupleSlotNames =
       zipWith
         mktupleSlotName
@@ -216,8 +247,10 @@ wrapResult options primName resultName ty =
         'MutableArray
     Just (TyVar "a") ->
       pure [noBindS (appE (varE (optionsEvalBox options)) (varE resultName))]
+    Just (TyApp (TyCon ("State#")) [TyVar "s"]) ->
+      pure [noBindS [|pure StateWhnf|]]
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
-    Nothing -> pure [noBindS [|pure EmptyWhnf|]]
+    Nothing -> Left "No return type!"
 
 -- | Eval and unwrap an argument from our representation to primitive host Haskell.
 unwrapArg :: [Char] -> Options -> (Name, (Name, Ty)) -> Either [Char] StmtQ
@@ -235,10 +268,7 @@ unwrapArg primName options (result, (arg, argTy)) =
            (varP result)
            (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
     TyApp (TyCon ("State#")) [TyVar "s"] ->
-      pure
-        (bindS
-           (varP result)
-           (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
+      pure (noBindS (appE (varE 'pure) (tupE [])))
     TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
     TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
       unwrap 'MutableArray optionsEvalMutableArray
@@ -291,11 +321,11 @@ wrapUnboxedTuple options slotTypes resultName primName = do
                 TyApp (TyCon ("MutableByteArray#")) [TyVar "s"] ->
                   pure (varE (optionsBoxMutableByteArray options))
                 TyApp (TyCon ("SmallMutableArray#")) [TyVar "s", TyVar "a"] ->
-                  pure (varE (optionsBoxMutableArray options))
+                  pure (varE (optionsBoxSmallMutableArray options))
                 TyApp (TyCon ("Array#")) [TyVar "a"] ->
                   pure (varE (optionsBoxArray options))
                 TyVar "a" -> pure (varE 'pure)
-                TyApp (TyCon ("State#")) [TyVar "s"] -> pure (varE 'pure)
+                TyApp (TyCon ("State#")) [TyVar "s"] -> pure (varE 'boxState)
                 _ ->
                   Left
                     ("Invalid type for unboxed tuple slot: " ++

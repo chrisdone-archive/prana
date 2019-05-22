@@ -17,7 +17,7 @@ data Whnf
   | AddrWhnf (Ptr ())
   | ConWhnf DataConId [Box]
   | FunWhnf (Map LocalVarId Box) [LocalVarId] Expr
-  | EmptyWhnf
+  | StateWhnf
   | ArrayWhnf (Array Box)
   | MutableArrayWhnf (MutableRealWorldArray Box)
   | MutableByteArrayWhnf MutableRealWorldByteArray
