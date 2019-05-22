@@ -20,6 +20,7 @@ import           Prana.Interpreter.Binding
 import           Prana.Interpreter.Boxing
 import           Prana.Interpreter.PrimOps
 import           Prana.Interpreter.Types
+import           Prana.Pretty
 import           Prana.Types
 
 evalExpr ::
@@ -28,8 +29,8 @@ evalExpr ::
   -> Map LocalVarId Box
   -> Expr
   -> IO Whnf
-evalExpr index globals locals0 = do
-  go locals0
+evalExpr index globals locals0 toplevelexpr = do
+  go locals0 toplevelexpr
   where
     go locals expr = do
       whnf <- go' locals expr
@@ -135,7 +136,10 @@ evalExpr index globals locals0 = do
                       else loop rest
                   loop [] =
                     case mdefaultExpr of
-                      Nothing -> error "Inexhaustive pattern match!"
+                      Nothing ->
+                        error
+                          ("(DataAlts) Inexhaustive pattern match: " ++
+                           show alts)
                       Just defaultExpr -> go locals1 defaultExpr
                in loop alts
             PrimAlts _primRep litAlts mdefaultExpr -> do
@@ -179,7 +183,12 @@ evalExpr index globals locals0 = do
                       else loop rest
                   loop [] =
                     case mdefaultExpr of
-                      Nothing -> error "Inexhaustive pattern match!"
+                      Nothing ->
+                        error
+                          ("(MultiValAlts) Inexhaustive pattern match! " ++
+                           show size ++
+                           " " ++
+                           show alts ++ "\n" ++ prettyExpr index toplevelexpr)
                       Just defaultExpr -> go locals1 defaultExpr
                in loop alts
             PolymorphicAlt rhsExpr -> do
