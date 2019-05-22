@@ -12,7 +12,7 @@ under `prana-interpreter` for example programs that run with prana.
 
 ## Milestones
 
-Pure-Haskell goals:
+#### Pure-Haskell goals
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
@@ -28,7 +28,7 @@ Pure-Haskell goals:
 |Have a sophisticated inspector| – | Fairly straight-forward |
 |Get code coverage to near 100%| - | Detailed |
 
-GHC Haskell goals:
+#### GHC Haskell goals
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
@@ -39,7 +39,7 @@ GHC Haskell goals:
 |Add hotswapping support (like Emacs)| – | Requires exploration/experiment |
 |Threaded runtime/concurrency| – | Tricky, but not required |
 
-Parallel goals:
+#### Parallel goals
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
@@ -47,7 +47,7 @@ Parallel goals:
 |Analysis package `prana-analysis`| – | Fairly straight-forward |
 |Make patched GHC for [standard location outputs](https://github.com/grin-tech/ghc-grin/blob/ea00b4ed18e2977dabb9c41ddcc28699ea96a85a/ghc-8.6.2.patch) | - | Straight-forward |
 
-Optional goals:
+#### Optional goals
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
@@ -56,7 +56,7 @@ Optional goals:
 |Allocation tests| – | Easy |
 |CPU instruction tests| – | Easy |
 
-Dream goals:
+#### Dream goals
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
@@ -80,12 +80,12 @@ The following are planned to be implemented as standard:
 |`Word64#`|:heavy_check_mark:|
 |`Double#`|:heavy_check_mark:|
 |`Float#`|:heavy_check_mark:|
-|`Array# a`|-|
-|`MutableArray# s a`|-|
-|`SmallArray# a`|-|
-|`SmallMutableArray# s a`|-|
-|`ByteArray#`|-|
-|`MutableByteArray# s`|-|
+|`Array# a`|:heavy_check_mark:|
+|`MutableArray# s a`|:heavy_check_mark:|
+|`SmallArray# a`|:heavy_check_mark:|
+|`SmallMutableArray# s a`|:heavy_check_mark:|
+|`ByteArray#`|:heavy_check_mark:|
+|`MutableByteArray# s`|:heavy_check_mark:|
 |`ArrayArray#`|-|
 |`MutableArrayArray# s`|-|
 |`Addr#`|:heavy_check_mark:|
