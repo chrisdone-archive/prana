@@ -57,7 +57,7 @@ prettyExpr index =
         , prettyAlts index alts
         ]
     LetExpr binding expr ->
-      node "LetExpr[TODO]" [prettyBinding index binding, prettyExpr index expr]
+      node "LetExpr" [prettyBinding index binding, prettyExpr index expr]
     LitExpr lit -> show lit
 
 prettyBinding :: ReverseIndex -> LocalBinding -> [Char]

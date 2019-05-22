@@ -117,7 +117,7 @@ evalExpr index globals locals0 toplevelexpr = do
          -> do
           case dataAlts of
             DataAlts _tyCon alts mdefaultExpr -> do
-              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              (dataConId, boxes) <- evalExprToCon "DataAlts" index globals locals expr
               caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
               let loop (DataAlt altDataConId localVarIds rhsExpr:rest) =
@@ -163,7 +163,7 @@ evalExpr index globals locals0 toplevelexpr = do
                     ("Unexpected whnf for PrimAlts (I'm sure ClosureWhnf will come up here): " ++
                      show whnf)
             MultiValAlts size alts mdefaultExpr -> do
-              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              (dataConId, boxes) <- evalExprToCon ("MultiValAlts:\n"++prettyExpr index toplevelexpr) index globals locals expr
               caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
               let loop (DataAlt altDataConId localVarIds rhsExpr:rest) = do
@@ -192,19 +192,20 @@ evalExpr index globals locals0 toplevelexpr = do
                       Just defaultExpr -> go locals1 defaultExpr
                in loop alts
             PolymorphicAlt rhsExpr -> do
-              (dataConId, boxes) <- evalExprToCon index globals locals expr
+              (dataConId, boxes) <- evalExprToCon "PolymorphicAlt" index globals locals expr
               caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
               let locals1 = M.insert caseExprVarId caseExprBox locals
               go locals1 rhsExpr
 
-evalExprToCon :: ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
-evalExprToCon index globals locals0 expr = do
+evalExprToCon :: String -> ReverseIndex -> Map GlobalVarId Box -> Map LocalVarId Box -> Expr -> IO (DataConId, [Box])
+evalExprToCon label index globals locals0 expr = do
   whnf <- evalExpr index globals locals0 expr
   case whnf of
     ConWhnf dataConId boxes -> pure (dataConId, boxes)
     FunWhnf{} ->
       error "Unexpected function for data alt case scrutinee."
     LitWhnf {} -> error "Unexpected literal for data alt case scrutinee."
+    _ -> error ("TODO: evalExprToCon: "++label ++ ": "++ show whnf)
 
 evalBox :: ReverseIndex -> Map GlobalVarId Box -> Box -> IO Whnf
 evalBox index globals box = do
