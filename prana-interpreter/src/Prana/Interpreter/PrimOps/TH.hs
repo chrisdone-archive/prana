@@ -215,6 +215,36 @@ wrapResult options primName resultName ty =
     Just retTy -> Left (primName ++ ": Unknown return type " ++ show retTy)
     Nothing -> pure [noBindS [|pure EmptyWhnf|]]
 
+-- | Eval and unwrap an argument from our representation to primitive host Haskell.
+unwrapArg :: [Char] -> Options -> (Name, (Name, Ty)) -> Either [Char] StmtQ
+unwrapArg primName options (result, (arg, argTy)) =
+  case argTy of
+    TyApp (TyCon "Int#") [] -> unwrap 'I# optionsEvalInt
+    TyApp (TyCon "Char#") [] -> unwrap 'C# optionsEvalChar
+    TyApp (TyCon "Word#") [] -> unwrap 'W# optionsEvalWord
+    TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
+    TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
+    TyApp (TyCon "Addr#") [] -> unwrap 'Ptr optionsEvalAddr
+    TyVar "a" ->
+      pure
+        (bindS
+           (varP result)
+           (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
+    TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
+    TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
+      unwrap 'MutableArray optionsEvalMutableArray
+    _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
+  where
+    unwrap hostCon evaler =
+      pure
+        (bindS
+           (conP hostCon [varP result])
+           (appE
+              (appE
+                 (varE (evaler options))
+                 (varE (optionsEvalSomeVarId options)))
+              (varE arg)))
+
 -- | Wrap up a value in a literal WHNF.
 wrapLit :: Applicative f => Name -> Name -> Name -> f [StmtQ]
 wrapLit resultName litCon valCon = wrapWhnf resultName 'LitWhnf (conE litCon) valCon
@@ -291,36 +321,6 @@ wrapUnboxedTuple options slotTypes resultName primName =
   where
     mkSlotName i = mkName ("slot_" ++ show i)
     mkSlotNameBoxed i = mkName ("slot_boxed_" ++ show i)
-
--- | Eval and unwrap an argument from our representation to primitive host Haskell.
-unwrapArg :: [Char] -> Options -> (Name, (Name, Ty)) -> Either [Char] StmtQ
-unwrapArg primName options (result, (arg, argTy)) =
-  case argTy of
-    TyApp (TyCon "Int#") [] -> unwrap 'I# optionsEvalInt
-    TyApp (TyCon "Char#") [] -> unwrap 'C# optionsEvalChar
-    TyApp (TyCon "Word#") [] -> unwrap 'W# optionsEvalWord
-    TyApp (TyCon "Double#") [] -> unwrap 'D# optionsEvalDouble
-    TyApp (TyCon "Float#") [] -> unwrap 'F# optionsEvalFloat
-    TyApp (TyCon "Addr#") [] -> unwrap 'Ptr optionsEvalAddr
-    TyVar "a" ->
-      pure
-        (bindS
-           (varP result)
-           (appE (appE (varE 'boxArg) (varE (optionsLocals options))) (varE arg)))
-    TyApp (TyCon ("Array#")) [TyVar "a"] -> unwrap 'Array optionsEvalArray
-    TyApp (TyCon ("MutableArray#")) [TyVar "s", TyVar "a"] ->
-      unwrap 'MutableArray optionsEvalMutableArray
-    _ -> Left (primName ++ ": Unknown arg type: " ++ show argTy)
-  where
-    unwrap hostCon evaler =
-      pure
-        (bindS
-           (conP hostCon [varP result])
-           (appE
-              (appE
-                 (varE (evaler options))
-                 (varE (optionsEvalSomeVarId options)))
-              (varE arg)))
 
 -- | Given a constructor for WHNF, evaluate or unwrap that for use in
 -- host haskell.
