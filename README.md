@@ -39,6 +39,8 @@ under `prana-interpreter` for example programs that run with prana.
 |Run [base package tests](https://github.com/ghc/packages-base/tree/master/tests) | – | Fairly straight-forward |
 |Add hotswapping support (like Emacs)| – | Requires exploration/experiment |
 |Threaded runtime/concurrency| – | Tricky, but not required |
+|strace-like functionality for all primops| – | Pretty easy |
+|Fuzzing of primops (think: threads, exceptions)| – | Fun, space for UX design |
 
 #### Parallel goals
 
