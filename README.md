@@ -26,7 +26,8 @@ under `prana-interpreter` for example programs that run with prana.
 |Primops for register types (`Word#`, `Int#`, etc.)| :heavy_check_mark: | Straight-forward |
 |Primops for arrays (`ByteArray#`, etc.)| :heavy_check_mark: | Fairly straight-forward |
 |Have a sophisticated inspector| – | Fairly straight-forward |
-|Get code coverage to near 100%| - | Detailed |
+|Get code coverage to near 100%| – | Detailed |
+|Code cleanup| – | Straight-forward |
 
 #### GHC Haskell goals
 
