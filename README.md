@@ -67,6 +67,14 @@ under `prana-interpreter` for example programs that run with prana.
 |Prana web service| – | Straight-forward |
 |JavaScript implementation| – | Takes some work |
 
+#### Tooling goals
+
+|Milestone|Status|Appraisal|
+|:---|:---|:---|
+|A web UI| – | Takes some work |
+|Emacs integration| – | Takes some work |
+|Your-IDE-here| – | ? |
+
 ## Primitive types
 
 The following are planned to be implemented as standard:
