@@ -132,6 +132,10 @@ chris@precision:~/Work/chrisdone/prana$ nm -g ghc-8.4/libraries/ghc-prim/dist/bu
 |Analysis package `prana-analysis`| – | Fairly straight-forward |
 |Make patched GHC for [standard location outputs](https://github.com/grin-tech/ghc-grin/blob/ea00b4ed18e2977dabb9c41ddcc28699ea96a85a/ghc-8.6.2.patch) | - | Straight-forward |
 
+I now need a reproducible `Dockerfile` that will be reliable for
+building the base packages, because I'm now unable to build from
+ghc-8.4.3's libraries.
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|

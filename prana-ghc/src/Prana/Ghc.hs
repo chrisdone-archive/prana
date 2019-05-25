@@ -59,7 +59,6 @@ import qualified Data.List.NonEmpty as NE
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
-import qualified Data.Set as Set
 import           Data.Validation
 import qualified Digraph
 import qualified DynFlags
@@ -166,7 +165,7 @@ loadStandardPackages options = do
 
 --------------------------------------------------------------------------------
 -- General entry point
-deriving instance Show GHC.GhcMode
+
 -- | Compile all modules in the graph.
 --
 -- 1) Load up the names index.
@@ -185,7 +184,6 @@ compileModuleGraph options index0 = do
     (putStrLn
        (unlines
           [ "Potentially interesting DynFlags fields:"
-          , "ghcMode = " ++ show (DynFlags.ghcMode dflags)
           , "ghcLink = " ++ show (DynFlags.ghcLink dflags)
           , "hscTarget = " ++ show (DynFlags.hscTarget dflags)
           , "dynOutputFile = " ++ show (DynFlags.dynOutputFile dflags)
@@ -223,16 +221,33 @@ installPackage options index' bindings = do
           (Module.installedUnitIdFS
              (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
       path = optionsPackagesDir options ++ "/" ++ fp
+      so_path = optionsPackagesDir options ++ "/" ++ pkg ++ ".so"
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
-  liftIO
-    (do S8.putStrLn "Updating index ... "
-        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
-  liftIO
-    (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
-        L.writeFile pathTmp (encode bindings))
-  liftIO
-    (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
-        renameFile pathTmp path)
+  case DynFlags.objectDir dflags of
+    Nothing -> error "Need the dist directory to get the shared library."
+    Just objectDir -> do
+      liftIO
+        (do exists <- doesDirectoryExist objectDir
+            if exists
+              then do
+                files <- getDirectoryContents objectDir
+                case find (isSuffixOf ".so") files of
+                  Nothing ->
+                    S8.putStrLn (S8.pack ("Couldn't find .so file for " ++ pkg))
+                  Just file -> do
+                    S8.putStrLn
+                      (S8.pack ("Copying shared object for " ++ pkg ++ " .."))
+                    copyFile (objectDir ++ "/" ++ file) so_path
+              else S8.putStrLn (S8.pack ("Can't find .so file, no object dir for " ++ pkg)))
+      liftIO
+        (do S8.putStrLn "Updating index ... "
+            L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
+      liftIO
+        (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
+            L.writeFile pathTmp (encode bindings))
+      liftIO
+        (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
+            renameFile pathTmp path)
 
 -- | Build the graph, writing errors, if any, and returning either error or success.
 buildGraph ::
