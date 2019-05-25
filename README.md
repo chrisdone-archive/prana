@@ -140,6 +140,9 @@ Some
 [interesting notes](https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897)
 on using custom GHCs with Stack.
 
+Perhaps I can prepare a "GHC + base packages" for Stack with the
+custom GHC support.
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
