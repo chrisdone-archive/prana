@@ -136,6 +136,10 @@ I now need a reproducible `Dockerfile` that will be reliable for
 building the base packages, because I'm now unable to build from
 ghc-8.4.3's libraries.
 
+Some
+[interesting notes](https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897)
+on using custom GHCs with Stack.
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
