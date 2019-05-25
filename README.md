@@ -45,6 +45,11 @@ under `prana-interpreter` for example programs that run with prana.
 * All the base packages only use static FFI calls, we can ignore
   dynamic ones for now.
 * Wrappers are used in the base packages.
+* The following prim calls (custom primops) are used:
+  * PrimCall "stg_word32ToFloatzh" base
+  * PrimCall "stg_floatToWord32zh" base
+  * PrimCall "stg_word64ToDoublezh" base
+  * PrimCall "stg_doubleToWord64zh" base
 
 #### Parallel goals
 
