@@ -225,9 +225,10 @@ fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
   \case
      StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
-     StgSyn.StgFCallOp foreignCall unique -> trace (show foreignCall) (pure OtherOp)
-     _ -> pure OtherOp
+     StgSyn.StgFCallOp foreignCall _unique -> trace (show foreignCall) (pure OtherOp)
+     StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
 
+deriving instance Show PrimOp.PrimCall
 deriving instance Show ForeignCall.ForeignCall
 deriving instance Show ForeignCall.CCallSpec
 deriving instance Show ForeignCall.CCallTarget
