@@ -103,6 +103,27 @@ drwxr-xr-x 5 chris chris 4.0K May 25 11:54 ..
 -rw-rw-r-- 1 chris chris 1.4K Feb 27 18:13 word2float.o
 ```
 
+Demo for ghc-prim:
+
+```
+[6 of 8] Converting GHC.Debug
+CCall (CCallSpec (StaticTarget NoSourceText "debugLn" (Just ghc-prim) True) CCallConv PlayRisky)
+CCall (CCallSpec (StaticTarget NoSourceText "debugErrLn" (Just ghc-prim) True) CCallConv PlayRisky)
+```
+
+So:
+
+```
+chris@precision:~/Work/chrisdone/prana$ nm -g ghc-8.4/libraries/ghc-prim/dist/build/libHSghc-prim-0.5.2.0-Bfo9y0qb0emG5VRfx5d4mv-ghc8.4.3.so | grep debugLn
+00000000003abd60 T debugLn
+00000000003dd998 D ghczmprim_GHCziDebug_debugLn_closure
+00000000003954c0 T ghczmprim_GHCziDebug_debugLn_info
+chris@precision:~/Work/chrisdone/prana$ nm -g ghc-8.4/libraries/ghc-prim/dist/build/libHSghc-prim-0.5.2.0-Bfo9y0qb0emG5VRfx5d4mv-ghc8.4.3.so | grep debugErrLn
+00000000003abd70 T debugErrLn
+00000000003dd9a8 D ghczmprim_GHCziDebug_debugErrLn_closure
+0000000000395568 T ghczmprim_GHCziDebug_debugErrLn_info
+```
+
 #### Parallel goals
 
 |Milestone|Status|Appraisal|
