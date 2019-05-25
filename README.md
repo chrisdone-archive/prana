@@ -141,7 +141,12 @@ Some
 on using custom GHCs with Stack.
 
 Perhaps I can prepare a "GHC + base packages" for Stack with the
-custom GHC support. Create a [GHC bindist](https://github.com/commercialhaskell/stack/issues/4567)?
+custom GHC support. Create a
+[GHC bindist](https://github.com/commercialhaskell/stack/issues/4567)?
+
+This looks legit:
+
+https://stackoverflow.com/questions/42691533/how-to-use-different-ghc-builds-with-stack/53505494#53505494
 
 #### Optional goals
 
