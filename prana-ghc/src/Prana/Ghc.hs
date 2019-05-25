@@ -1,3 +1,4 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
@@ -165,7 +166,7 @@ loadStandardPackages options = do
 
 --------------------------------------------------------------------------------
 -- General entry point
-
+deriving instance Show GHC.GhcMode
 -- | Compile all modules in the graph.
 --
 -- 1) Load up the names index.
@@ -180,6 +181,19 @@ compileModuleGraph options index0 = do
   liftIO (createDirectoryIfMissing True (optionsPackagesDir options))
   dflags <- GHC.getSessionDynFlags
   GHC.setSessionDynFlags dflags {DynFlags.hscTarget = DynFlags.HscAsm}
+  liftIO
+    (putStrLn
+       (unlines
+          [ "Potentially interesting DynFlags fields:"
+          , "ghcMode = " ++ show (DynFlags.ghcMode dflags)
+          , "ghcLink = " ++ show (DynFlags.ghcLink dflags)
+          , "hscTarget = " ++ show (DynFlags.hscTarget dflags)
+          , "dynOutputFile = " ++ show (DynFlags.dynOutputFile dflags)
+          , "outputFile = " ++ show (DynFlags.outputFile dflags)
+          , "dylibInstallName = " ++ show (DynFlags.dylibInstallName dflags)
+          , "objectDir = " ++ show (DynFlags.objectDir dflags)
+          , "dynObjectSuf = " ++ show (DynFlags.dynObjectSuf dflags)
+          ]))
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
   ((listOfListOfbindings, errors), index') <-

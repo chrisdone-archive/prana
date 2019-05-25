@@ -51,6 +51,58 @@ under `prana-interpreter` for example programs that run with prana.
   * PrimCall "stg_word64ToDoublezh" base
   * PrimCall "stg_doubleToWord64zh" base
 
+Meanwhile, objectDir from DynFlags contains
+
+```
+chris@precision:~/Work/chrisdone/prana$ ls -alh ghc-8.4/libraries/ghc-prim/dist/build
+total 14M
+drwxr-xr-x 5 chris chris 4.0K May 25 11:54 .
+drwxr-xr-x 4 chris chris 4.0K May 25 11:51 ..
+drwxr-xr-x 2 chris chris 4.0K May 25 11:47 autogen
+drwxrwxr-x 2 chris chris 4.0K Feb 27 18:13 cbits
+drwxrwxr-x 2 chris chris 4.0K May 25 11:43 GHC
+-rw-rw-r-- 1 chris chris 7.0M May 25 11:41 libHSghc-prim-0.5.2.0-Bfo9y0qb0emG5VRfx5d4mv.a
+-rwxrwxr-x 1 chris chris 6.9M May 25 11:51 libHSghc-prim-0.5.2.0-Bfo9y0qb0emG5VRfx5d4mv-ghc8.4.3.so
+```
+
+Which is interesting for two use-cases:
+
+1. We could copy the whole .so file alongside our .prana file, and
+   then simply load it up with dlopen() and lookup the C functions.
+2. Or, alternatively, we could just link together all the cbits (see
+   below) into one ghc-prim.so, along with any additional linker flags
+   for the package.
+
+But my hunch is that it would be much easier to just load up the 7meg
+.so file.
+
+``` haskell
+ghc-8.4/libraries/ghc-prim/dist/build/cbits:
+total 96K
+drwxrwxr-x 2 chris chris 4.0K Feb 27 18:13 .
+drwxr-xr-x 5 chris chris 4.0K May 25 11:54 ..
+-rw-rw-r-- 1 chris chris 4.9K Feb 27 18:13 atomic.dyn_o
+-rw-rw-r-- 1 chris chris 4.9K Feb 27 18:13 atomic.o
+-rw-rw-r-- 1 chris chris 1.4K Feb 27 18:13 bswap.dyn_o
+-rw-rw-r-- 1 chris chris 1.4K Feb 27 18:13 bswap.o
+-rw-rw-r-- 1 chris chris 1.6K Feb 27 18:13 clz.dyn_o
+-rw-rw-r-- 1 chris chris 1.6K Feb 27 18:13 clz.o
+-rw-rw-r-- 1 chris chris 1.6K Feb 27 18:13 ctz.dyn_o
+-rw-rw-r-- 1 chris chris 1.6K Feb 27 18:13 ctz.o
+-rw-rw-r-- 1 chris chris 1.8K Feb 27 18:13 debug.dyn_o
+-rw-rw-r-- 1 chris chris 1.8K Feb 27 18:13 debug.o
+-rw-rw-r-- 1 chris chris  944 Feb 27 18:13 longlong.dyn_o
+-rw-rw-r-- 1 chris chris  944 Feb 27 18:13 longlong.o
+-rw-rw-r-- 1 chris chris 1.8K Feb 27 18:13 pdep.dyn_o
+-rw-rw-r-- 1 chris chris 1.8K Feb 27 18:13 pdep.o
+-rw-rw-r-- 1 chris chris 1.7K Feb 27 18:13 pext.dyn_o
+-rw-rw-r-- 1 chris chris 1.7K Feb 27 18:13 pext.o
+-rw-rw-r-- 1 chris chris 2.4K Feb 27 18:13 popcnt.dyn_o
+-rw-rw-r-- 1 chris chris 2.4K Feb 27 18:13 popcnt.o
+-rw-rw-r-- 1 chris chris 1.4K Feb 27 18:13 word2float.dyn_o
+-rw-rw-r-- 1 chris chris 1.4K Feb 27 18:13 word2float.o
+```
+
 #### Parallel goals
 
 |Milestone|Status|Appraisal|
