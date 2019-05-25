@@ -40,6 +40,12 @@ under `prana-interpreter` for example programs that run with prana.
 |Add hotswapping support (like Emacs)| – | Requires exploration/experiment |
 |Threaded runtime/concurrency| – | Could be tricky |
 
+##### FFI support
+
+* All the base packages only use static FFI calls, we can ignore
+  dynamic ones for now.
+* Wrappers are used in the base packages.
+
 #### Parallel goals
 
 |Milestone|Status|Appraisal|
