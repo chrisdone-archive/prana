@@ -30,6 +30,8 @@ import           Data.Maybe
 import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
+import           Debug.Trace
+import           ForeignCall
 import qualified Literal
 import qualified Module
 import qualified Name
@@ -223,8 +225,13 @@ fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
   \case
      StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
+     StgSyn.StgFCallOp foreignCall unique -> trace (show foreignCall) (pure OtherOp)
      _ -> pure OtherOp
 
+deriving instance Show ForeignCall.ForeignCall
+deriving instance Show ForeignCall.CCallSpec
+deriving instance Show ForeignCall.CCallTarget
+deriving instance Show ForeignCall.CCallConv
 deriving instance Show PrimOp.PrimOp
 deriving instance Show PrimOp.PrimOpVecCat
 
