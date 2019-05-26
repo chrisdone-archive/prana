@@ -123,19 +123,28 @@ compileModuleGraphFromEnv options = do
 
 -- | Check the wired in packages. If they're not installed we bail out.
 checkWiredIns :: Options -> GHC.Ghc ()
-checkWiredIns options =
-  mapM_
-    (\name -> do
-       exists <- libraryExists options name
-       if not exists
-         then error
-                ("Prana problem:\nWired in package " <> show name <>
-                 " not installed for prana.\n\nIt can't be installed with regular stack. \
-                 \It has to be built specially. Please run:\n\n  $ stack exec prana-boot\n\n" <>
-                 "For debugging purposes, here is where I expected it to be:\n" <>
-                 packageLocation options name)
-         else pure ())
-    wiredInPackages
+checkWiredIns options = do
+  dflags <- GHC.getSessionDynFlags
+  let cur = FastString.unpackFS
+              (Module.installedUnitIdFS
+                 (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
+  if elem cur wiredInPackages
+     then pure ()
+     else mapM_
+            (\name -> do
+               exists <- libraryExists options name
+               if not exists
+                 then error
+                        ("Prana problem:\nWired in package " <> show name <>
+                         " not installed for prana.\n\nIt can't be installed with regular stack. \
+                            \It has to be built specially. Please run:\n\n  $ stack exec prana-boot\n\n" <>
+                         "For debugging purposes, here is where I expected it to be:\n" <>
+                         packageLocation options name <>
+                         "\n\n" <>
+                         "Current package is: " <>
+                         cur)
+                 else pure ())
+            wiredInPackages
 
 --------------------------------------------------------------------------------
 -- Convenient wrappers
