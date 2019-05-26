@@ -2,3 +2,6 @@
 *.hi
 *.o
 *.prana
+dist/
+prana-boot/packages/ghc-prim-0.5.2.0/GHC/Prim.hs
+prana-boot/packages/ghc-prim-0.5.2.0/Setup
