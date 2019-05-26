@@ -130,29 +130,12 @@ chris@precision:~/Work/chrisdone/prana$ nm -g ghc-8.4/libraries/ghc-prim/dist/bu
 |:---|:---|:---|
 |Reproducible (Docker) build of GHC base packages| :construction: | Takes work |
 |Analysis package `prana-analysis`| – | Fairly straight-forward |
-|Make patched GHC for [standard location outputs](https://github.com/grin-tech/ghc-grin/blob/ea00b4ed18e2977dabb9c41ddcc28699ea96a85a/ghc-8.6.2.patch) | - | Straight-forward |
 
-I now need a reproducible `Dockerfile` that will be reliable for
-building the base packages, because I'm now unable to build from
-ghc-8.4.3's libraries.
+I now need a reproducible way to build:
 
-Some
-[interesting notes](https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897)
-on using custom GHCs with Stack.
-
-Perhaps I can prepare a "GHC + base packages" for Stack with the
-custom GHC support. Create a
-[GHC bindist](https://github.com/commercialhaskell/stack/issues/4567)?
-
-This looks legit:
-
-https://stackoverflow.com/questions/42691533/how-to-use-different-ghc-builds-with-stack/53505494#53505494
-
-Possible proposal:
-
-* Run `docker build image -t prana .` to make the prepared GHC
-* Run `docker run --rm prana -v$(pwd)/$(pwd) copy-bindist`
-* Run `stack build` using that custom GHC?
+* `ghc-prim`
+* `integer-simple`
+* `base`
 
 #### Optional goals
 
