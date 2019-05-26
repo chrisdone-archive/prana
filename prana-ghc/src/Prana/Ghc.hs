@@ -34,6 +34,7 @@ module Prana.Ghc
   , loadLibrary
   , readIndex
   , optionsIndexPath
+  , wiredInPackages
   , Options(..)
   , Mode(..)
   ) where
@@ -122,6 +123,10 @@ compileModuleGraphFromEnv options = do
 --------------------------------------------------------------------------------
 -- Convenient wrappers
 
+-- | Wired in packages that have to be compiled specially.
+wiredInPackages :: [String]
+wiredInPackages = ["ghc-prim", "integer-gmp", "base"]
+
 -- | Run a GHC action.
 runGhc :: GHC.Ghc a -> IO a
 runGhc action =
@@ -145,10 +150,8 @@ setModuleGraph filenames = do
 -- | Load ghc-prim, integer-gmp and base.
 loadStandardPackages :: MonadIO m => Options -> m [GlobalBinding]
 loadStandardPackages options = do
-  ghcPrim <- loadLibrary options "ghc-prim"
-  integerGmp <- loadLibrary options "integer-gmp"
-  base <- loadLibrary options "base"
-  pure (ghcPrim <> integerGmp <> base)
+  things <- mapM (loadLibrary options) wiredInPackages
+  pure (mconcat things)
 
 --------------------------------------------------------------------------------
 -- General entry point
