@@ -131,7 +131,7 @@ checkWiredIns options =
          then error
                 ("Prana problem:\nWired in package " <> show name <>
                  " not installed for prana.\n\nIt can't be installed with regular stack. \
-                 \It has to be built specially. Please run:\n\nprana-boot\n\n" <>
+                 \It has to be built specially. Please run:\n\n  $ stack exec prana-boot\n\n" <>
                  "For debugging purposes, here is where I expected it to be:\n" <>
                  packageLocation options name)
          else pure ())
