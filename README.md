@@ -137,6 +137,8 @@ I now need a reproducible way to build:
 * `integer-simple`
 * `base`
 
+     $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -v0 --with-ghc prana-ghc && stack exec --no-ghc-package-path ./Setup build
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
