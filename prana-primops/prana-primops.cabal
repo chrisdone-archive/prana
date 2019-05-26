@@ -1,5 +1,5 @@
 Name: prana-primops
-Version: 0.1
+Version: 0
 Copyright: XXX
 License: BSD3
 -- XXX License-File: LICENSE
@@ -34,3 +34,14 @@ library
                    template-haskell,
                    directory,
                    binary
+
+Executable prana-genprimopcode
+    Default-Language: Haskell2010
+    hs-source-dirs: src, app
+    Main-Is: Main.hs
+    Other-Modules: Lexer
+                   Parser
+                   ParserM
+                   Syntax
+    Build-Depends: base       >= 4   && < 5,
+                   array

@@ -88,11 +88,11 @@ data TyCon = TyCon String
   deriving (Eq, Ord)
 
 instance Show TyCon where
-    show (TyCon tc)      = "(TyCon (" ++ show tc++"))"
+    show (TyCon tc)      = tc
     show SCALAR          = "SCALAR"
     show VECTOR          = "VECTOR"
     show VECTUPLE        = "VECTUPLE"
-    show (VecTyCon tc _) = "(VecTyCon (" ++ show tc ++"))"
+    show (VecTyCon tc _) = tc
 
 -- Follow definitions of Fixity and FixityDirection in GHC
 
