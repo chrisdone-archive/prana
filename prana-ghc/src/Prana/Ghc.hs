@@ -130,7 +130,9 @@ checkWiredIns options =
        if not exists
          then error
                 ("Wired in package " <> show name <>
-                 " not available. Please run: prana-boot")
+                 " not available. Please run: prana-boot\n\n" <>
+                 "For debugging purposes, here is where I expected it to be:\n" <>
+                 packageLocation options name)
          else pure ())
     wiredInPackages
 
@@ -386,14 +388,17 @@ readIndex fp = do
 
 libraryExists :: MonadIO m => Options -> String -> m Bool
 libraryExists options name =
-  liftIO (doesFileExist (optionsPackagesDir options ++ "/" ++ name ++ ".prana"))
+  liftIO (doesFileExist (packageLocation options name))
+
+packageLocation :: Options -> String -> FilePath
+packageLocation options name = optionsPackagesDir options ++ "/" ++ name ++ ".prana"
 
 loadLibrary :: MonadIO m => Options -> String -> m [GlobalBinding]
 loadLibrary options name =
   liftIO
     (do S8.putStrLn (S8.pack ("Loading library " ++ name ++ " ..."))
         bytes <-
-          L.readFile (optionsPackagesDir options ++ "/" ++ name ++ ".prana")
+          L.readFile (packageLocation options name)
         let !bs = decode bytes
         pure bs)
 
