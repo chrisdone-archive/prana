@@ -178,6 +178,10 @@ compileModuleGraph options index0 = do
           , "dylibInstallName = " ++ show (DynFlags.dylibInstallName dflags)
           , "objectDir = " ++ show (DynFlags.objectDir dflags)
           , "dynObjectSuf = " ++ show (DynFlags.dynObjectSuf dflags)
+          , "thisInstalledUnitId = " ++
+            FastString.unpackFS
+              (Module.installedUnitIdFS
+                 (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
           ]))
   mgraph <-
     fmap (\g -> GHC.topSortModuleGraph False g Nothing) GHC.getModuleGraph
