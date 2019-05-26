@@ -28,7 +28,6 @@ module Prana.Ghc
   , loadStandardPackages
   , compileModSummary
   , compileModuleGraph
-  , getOptions
   , showErrors
   , lookupGlobalBindingRhsByName
   , lookupGlobalBindingRhsById
@@ -36,6 +35,7 @@ module Prana.Ghc
   , readIndex
   , optionsIndexPath
   , Options(..)
+  , Mode(..)
   ) where
 
 import           Control.Exception
@@ -78,7 +78,6 @@ import           Prana.Types
 import qualified SimplStg
 import qualified StgSyn as GHC
 import           System.Directory
-import           System.Environment
 import           TidyPgm
 import qualified TyCon
 
@@ -102,19 +101,6 @@ data Options =
 --------------------------------------------------------------------------------
 -- Parse options for this compiler mod
 
-getOptions :: MonadIO m => m Options
-getOptions =
-  liftIO
-    (Options <$> getEnv "PRANA_DIR" <*>
-     (lookupEnv "PRANA_MODE" >>=
-      (\case
-         Just "DEV" -> pure DEV
-         Just "INSTALL" -> pure INSTALL
-         _ ->
-           error
-             ("Please specify a mode via PRANA_MODE: " ++
-              show [minBound .. maxBound :: Mode]))))
-
 optionsIndexPath :: Options -> FilePath
 optionsIndexPath options = optionsDir options <> "/index"
 
@@ -122,15 +108,14 @@ optionsIndexTmpPath :: Options -> FilePath
 optionsIndexTmpPath options = optionsDir options <> ".tmp"
 
 optionsPackagesDir :: Options -> FilePath
-optionsPackagesDir options = optionsDir options <> "/packages/"
+optionsPackagesDir options = optionsDir options <> "/packages"
 
 --------------------------------------------------------------------------------
 -- Entry point for modded GHC
 
 -- | Read in arguments from PRANA_ARGS
-compileModuleGraphFromEnv :: GHC.Ghc ()
-compileModuleGraphFromEnv = do
-  options <- liftIO getOptions
+compileModuleGraphFromEnv :: Options -> GHC.Ghc ()
+compileModuleGraphFromEnv options = do
   index <- liftIO (readIndex (optionsIndexPath options))
   void (compileModuleGraph options index)
 
@@ -223,33 +208,16 @@ installPackage options index' bindings = do
           (Module.installedUnitIdFS
              (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
       path = optionsPackagesDir options ++ "/" ++ fp
-      so_path = optionsPackagesDir options ++ "/" ++ pkg ++ ".so"
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
-  case DynFlags.objectDir dflags of
-    Nothing -> error "Need the dist directory to get the shared library."
-    Just objectDir -> do
-      liftIO
-        (do exists <- doesDirectoryExist objectDir
-            if exists
-              then do
-                files <- getDirectoryContents objectDir
-                case find (isSuffixOf ".so") files of
-                  Nothing ->
-                    S8.putStrLn (S8.pack ("Couldn't find .so file for " ++ pkg))
-                  Just file -> do
-                    S8.putStrLn
-                      (S8.pack ("Copying shared object for " ++ pkg ++ " .."))
-                    copyFile (objectDir ++ "/" ++ file) so_path
-              else S8.putStrLn (S8.pack ("Can't find .so file, no object dir for " ++ pkg)))
-      liftIO
-        (do S8.putStrLn "Updating index ... "
-            L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
-      liftIO
-        (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
-            L.writeFile pathTmp (encode bindings))
-      liftIO
-        (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
-            renameFile pathTmp path)
+  liftIO
+    (do S8.putStrLn "Updating index ... "
+        L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
+  liftIO
+    (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
+        L.writeFile pathTmp (encode bindings))
+  liftIO
+    (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
+        renameFile pathTmp path)
 
 -- | Build the graph, writing errors, if any, and returning either error or success.
 buildGraph ::
