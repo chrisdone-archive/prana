@@ -1,0 +1,4 @@
+extra-lib-dirs: 
+extra-libraries:  
+include-dirs: 
+install-includes: HsBaseConfig.h EventConfig.h

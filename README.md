@@ -137,7 +137,18 @@ I now need a reproducible way to build:
 * `integer-simple`
 * `base`
 
+ghc-prim
+
      $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -v0 --with-ghc prana-ghc && stack exec --no-ghc-package-path ./Setup build
+
+integer-gmp
+
+     $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -v0 --with-ghc prana-ghc && stack exec --no-ghc-package-path ./Setup build
+
+base
+
+    $ autoreconf
+    $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -finteger-gmp -v0 --with-ghc prana-ghc  --ghc-options=-O0 && stack exec --no-ghc-package-path -- ./Setup build --ghc-options=-O0
 
 #### Optional goals
 
