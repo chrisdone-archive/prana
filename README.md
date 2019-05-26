@@ -128,7 +128,7 @@ chris@precision:~/Work/chrisdone/prana$ nm -g ghc-8.4/libraries/ghc-prim/dist/bu
 
 |Milestone|Status|Appraisal|
 |:---|:---|:---|
-|Reproducible (Docker) build of GHC base packages| :construction: | Takes work |
+|Boot process to compile the wired in packages| :construction: | Takes work |
 |Analysis package `prana-analysis`| – | Fairly straight-forward |
 
 I now need a reproducible way to build:
