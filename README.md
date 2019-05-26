@@ -148,6 +148,12 @@ This looks legit:
 
 https://stackoverflow.com/questions/42691533/how-to-use-different-ghc-builds-with-stack/53505494#53505494
 
+Possible proposal:
+
+* Run `docker build image -t prana .` to make the prepared GHC
+* Run `docker run --rm prana -v$(pwd)/$(pwd) copy-bindist`
+* Run `stack build` using that custom GHC?
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
