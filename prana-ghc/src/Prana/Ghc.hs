@@ -117,8 +117,22 @@ optionsPackagesDir options = optionsDir options <> "/packages"
 -- | Read in arguments from PRANA_ARGS
 compileModuleGraphFromEnv :: Options -> GHC.Ghc ()
 compileModuleGraphFromEnv options = do
+  checkWiredIns options
   index <- liftIO (readIndex (optionsIndexPath options))
   void (compileModuleGraph options index)
+
+-- | Check the wired in packages. If they're not installed we bail out.
+checkWiredIns :: Options -> GHC.Ghc ()
+checkWiredIns options =
+  mapM_
+    (\name -> do
+       exists <- libraryExists options name
+       if not exists
+         then error
+                ("Wired in package " <> show name <>
+                 " not available. Please run: prana-boot")
+         else pure ())
+    wiredInPackages
 
 --------------------------------------------------------------------------------
 -- Convenient wrappers
@@ -369,6 +383,10 @@ readIndex fp = do
 
 --------------------------------------------------------------------------------
 -- Index helpers
+
+libraryExists :: MonadIO m => Options -> String -> m Bool
+libraryExists options name =
+  liftIO (doesFileExist (optionsPackagesDir options ++ "/" ++ name ++ ".prana"))
 
 loadLibrary :: MonadIO m => Options -> String -> m [GlobalBinding]
 loadLibrary options name =
