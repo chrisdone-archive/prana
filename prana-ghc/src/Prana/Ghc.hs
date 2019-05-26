@@ -41,9 +41,10 @@ module Prana.Ghc
 import           Control.Exception
 import           Control.Monad.IO.Class
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Reader
-import           Control.Monad.State
-import           Control.Monad.Writer
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Reader
+import           Control.Monad.Trans.State.Strict
+import           Control.Monad.Trans.Writer
 import qualified CorePrep
 import qualified CoreSyn
 import qualified CoreToStg
@@ -53,6 +54,7 @@ import qualified Data.ByteString as S
 import qualified Data.ByteString.Char8 as S8
 import qualified Data.ByteString.Lazy as L
 import           Data.Either
+import           Data.Functor
 import           Data.List
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE

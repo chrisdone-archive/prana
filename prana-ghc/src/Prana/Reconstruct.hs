@@ -19,7 +19,7 @@ module Prana.Reconstruct
   ) where
 
 import           Control.Exception
-import           Control.Monad.Reader
+import           Control.Monad.Trans.Reader
 import qualified CoreSyn
 import           Data.Bifunctor
 import qualified Data.ByteString.Char8 as S8

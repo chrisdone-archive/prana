@@ -10,7 +10,7 @@ module Prana.Index
   , ReverseIndex(..)
   ) where
 
-import           Control.Monad.State
+import           Control.Monad.Trans.State.Strict
 import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Maybe

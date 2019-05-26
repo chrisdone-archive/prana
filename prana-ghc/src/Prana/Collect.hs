@@ -8,7 +8,7 @@ module Prana.Collect
   ,collectDataTypes)
   where
 
-import           Control.Monad.State
+import           Control.Monad.Trans.State.Strict
 import           Data.Bitraversable
 import           Data.List
 import           Data.Set (Set)
