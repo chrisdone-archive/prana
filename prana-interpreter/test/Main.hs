@@ -19,6 +19,7 @@ import           Data.Conduit
 import qualified Data.Conduit.List as CL
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           GHC.Paths
 import           Prana.Ghc
 import           Prana.Index
 import           Prana.Interpreter
@@ -30,6 +31,9 @@ import           Test.Hspec (runIO, shouldReturn, it, describe, hspec, Spec)
 main :: IO ()
 main =
   hspec spec
+
+getOptions :: IO Options
+getOptions = pure Options {optionsMode = DEV, optionsDir = libdir <> "/prana"}
 
 spec :: Spec
 spec =
