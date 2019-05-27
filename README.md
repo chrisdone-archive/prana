@@ -147,6 +147,8 @@ integer-gmp
 
 base
 
+https://github.com/valderman/haste-compiler/issues/11#issuecomment-184452053
+
     $ autoreconf
     $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -finteger-gmp -v0 --with-ghc prana-ghc  --ghc-options=-O0 && stack exec --no-ghc-package-path -- ./Setup build --ghc-options=-O0
 
