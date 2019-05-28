@@ -152,6 +152,14 @@ https://github.com/valderman/haste-compiler/issues/11#issuecomment-184452053
     $ autoreconf
     $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -finteger-gmp -v0 --with-ghc prana-ghc  --ghc-options=-O0 && stack exec --no-ghc-package-path -- ./Setup build --ghc-options=-O0
 
+
+Custom snapshots:
+
+* core packages: https://github.com/commercialhaskell/stackage/issues/3115
+* custom snapshot: https://docs.haskellstack.org/en/stable/custom_snapshot/
+* custom ghc: https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897
+* what to try: https://gist.github.com/chrisdone/2e22038b77d74853c8f1d30e9f9d3cfb#file-timings-txt-L553
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
