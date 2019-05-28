@@ -237,9 +237,11 @@ installPackage options index' bindings = do
   dflags <- GHC.getSessionDynFlags
   let fp = pkg ++ ".prana"
       pkg =
-        FastString.unpackFS
-          (Module.installedUnitIdFS
-             (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
+        S8.unpack
+          (stripVersionOut
+             (FastString.fs_bs
+                (Module.installedUnitIdFS
+                   (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))))
       path = optionsPackagesDir options ++ "/" ++ fp
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO

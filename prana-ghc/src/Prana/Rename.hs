@@ -14,6 +14,7 @@ module Prana.Rename
   , renameName
   , renameDataType
   , displayName
+  , stripVersionOut
   , Name(..)
   , Unique(..)
   , RenameFailure(..)

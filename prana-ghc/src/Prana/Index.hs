@@ -13,7 +13,6 @@ module Prana.Index
 import           Control.Monad.Trans.State.Strict
 import           Data.List
 import qualified Data.Map.Strict as M
-import           Data.Maybe
 import qualified Data.Set as Set
 import           Data.Tuple
 import           Prana.Collect
