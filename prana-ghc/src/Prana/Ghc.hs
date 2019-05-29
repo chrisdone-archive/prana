@@ -71,6 +71,7 @@ import qualified GHC.Paths
 import           HscTypes
 import qualified Module
 import qualified Outputable
+import qualified PackageConfig
 import           Prana.Collect
 import           Prana.Index
 import           Prana.Reconstruct
@@ -125,26 +126,54 @@ compileModuleGraphFromEnv options = do
 checkWiredIns :: Options -> GHC.Ghc ()
 checkWiredIns options = do
   dflags <- GHC.getSessionDynFlags
-  let cur = FastString.unpackFS
-              (Module.installedUnitIdFS
-                 (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
+  let cur =
+        FastString.unpackFS
+          (Module.installedUnitIdFS
+             (Module.toInstalledUnitId (DynFlags.thisPackage dflags)))
   if elem cur wiredInPackages
-     then pure ()
-     else mapM_
+    then pure ()
+    else mapM_
+           (\name -> do
+              exists <- libraryExists options name
+              if not exists
+                then liftIO
+                       (putStrLn
+                          ("Prana problem:\nWired in package " <> show name <>
+                           " not installed for prana.\n\nIt can't be installed with regular stack. \
+                                        \It has to be built specially. Please run:\n\n  $ stack exec prana-boot\n\n" <>
+                           "For debugging purposes, here is where I expected it to be:\n" <>
+                           packageLocation options name <>
+                           "\n\n" <>
+                           "Current package is: " <>
+                           cur))
+                else pure ())
+           wiredInPackages
+  case DynFlags.pkgDatabase dflags of
+    Nothing -> liftIO (putStrLn "Warning: no package database.")
+    Just packageDbs ->
+      let packageConfigs = map toString (concatMap snd packageDbs)
+       in mapM_
             (\name -> do
                exists <- libraryExists options name
                if not exists
-                 then error
-                        ("Prana problem:\nWired in package " <> show name <>
-                         " not installed for prana.\n\nIt can't be installed with regular stack. \
-                            \It has to be built specially. Please run:\n\n  $ stack exec prana-boot\n\n" <>
-                         "For debugging purposes, here is where I expected it to be:\n" <>
-                         packageLocation options name <>
-                         "\n\n" <>
-                         "Current package is: " <>
-                         cur)
+                 then liftIO
+                        (putStrLn
+                           ("Prana problem:\nRegular package " <> show name <>
+                            " not installed for prana.\n\nIt needs to be rebuilt with stack. \
+                                     \Please run:\n\n  $ stack exec prana-boot\n\n" <>
+                            "For debugging purposes, here is where I expected it to be:\n" <>
+                            packageLocation options name <>
+                            "\n\n" <>
+                            "Current package is: " <>
+                            cur))
                  else pure ())
-            wiredInPackages
+            packageConfigs
+      where toString packageConfig =
+              S8.unpack
+                (stripVersionOut
+                   (FastString.fs_bs
+                      (Module.installedUnitIdFS
+                         (PackageConfig.unitId packageConfig))))
 
 --------------------------------------------------------------------------------
 -- Convenient wrappers
