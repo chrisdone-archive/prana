@@ -153,7 +153,9 @@ https://github.com/valderman/haste-compiler/issues/11#issuecomment-184452053
     $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -finteger-gmp -v0 --with-ghc prana-ghc  --ghc-options=-O0 && stack exec --no-ghc-package-path -- ./Setup build --ghc-options=-O0
 
 
-* custom ghc: https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897
+* custom ghc:
+  https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897
+  doesn't work https://github.com/commercialhaskell/stack/issues/725#issuecomment-496929378
 
 Stack refuses to build core packages, so we'll have to put that in
 prana-boot:
