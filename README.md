@@ -163,6 +163,14 @@ https://github.com/valderman/haste-compiler/issues/11#issuecomment-184452053
 Stack refuses to build core packages, so we'll have to put that in
 prana-boot.
 
+I need a check that:
+
+1. Literally looks at the list of packages in scope.
+2. Complains if any of those packages are not built by prana, ask the
+   user to run prana-boot.
+
+That should solve all my issues.
+
 #### Optional goals
 
 |Milestone|Status|Appraisal|
