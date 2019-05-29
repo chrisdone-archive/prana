@@ -229,15 +229,15 @@ installPackage options index' bindings = do
       path = optionsPackagesDir options ++ "/" ++ fp
       pathTmp = optionsPackagesDir options ++ "/" ++ fp ++ ".tmp"
   liftIO
-    (do S8.putStrLn "Updating index ... "
+    (do S8.putStrLn "Updating prana index ... "
         L.writeFile (optionsIndexTmpPath options) (encode (index' :: Index)))
   liftIO
-    (do S8.putStrLn (S8.pack ("Writing library " ++ pkg ++ " ..."))
+    (do S8.putStrLn (S8.pack ("Writing prana library " ++ pkg ++ " ..."))
         L.writeFile pathTmp (encode bindings))
   liftIO
     (do renameFile (optionsIndexTmpPath options) (optionsIndexPath options)
         renameFile pathTmp path
-        S8.putStrLn (S8.pack ("Wrote library to " ++ path)))
+        S8.putStrLn (S8.pack ("Wrote prana library to " ++ path)))
 
 -- | Build the graph, writing errors, if any, and returning either error or success.
 buildGraph ::
@@ -260,7 +260,7 @@ buildGraph mgraph = do
          (S8.putStrLn
             (S8.pack
                ("[" <> show i <> " of " <> show total <> "] Converting " <>
-                modName)))
+                modName <> " [prana]")))
        index' <- lift get
        let scope = Scope {scopeIndex = index', scopeModule = module'}
        case result of
@@ -290,7 +290,7 @@ compileToPrana total i modSummary = do
       mn = GHC.ms_mod modSummary
   liftIO
     (S8.putStrLn
-          (S8.pack ("[" <> show i <> " of " <> show total <> "] Compiling " <> modName)))
+          (S8.pack ("[" <> show i <> " of " <> show total <> "] Recompiling " <> modName <> " [prana]")))
   lift (compileModSummary modSummary)
 
 -- | Compile the module summary to a set of global bindings, updating

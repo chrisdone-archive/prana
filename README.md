@@ -155,20 +155,13 @@ https://github.com/valderman/haste-compiler/issues/11#issuecomment-184452053
 
 * custom ghc:
   https://github.com/commercialhaskell/stack/issues/725#issuecomment-364624897
-  doesn't work https://github.com/commercialhaskell/stack/issues/725#issuecomment-496929378
+  doesn't work
+  https://github.com/commercialhaskell/stack/issues/725#issuecomment-496929378
+
+* But this works via compiler-tools: https://github.com/commercialhaskell/stack/issues/725#issuecomment-496935164
 
 Stack refuses to build core packages, so we'll have to put that in
-prana-boot:
-
-* rts-1.0
-* ghc-prim-0.5.2.0
-* integer-gmp-1.0.2.0
-* base-4.11.1.0
-* ghci-8.4.3
-* ghc-boot-8.4.3
-* ghc-boot-th-8.4.3
-* ghc-8.4.3
-* template-haskell-2.13.0.0
+prana-boot.
 
 #### Optional goals
 
