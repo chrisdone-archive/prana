@@ -6,6 +6,6 @@ dist/
 prana-boot/packages/ghc-prim-0.5.2.0/GHC/Prim.hs
 prana-boot/packages/ghc-prim-0.5.2.0/Setup
 prana-boot/packages/base-4.11.1.0/configure
-Modified   prana-boot/packages/base-4.11.1.0/Setup
-Modified   prana-boot/packages/base-4.11.1.0/autom4te.cache/requests
-Modified   prana-boot/packages/integer-gmp-1.0.2.0/Setup
+prana-boot/packages/base-4.11.1.0/Setup
+prana-boot/packages/base-4.11.1.0/autom4te.cache/requests
+prana-boot/packages/integer-gmp-1.0.2.0/Setup

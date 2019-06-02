@@ -35,6 +35,7 @@ import           ForeignCall
 import qualified Literal
 import qualified Module
 import qualified Name
+import qualified Outputable (ppr, showSDocUnsafe)
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types
@@ -189,7 +190,9 @@ fromStgGenExpr =
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
       bindConvert
-        (fromStgOp stgOp)
+        (case stgOp of
+           StgSyn.StgFCallOp fcall _ -> trace (show (fcall, typ)) (fromStgOp stgOp)
+           _ -> fromStgOp stgOp)
         (\op ->
            OpAppExpr <$> pure op <*> traverse fromStgGenArg arguments <*>
            case op of
@@ -225,8 +228,11 @@ fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
   \case
      StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
-     StgSyn.StgFCallOp foreignCall _unique -> trace (show foreignCall) (pure OtherOp)
+     StgSyn.StgFCallOp foreignCall _unique -> (pure OtherOp)
      StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
+
+instance Show Type.Type where
+  show n = Outputable.showSDocUnsafe (Outputable.ppr n)
 
 deriving instance Show PrimOp.PrimCall
 deriving instance Show ForeignCall.ForeignCall
