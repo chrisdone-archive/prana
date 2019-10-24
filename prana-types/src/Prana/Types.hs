@@ -293,6 +293,52 @@ data ReverseIndex =
     }
 
 --------------------------------------------------------------------------------
+-- Foreign types
+
+data CCallSpec
+  =  CCallSpec  CCallTarget     -- What to call
+                CCallConv       -- Calling convention to use.
+                Safety
+  deriving( Eq , Generic, Show)
+
+data CCallTarget
+  -- An "unboxed" ccall# to named function in a particular package.
+  = StaticTarget
+        String                -- of the CLabelString.
+                                  -- See note [Pragma source text] in BasicTypes
+        ByteString                    -- C-land name of label.
+
+
+  -- The first argument of the import is the name of a function pointer (an Addr#).
+  --    Used when importing a label as "foreign import ccall "dynamic" ..."
+        Bool                            -- True => really a function
+                                        -- False => a value; only
+                                        -- allowed in CAPI imports
+  | DynamicTarget
+
+  deriving( Eq, Generic, Show )
+
+data CCallConv = CCallConv | CApiConv | StdCallConv | PrimCallConv | JavaScriptCallConv
+  deriving (Eq, Generic, Show)
+
+data Safety
+  = PlaySafe            -- Might invoke Haskell GC, or do a call back, or
+                        -- switch threads, etc.  So make sure things are
+                        -- tidy before the call. Additionally, in the threaded
+                        -- RTS we arrange for the external call to be executed
+                        -- by a separate OS thread, i.e., _concurrently_ to the
+                        -- execution of other Haskell threads.
+
+  | PlayInterruptible   -- Like PlaySafe, but additionally
+                        -- the worker thread running this foreign call may
+                        -- be unceremoniously killed, so it must be scheduled
+                        -- on an unbound thread.
+
+  | PlayRisky           -- None of the above can happen; the call will return
+                        -- without interacting with the runtime system at all
+  deriving ( Eq, Generic, Show )
+
+--------------------------------------------------------------------------------
 -- Binary instances
 
 instance Binary GlobalBinding
@@ -314,3 +360,7 @@ instance Binary PrimElemRep
 instance Binary LitAlt
 instance Binary Closure
 instance Binary Con
+instance Binary CCallSpec
+instance Binary CCallTarget
+instance Binary CCallConv
+instance Binary Safety
