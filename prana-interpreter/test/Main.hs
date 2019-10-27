@@ -301,6 +301,12 @@ data Step
   | BeginConStep DataConId
   | EndConStep
   | FunStep (Map LocalVarId Box) [LocalVarId] (Expr)
+  | AddrStep
+  | StateStep
+  | ArrayStep
+  | MutableArrayStep
+  | SmallMutableArrayStep
+  | MutableByteArrayStep
   deriving (Show, Eq)
 
 stepSource ::
@@ -321,6 +327,12 @@ stepSource index globals =
         boxes
       yield EndConStep
     FunWhnf locals params expr -> yield (FunStep locals params expr)
+    AddrWhnf {} -> yield AddrStep
+    StateWhnf {} -> yield StateStep
+    ArrayWhnf {} -> yield ArrayStep
+    MutableArrayWhnf {} -> yield MutableArrayStep
+    SmallMutableArrayWhnf {} -> yield SmallMutableArrayStep
+    MutableByteArrayWhnf {} -> yield MutableByteArrayStep
 
 printWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 printWhnf index globals =
@@ -340,6 +352,12 @@ printWhnf index globals =
       putStr ")"
     FunWhnf {} -> do
       putStr "<function>"
+    AddrWhnf {} -> putStr "AddrWhnf"
+    StateWhnf {} -> putStr "StateWhnf"
+    ArrayWhnf {} -> putStr "ArrayWhnf"
+    MutableArrayWhnf {} -> putStr "MutableArrayWhnf"
+    SmallMutableArrayWhnf {} -> putStr "SmallMutableArrayWhnf"
+    MutableByteArrayWhnf {} -> putStr "MutableByteArrayWhnf"
 
 deepseqWhnf :: ReverseIndex -> Map GlobalVarId Box -> Whnf -> IO ()
 deepseqWhnf index globals =
@@ -353,3 +371,9 @@ deepseqWhnf index globals =
         boxes
     FunWhnf{} -> do
       pure ()
+    AddrWhnf {} -> pure ()
+    StateWhnf {} -> pure ()
+    ArrayWhnf {} -> pure ()
+    MutableArrayWhnf {} -> pure ()
+    SmallMutableArrayWhnf {} -> pure ()
+    MutableByteArrayWhnf {} -> pure ()
