@@ -11,6 +11,7 @@ library
     Prana.Index
     Prana.Reconstruct
     Prana.Rename
+    Prana.FFI
   hs-source-dirs:
       src
   build-depends:

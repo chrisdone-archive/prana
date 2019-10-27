@@ -1,3 +1,4 @@
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -38,6 +39,7 @@ import qualified Literal
 import qualified Module
 import qualified Name
 import qualified Outputable (ppr, showSDocUnsafe)
+import           Prana.FFI
 import           Prana.Index
 import           Prana.Rename
 import           Prana.Types as Prana
@@ -69,6 +71,7 @@ data ConvertError
   | TypeNameNotFound !Name
   | CouldntGetTyConForPrimOp !String
   | UnsupportedCallingConvention !ForeignCall.CCallConv
+  | FFITypeError !FFIError
   deriving (Eq, Typeable)
 
 instance Exception ConvertError where
@@ -81,6 +84,7 @@ instance Exception ConvertError where
       orelse -> show orelse
 
 instance Show ConvertError where
+  show (FFITypeError err) = "FFITypeError " ++ show err
   show UnexpectedPolymorphicCaseAlts {} = "UnexpectedPolymorphicCaseAlts"
   show UnexpectedLambda {} = "UnexpectedLambda"
   show (ConNameNotFound name) = "ConNameNotFound " ++ show name
@@ -92,7 +96,8 @@ instance Show ConvertError where
   show (CouldntGetTyConForPrimOp s) = "Couldn'tGetTyConForPrimOp " ++ show s
   show (BadOpConversion primop) = "BadOpConversion " ++ show primop
   show (TypeNameNotFound primop) = "TypeNameNotFound " ++ show primop
-  show (UnsupportedCallingConvention callconv) = "UnsupportedCallingConvention " ++ show callconv
+  show (UnsupportedCallingConvention callconv) =
+    "UnsupportedCallingConvention " ++ show callconv
 
 data Scope =
   Scope
@@ -104,15 +109,9 @@ data Scope =
 failure :: ConvertError -> Convert a
 failure e = Convert (ReaderT (\_ -> Failure (pure e)))
 
--- | Monadic-style bind.
-bindConvert :: Convert a -> (a -> Convert b) -> Convert b
-bindConvert m f =
-  Convert
-    (ReaderT
-       (\r ->
-          bindValidation
-            (runReaderT (runConvert m) r)
-            (\v -> runReaderT (runConvert (f v)) r)))
+-- | Embed a validation within a Convert.
+embedValidation :: Validation (NonEmpty ConvertError) a -> Convert a
+embedValidation m = Convert (ReaderT (const m))
 
 --------------------------------------------------------------------------------
 -- Conversion functions
@@ -129,8 +128,8 @@ fromGenStgTopBinding =
           traverse
             (\(bindr, rhs) -> (,) <$> lookupGlobalVarId bindr <*> fromGenStgRhs rhs)
             pairs
-    StgSyn.StgTopStringLit bindr byteString ->
-      GlobalStringLit <$> lookupGlobalVarId bindr <*> pure byteString
+    StgSyn.StgTopStringLit bindr byteString' ->
+      GlobalStringLit <$> lookupGlobalVarId bindr <*> pure byteString'
 
 fromGenStgBinding :: StgSyn.GenStgBinding Name Name -> Convert LocalBinding
 fromGenStgBinding =
@@ -194,18 +193,7 @@ fromStgGenExpr =
       traverse fromStgGenArg arguments <*>
       pure (map (const Type) types)
     StgSyn.StgOpApp stgOp arguments typ ->
-      bindConvert
-        (case stgOp of
-           StgSyn.StgFCallOp fcall _ -> trace (show (fcall, typ)) (fromStgOp stgOp)
-           _ -> fromStgOp stgOp)
-        (\op ->
-           OpAppExpr <$> pure op <*> traverse fromStgGenArg arguments <*>
-           case op of
-             PrimOp TagToEnumOp ->
-               case Type.tyConAppTyConPicky_maybe typ of
-                 Just ty -> fmap Just (lookupTypeId (Name.getName ty))
-                 Nothing -> pure Nothing
-             _ -> pure Nothing)
+      OpAppExpr <$> fromStgOp typ stgOp <*> traverse fromStgGenArg arguments
     StgSyn.StgCase expr bndr altType alts ->
       CaseExpr <$> fromStgGenExpr expr <*> lookupLocalVarId bndr <*>
       case altType of
@@ -229,43 +217,52 @@ fromStgGenExpr =
     StgSyn.StgTick _tickish expr -> fromStgGenExpr expr
     StgSyn.StgLam {} -> failure UnexpectedLambda
 
-fromStgOp :: StgSyn.StgOp -> Convert Op
-fromStgOp =
+fromStgOp :: Type.Type -> StgSyn.StgOp -> Convert Op
+fromStgOp typ =
   \case
-    StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
-    StgSyn.StgFCallOp (foreignCall) unique ->
+    StgSyn.StgPrimOp op ->
+      PrimOp <$> fromPrimOp op <*>
+      case Type.tyConAppTyConPicky_maybe typ of
+        Just ty -> fmap Just (lookupTypeId (Name.getName ty))
+        Nothing -> pure Nothing
+    StgSyn.StgFCallOp (foreignCall) unique' ->
       Prana.ForeignOp <$>
       fromForeignCall
         foreignCall
-        (Unexported (fromIntegral (Unique.getKey unique)))
+        (Unexported (fromIntegral (Unique.getKey unique'))) <*>
+      embedValidation (first (fmap FFITypeError) (parseAcceptableFFIReturnType typ))
     StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
 
 fromForeignCall :: ForeignCall.ForeignCall -> Unique -> Convert Prana.CCallSpec
-fromForeignCall (ForeignCall.CCall (ForeignCall.CCallSpec target conv safety)) unique =
+fromForeignCall (ForeignCall.CCall (ForeignCall.CCallSpec target conv safety')) unique' =
   Prana.CCallSpec <$>
   (pure
      (case target of
         ForeignCall.DynamicTarget -> Prana.DynamicTarget
         ForeignCall.StaticTarget str bs _ bool ->
           Prana.StaticTarget
-            (case str of
-               BasicTypes.SourceText s -> Prana.SourceText s
-               BasicTypes.NoSourceText -> Prana.NoSourceText)
-            (FastString.fs_bs bs)
-            (if bool
-               then IsFunction
-               else IsValue))) <*>
+            (StaticCallTarget
+               { sourceText =
+                   case str of
+                     BasicTypes.SourceText s -> Prana.SourceText s
+                     BasicTypes.NoSourceText -> Prana.NoSourceText
+               , byteString = FastString.fs_bs bs
+               , functionOrValue =
+                   if bool
+                     then IsFunction
+                     else IsValue
+               }))) <*>
   (case conv of
      ForeignCall.CCallConv -> pure Prana.CCallConv
      ForeignCall.CApiConv -> pure Prana.CApiConv
      ForeignCall.StdCallConv -> pure Prana.StdCallConv
      _ -> failure (UnsupportedCallingConvention conv)) <*>
   pure
-    (case safety of
+    (case safety' of
        ForeignCall.PlaySafe -> Prana.PlaySafe
        ForeignCall.PlayInterruptible -> Prana.PlayInterruptible
        ForeignCall.PlayRisky -> Prana.PlayRisky) <*>
-  pure unique
+  pure unique'
 
 instance Show Type.Type where
   show n = Outputable.showSDocUnsafe (Outputable.ppr n)

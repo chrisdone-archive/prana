@@ -223,6 +223,25 @@ spec =
                 , EndConStep
                 , EndConStep
                 , EndConStep
+                ])
+        it
+          "Foreign op"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/Foreign.hs"
+                  "Foreign"
+                  IOMode
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 17})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (DoubleLit 0.8414709848078965)
+                , EndConStep
                 ]))
 
 getDataConI# :: Applicative f => Index -> f DataConId
@@ -237,6 +256,23 @@ getDataConI# index =
          (indexDataCons index) of
     Nothing -> error "Couldn't find constructor."
     Just dataConId -> pure dataConId
+
+-- | Compile and run left-to-right evaluation of the complete data structure.
+compileOnly ::
+     Index
+  -> Options
+  -> String
+  -> IO (Index, [GlobalBinding])
+compileOnly index0 options fileName  =
+  runGhc
+    (do setModuleGraph [fileName]
+        result <- compileModuleGraph options index0
+        case result of
+          Left err -> do
+            showErrors err
+            error "Bailing out."
+          Right (index, sourceGlobals) ->
+            pure (index, sourceGlobals))
 
 data RunMode = PureMode | IOMode
 

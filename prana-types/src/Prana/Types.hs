@@ -32,7 +32,7 @@ data LocalBinding
 data Expr
   = AppExpr !SomeVarId ![Arg]
   | ConAppExpr !DataConId ![Arg] ![Type]
-  | OpAppExpr !Op ![Arg] !(Maybe TypeId)
+  | OpAppExpr !Op ![Arg]
   | CaseExpr !Expr !LocalVarId !Alts
   | LetExpr !LocalBinding !Expr
   | LitExpr !Lit
@@ -242,9 +242,20 @@ data TyCon =
   deriving (Show, Eq, Generic)
 
 data Op
-  = PrimOp PrimOp
-  | ForeignOp CCallSpec
+  = PrimOp !PrimOp !(Maybe TypeId)
+  | ForeignOp !CCallSpec !FFIType
   | OtherOp
+  deriving (Show, Eq, Generic)
+
+data FFIPrimType
+  = FFIDouble
+  | FFIRealWorld
+  deriving (Show, Eq, Generic)
+
+data FFIType
+  = FFIPrimType FFIPrimType
+  | FFIFun [FFIType] FFIPrimType
+  | FFIUnknownType
   deriving (Show, Eq, Generic)
 
 displayName :: Name -> String
@@ -296,12 +307,14 @@ data ReverseIndex =
 --------------------------------------------------------------------------------
 -- Foreign types
 
-data CCallSpec
-  =  CCallSpec  CCallTarget     -- What to call
-                CCallConv       -- Calling convention to use.
-                Safety
-                Unique
-  deriving( Eq , Generic, Show)
+data CCallSpec =
+  CCallSpec
+    { cCallTarget :: !CCallTarget
+    , cCallConv :: !CCallConv
+    , safety :: !Safety
+    , unique :: !Unique
+    }
+  deriving (Eq, Generic, Show)
 
 data SourceText
   = SourceText String | NoSourceText
@@ -309,18 +322,19 @@ data SourceText
 
 data CCallTarget
   -- An "unboxed" ccall# to named function in a particular package.
-  = StaticTarget
-        SourceText                -- of the CLabelString.
-                                  -- See note [Pragma source text] in BasicTypes
-        ByteString                    -- C-land name of label.
-
-
-  -- The first argument of the import is the name of a function pointer (an Addr#).
-  --    Used when importing a label as "foreign import ccall "dynamic" ..."
-        FunctionOrValue  -- allowed in CAPI imports
+  = StaticTarget !StaticCallTarget
   | DynamicTarget
+  -- ^ The first argument of the import is the name of a function
+  --   pointer (an Addr#).  Used when importing a label as "foreign
+  --   import ccall "dynamic" ..."
+  deriving (Eq, Generic, Show)
 
-  deriving( Eq, Generic, Show )
+data StaticCallTarget =
+  StaticCallTarget
+    { sourceText :: SourceText -- of the CLabelString. See note [Pragma source text] in BasicTypes
+    , byteString :: ByteString -- C-land name of label.
+    , functionOrValue :: FunctionOrValue -- allowed in CAPI imports
+    } deriving (Eq, Generic, Show)
 
 data FunctionOrValue = IsFunction | IsValue
   deriving( Eq, Generic, Show )
@@ -379,3 +393,7 @@ instance Binary CCallConv
 instance Binary Safety
 instance Binary SourceText
 instance Binary FunctionOrValue
+instance Binary StaticCallTarget
+instance Binary FFIReturnType
+instance Binary FFIType
+instance Binary FFIPrimType

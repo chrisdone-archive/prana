@@ -45,10 +45,10 @@ prettyExpr index =
         [ prettyDataConId index dataConId
         , prettyList (map (prettyArg index) args)
         ]
-    OpAppExpr op args primType ->
+    OpAppExpr op args ->
       node
         "OpAppExpr"
-        [show op, prettyList (map (prettyArg index) args), show primType]
+        [show op, prettyList (map (prettyArg index) args)]
     CaseExpr expr localVarId alts ->
       node
         "CaseExpr"

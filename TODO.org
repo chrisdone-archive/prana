@@ -1,0 +1,26 @@
+* TODO Write a simple C runtime linker and function call
+#+BEGIN_SRC
+import System.Posix.DynamicLinker
+import Foreign.Ptr
+import Foreign.LibFFI
+main = do
+    malloc <- dlsym Default "malloc"
+    memset <- dlsym Default "memset"
+    p <- callFFI malloc (retPtr retVoid) [argCSize (2^30)]
+    callFFI memset (retPtr retVoid) [argPtr p, argCInt 0, argCSize (2^30)]
+    callFFI memset (retPtr retVoid) [argPtr nullPtr, argCInt 0, argCSize 1]
+#+END_SRC
+
+From
+http://hackage.haskell.org/package/libffi-0.1/docs/Foreign-LibFFI.html
+
+
+* TODO Add foreign calls to the index
+* DONE Add ForeignOp constructor to Op (ref'ing CCallSpec)
+  CLOSED: [2019-10-27 Sun 11:38]
+  - State "DONE"       from "TODO"       [2019-10-27 Sun 11:38]
+#+BEGIN_SRC
+ data Op
+   = PrimOp PrimOp
++  | ForeignOp CCallSpec
+#+END_SRC

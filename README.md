@@ -262,3 +262,17 @@ The following don't need implementing or won't be implemented:
 ## Notable differences with GHCi
 
 * Handles unboxed tuples as any other type.
+
+## Workarounds and issues
+
+Use of libffi may show this
+
+    error while loading shared libraries: libffi.so.7: cannot open shared object file: No such file or directory
+
+which is due to this: https://gitlab.haskell.org/ghc/ghc/issues/15397
+
+Workaround, set the same path as your GHC's rts path:
+
+    LD_LIBRARY_PATH=/home/chris/.stack/programs/x86_64-linux/ghc-8.4.3/lib/ghc-8.4.3/rts/
+
+which has the libffi.so.7 in it.
