@@ -243,6 +243,7 @@ data TyCon =
 
 data Op
   = PrimOp PrimOp
+  | ForeignOp CCallSpec
   | OtherOp
   deriving (Show, Eq, Generic)
 
@@ -299,26 +300,38 @@ data CCallSpec
   =  CCallSpec  CCallTarget     -- What to call
                 CCallConv       -- Calling convention to use.
                 Safety
+                Unique
+  deriving( Eq , Generic, Show)
+
+data SourceText
+  = SourceText String | NoSourceText
   deriving( Eq , Generic, Show)
 
 data CCallTarget
   -- An "unboxed" ccall# to named function in a particular package.
   = StaticTarget
-        String                -- of the CLabelString.
+        SourceText                -- of the CLabelString.
                                   -- See note [Pragma source text] in BasicTypes
         ByteString                    -- C-land name of label.
 
 
   -- The first argument of the import is the name of a function pointer (an Addr#).
   --    Used when importing a label as "foreign import ccall "dynamic" ..."
-        Bool                            -- True => really a function
-                                        -- False => a value; only
-                                        -- allowed in CAPI imports
+        FunctionOrValue  -- allowed in CAPI imports
   | DynamicTarget
 
   deriving( Eq, Generic, Show )
 
-data CCallConv = CCallConv | CApiConv | StdCallConv | PrimCallConv | JavaScriptCallConv
+data FunctionOrValue = IsFunction | IsValue
+  deriving( Eq, Generic, Show )
+
+data CCallConv
+  = CCallConv
+  | CApiConv
+  | StdCallConv
+  -- Unsupported GHC ones:
+  -- | PrimCallConv
+  -- | JavaScriptCallConv
   deriving (Eq, Generic, Show)
 
 data Safety
@@ -364,3 +377,5 @@ instance Binary CCallSpec
 instance Binary CCallTarget
 instance Binary CCallConv
 instance Binary Safety
+instance Binary SourceText
+instance Binary FunctionOrValue

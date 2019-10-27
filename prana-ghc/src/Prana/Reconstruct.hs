@@ -18,6 +18,7 @@ module Prana.Reconstruct
   , failure
   ) where
 
+import qualified BasicTypes
 import           Control.Exception
 import           Control.Monad.Trans.Reader
 import qualified CoreSyn
@@ -31,6 +32,7 @@ import           Data.Typeable
 import           Data.Validation
 import qualified DataCon
 import           Debug.Trace
+import qualified FastString
 import           ForeignCall
 import qualified Literal
 import qualified Module
@@ -38,12 +40,13 @@ import qualified Name
 import qualified Outputable (ppr, showSDocUnsafe)
 import           Prana.Index
 import           Prana.Rename
-import           Prana.Types
+import           Prana.Types as Prana
 import qualified PrimOp
 import qualified StgSyn
 import           Text.Read
 import qualified TyCon
 import qualified Type
+import qualified Unique
 
 -- | A conversion monad.
 newtype Convert a =
@@ -65,6 +68,7 @@ data ConvertError
   | BadOpConversion !PrimOp.PrimOp
   | TypeNameNotFound !Name
   | CouldntGetTyConForPrimOp !String
+  | UnsupportedCallingConvention !ForeignCall.CCallConv
   deriving (Eq, Typeable)
 
 instance Exception ConvertError where
@@ -88,6 +92,7 @@ instance Show ConvertError where
   show (CouldntGetTyConForPrimOp s) = "Couldn'tGetTyConForPrimOp " ++ show s
   show (BadOpConversion primop) = "BadOpConversion " ++ show primop
   show (TypeNameNotFound primop) = "TypeNameNotFound " ++ show primop
+  show (UnsupportedCallingConvention callconv) = "UnsupportedCallingConvention " ++ show callconv
 
 data Scope =
   Scope
@@ -227,9 +232,40 @@ fromStgGenExpr =
 fromStgOp :: StgSyn.StgOp -> Convert Op
 fromStgOp =
   \case
-     StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
-     StgSyn.StgFCallOp foreignCall _unique -> (pure OtherOp)
-     StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
+    StgSyn.StgPrimOp op -> PrimOp <$> fromPrimOp op
+    StgSyn.StgFCallOp (foreignCall) unique ->
+      Prana.ForeignOp <$>
+      fromForeignCall
+        foreignCall
+        (Unexported (fromIntegral (Unique.getKey unique)))
+    StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
+
+fromForeignCall :: ForeignCall.ForeignCall -> Unique -> Convert Prana.CCallSpec
+fromForeignCall (ForeignCall.CCall (ForeignCall.CCallSpec target conv safety)) unique =
+  Prana.CCallSpec <$>
+  (pure
+     (case target of
+        ForeignCall.DynamicTarget -> Prana.DynamicTarget
+        ForeignCall.StaticTarget str bs _ bool ->
+          Prana.StaticTarget
+            (case str of
+               BasicTypes.SourceText s -> Prana.SourceText s
+               BasicTypes.NoSourceText -> Prana.NoSourceText)
+            (FastString.fs_bs bs)
+            (if bool
+               then IsFunction
+               else IsValue))) <*>
+  (case conv of
+     ForeignCall.CCallConv -> pure Prana.CCallConv
+     ForeignCall.CApiConv -> pure Prana.CApiConv
+     ForeignCall.StdCallConv -> pure Prana.StdCallConv
+     _ -> failure (UnsupportedCallingConvention conv)) <*>
+  pure
+    (case safety of
+       ForeignCall.PlaySafe -> Prana.PlaySafe
+       ForeignCall.PlayInterruptible -> Prana.PlayInterruptible
+       ForeignCall.PlayRisky -> Prana.PlayRisky) <*>
+  pure unique
 
 instance Show Type.Type where
   show n = Outputable.showSDocUnsafe (Outputable.ppr n)
