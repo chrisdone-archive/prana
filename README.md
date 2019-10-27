@@ -137,6 +137,14 @@ I now need a reproducible way to build:
 * `integer-simple`
 * `base`
 
+DON'T FORGET (2019 Oct 27):
+
+When rebuilding these, run
+
+    rm -rf /home/chris/.stack/programs/x86_64-linux/ghc-8.4.3/lib/ghc-8.4.3/prana/
+
+to reset the package index.
+
 ghc-prim
 
      $ stack build && stack ghc -- Setup.hs -v0 && stack exec --no-ghc-package-path -- ./Setup configure -v0 --with-ghc prana-ghc && stack exec --no-ghc-package-path ./Setup build
