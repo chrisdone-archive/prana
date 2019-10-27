@@ -164,7 +164,7 @@ evalExpr index globals locals0 toplevelexpr = do
                            show whnf)
                   MultiValAlts size alts mdefaultExpr -> do
                     (dataConId, boxes) <- evalExprToCon ("MultiValAlts:\n"++prettyExpr index toplevelexpr) index globals locals expr
-                    putStrLn ("Scrutinee: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))
+                    {-putStrLn ("Scrutinee: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))-}
                     caseExprBox <- boxWhnf (ConWhnf dataConId boxes)
                     -- Yes, this is a function, and it's weird.  I've
                     -- observed a case where the scrutinee binding is
@@ -183,7 +183,7 @@ evalExpr index globals locals0 toplevelexpr = do
                                      locals' <-
                                        foldM
                                          (\locals' (box, localVarId) -> do
-                                            do putStrLn ("Pattern: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))
+                                            do {-putStrLn ("Pattern: " ++ prettyLocalVar index caseExprVarId ++ " <- " ++ show (ConWhnf dataConId boxes))-}
                                                pure (M.insert localVarId box locals'))
                                          locals
                                          (zip boxes localVarIds)
