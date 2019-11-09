@@ -240,7 +240,26 @@ spec =
                     (DataConId
                        (TypeId {typeIdInt = 17})
                        (ConIndex {conIndexInt = 0}))
-                , LitStep (DoubleLit 0.8414709848078965)
+                , LitStep (DoubleLit (sin 1))
+                , EndConStep
+                ])
+        it
+          "Foreign op: atan2"
+          (do steps <-
+                compileAndRun
+                  index
+                  options
+                  std
+                  "test/assets/Atan2.hs"
+                  "Atan2"
+                  IOMode
+              shouldReturn
+                (runConduit (steps .| CL.consume))
+                [ BeginConStep
+                    (DataConId
+                       (TypeId {typeIdInt = 17})
+                       (ConIndex {conIndexInt = 0}))
+                , LitStep (DoubleLit (atan2 (-10) 10))
                 , EndConStep
                 ]))
 

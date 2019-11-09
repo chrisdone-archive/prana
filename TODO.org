@@ -1,4 +1,6 @@
-* TODO Write a simple C runtime linker and function call
+* DONE Write a simple C runtime linker and function call
+  CLOSED: [2019-11-09 Sat 17:28]
+  - State "DONE"       from "TODO"       [2019-11-09 Sat 17:28]
 #+BEGIN_SRC
 import System.Posix.DynamicLinker
 import Foreign.Ptr
@@ -14,7 +16,6 @@ main = do
 From
 http://hackage.haskell.org/package/libffi-0.1/docs/Foreign-LibFFI.html
 
-
 * TODO Add foreign calls to the index
 * DONE Add ForeignOp constructor to Op (ref'ing CCallSpec)
   CLOSED: [2019-10-27 Sun 11:38]
@@ -23,4 +24,29 @@ http://hackage.haskell.org/package/libffi-0.1/docs/Foreign-LibFFI.html
  data Op
    = PrimOp PrimOp
 +  | ForeignOp CCallSpec
+#+END_SRC
+* Deal with this issue:
+
+#+BEGIN_SRC
+prana-interpreter> [1 of 1] Recompiling Atan2 [prana]
+prana-interpreter> [1 of 1] Converting Atan2 [prana]
+prana-interpreter> prana-interpreter-test: panic! (the 'impossible' happened)
+prana-interpreter>   (GHC version 8.4.3 for x86_64-unknown-linux):
+prana-interpreter> 	Unexpected function for data alt case scrutinee.
+#+END_SRC
+
+#+BEGIN_SRC
+{-# LANGUAGE NoImplicitPrelude #-}
+
+-- | Demonstrate various use of the FFI.
+
+module Atan2 where
+
+import Foreign.C
+
+foreign import ccall "math.h atan2"
+   atan2 :: CDouble -> CDouble -> CDouble
+
+it :: CDouble
+it = atan2 (-10) (10) * 180 / 3.14159265
 #+END_SRC

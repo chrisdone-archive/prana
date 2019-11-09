@@ -10,6 +10,7 @@ import           Data.Function
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
+import           Data.Maybe
 import           Data.Typeable
 import           Data.Validation
 import qualified Module
@@ -25,7 +26,7 @@ data FFIError
   | ExpectedConType !Type.Type
   | NameResolveIssue !RenameFailure
   | ExpectedUnboxedTuple !Type.Type !Name
-  | ExpectedUnboxedTupleType
+  | ExpectedUnboxedTupleType !Type.Type
   | ExpectedStateRealWorld !Type.Type
   | UnknownPrimFFIType !WiredInType
   | InvalidFFIType !Name
@@ -34,7 +35,7 @@ data FFIError
 instance Eq FFIError where (==) = on (==) show
 
 instance Show FFIError where
-  show ExpectedUnboxedTupleType = "ExpectedUnboxedTupleType"
+  show (ExpectedUnboxedTupleType ty) = "ExpectedUnboxedTupleType: " ++ Outputable.showSDocUnsafe (Outputable.ppr ty)
   show (UnsupportedFFIType ty) = Outputable.showSDocUnsafe (Outputable.ppr ty)
   show (ExpectedFunType ty) =
     "ExpectedFunType: " ++ Outputable.showSDocUnsafe (Outputable.ppr ty)
@@ -56,22 +57,24 @@ parseAcceptableFFIReturnType ::
   -> Validation (NonEmpty FFIError) FFIReturnType
 parseAcceptableFFIReturnType theModule wiredInTypes typ =
   case Type.splitTyConApp_maybe typ of
-    Just (tyCon, Type.dropRuntimeRepArgs -> (stateRealWorld:args)) -> do
+    Just (tyCon, Type.dropRuntimeRepArgs -> (stateRealWorld:ret)) -> do
       bindValidation
         (validationNel
            (first NameResolveIssue (renameName theModule (Name.getName tyCon))))
         (\name ->
            case M.lookup name wiredInTypes of
-             Just (WiredIn_UnboxedTuple i)
-               | i >= 1 ->
-                 if Outputable.showSDocUnsafe (Outputable.ppr stateRealWorld) ==
-                    "State# RealWorld"
-                   then fmap
-                          FFIUnboxedTupleOfStateRealWorldAnd
-                          (traverse (parseFFIType theModule wiredInTypes) args)
-                   else Failure (pure (ExpectedStateRealWorld typ))
+             Just (WiredIn_UnboxedTuple {}) ->
+               if Outputable.showSDocUnsafe (Outputable.ppr stateRealWorld) ==
+                  "State# RealWorld"
+                 then fmap
+                        FFIUnboxedTupleOfStateRealWorldAnd
+                        (maybe
+                           (pure Nothing)
+                           (fmap Just . parseFFIType theModule wiredInTypes)
+                           (listToMaybe ret))
+                 else Failure (pure (ExpectedStateRealWorld typ))
              _ -> Failure (pure (ExpectedUnboxedTuple typ name)))
-    _ -> Failure (pure ExpectedUnboxedTupleType)
+    _ -> Failure (pure (ExpectedUnboxedTupleType typ))
 
 parseFFIType ::
      Module.Module
@@ -103,4 +106,4 @@ parseFFIType theModule wiredInTypes typ =
       error
         ("Didn't expect args... " ++
          unlines (map (\x -> Outputable.showSDocUnsafe (Outputable.ppr x)) args))
-    _ -> Failure (pure ExpectedUnboxedTupleType)
+    _ -> Failure (pure (ExpectedUnboxedTupleType typ))

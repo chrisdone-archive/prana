@@ -262,7 +262,7 @@ data FFIType
   deriving (Show, Eq, Generic)
 
 data FFIReturnType =
-  FFIUnboxedTupleOfStateRealWorldAnd ![FFIType]
+  FFIUnboxedTupleOfStateRealWorldAnd !(Maybe FFIType)
   deriving (Show, Eq, Generic)
 
 displayName :: Name -> String

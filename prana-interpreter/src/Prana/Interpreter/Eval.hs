@@ -300,28 +300,28 @@ evalCCallSpec ::
   -> [Arg]
   -> FFIReturnType
   -> IO Whnf
-evalCCallSpec index globals locals CCallSpec {cCallTarget, cCallConv, safety, unique} args ffiReturnType =
+evalCCallSpec index globals locals CCallSpec { cCallTarget
+                                             , cCallConv
+                                             , safety
+                                             , unique
+                                             } args ffiReturnType =
   case cCallTarget of
     DynamicTarget -> error "TODO: Dynamic foreign functions."
     StaticTarget StaticCallTarget {byteString, functionOrValue} -> do
-
-      -- TODO:  use the newly furnished ffiReturnType.
-
-      {- OLD commentary:
-
-          TODO: The return type observed was (# State# RealWorld, Double #)
-          but the type _expected_ was simply, (# Double# #), so
-          document this assumption somewhere.
-          TODO: Use the functionOrValue.
-
-      -}
-
       funPtr <- Posix.dlsym Posix.Default (S8.unpack byteString)
-      CDouble ret <-
-        mapM (evalFFIArg index globals locals) (init args) >>=
-        LibFFI.callFFI funPtr LibFFI.retCDouble
-      retBox <- boxWhnf (LitWhnf (DoubleLit ret))
-      pure (ConWhnf (UnboxedTupleConId 1) [retBox])
+      -- The init skips the State# RealWorld arg.
+      libffiArgs <- mapM (evalFFIArg index globals locals) (init args)
+      case ffiReturnType of
+        FFIUnboxedTupleOfStateRealWorldAnd Nothing -> do
+          LibFFI.callFFI funPtr LibFFI.retVoid libffiArgs
+          pure (ConWhnf (UnboxedTupleConId 0) [])
+        FFIUnboxedTupleOfStateRealWorldAnd (Just ty) ->
+          -- TODO: flesh out other cases.
+          case ty of
+            FFI_Double -> do
+              CDouble ret <- LibFFI.callFFI funPtr LibFFI.retCDouble libffiArgs
+              retBox <- boxWhnf (LitWhnf (DoubleLit ret))
+              pure (ConWhnf (UnboxedTupleConId 1) [retBox])
 
 -- | Evaluate the argument, if necessary, and produce, if possible, an
 -- FFI argument. Anything else is an exception.
