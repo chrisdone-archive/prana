@@ -109,10 +109,6 @@ data Scope =
 failure :: ConvertError -> Convert a
 failure e = Convert (ReaderT (\_ -> Failure (pure e)))
 
--- | Embed a validation within a Convert.
-embedValidation :: Validation (NonEmpty ConvertError) a -> Convert a
-embedValidation m = Convert (ReaderT (const m))
-
 --------------------------------------------------------------------------------
 -- Conversion functions
 
@@ -230,7 +226,14 @@ fromStgOp typ =
       fromForeignCall
         foreignCall
         (Unexported (fromIntegral (Unique.getKey unique'))) <*>
-      embedValidation (first (fmap FFITypeError) (parseAcceptableFFIReturnType typ))
+      asking
+        (\scope ->
+           first
+             (fmap FFITypeError)
+             (parseAcceptableFFIReturnType
+                (scopeModule scope)
+                wiredInTypes
+                typ))
     StgSyn.StgPrimCallOp primCall -> trace (show primCall) (pure OtherOp)
 
 fromForeignCall :: ForeignCall.ForeignCall -> Unique -> Convert Prana.CCallSpec

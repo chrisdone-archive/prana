@@ -243,19 +243,26 @@ data TyCon =
 
 data Op
   = PrimOp !PrimOp !(Maybe TypeId)
-  | ForeignOp !CCallSpec !FFIType
+  | ForeignOp !CCallSpec !FFIReturnType
   | OtherOp
   deriving (Show, Eq, Generic)
 
-data FFIPrimType
-  = FFIDouble
-  | FFIRealWorld
+data FFIType
+  = FFI_Char
+  | FFI_Int
+  | FFI_Int32
+  | FFI_Int64
+  | FFI_Word
+  | FFI_Word32
+  | FFI_Word64
+  | FFI_Addr
+  | FFI_Float
+  | FFI_Double
+  | FFI_StablePtr
   deriving (Show, Eq, Generic)
 
-data FFIType
-  = FFIPrimType FFIPrimType
-  | FFIFun [FFIType] FFIPrimType
-  | FFIUnknownType
+data FFIReturnType =
+  FFIUnboxedTupleOfStateRealWorldAnd ![FFIType]
   deriving (Show, Eq, Generic)
 
 displayName :: Name -> String
@@ -396,4 +403,3 @@ instance Binary FunctionOrValue
 instance Binary StaticCallTarget
 instance Binary FFIReturnType
 instance Binary FFIType
-instance Binary FFIPrimType
