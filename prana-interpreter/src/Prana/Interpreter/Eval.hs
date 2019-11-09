@@ -300,14 +300,22 @@ evalCCallSpec ::
   -> [Arg]
   -> FFIReturnType
   -> IO Whnf
-evalCCallSpec index globals locals CCallSpec {cCallTarget, cCallConv, safety, unique} args mtyp =
+evalCCallSpec index globals locals CCallSpec {cCallTarget, cCallConv, safety, unique} args ffiReturnType =
   case cCallTarget of
     DynamicTarget -> error "TODO: Dynamic foreign functions."
     StaticTarget StaticCallTarget {byteString, functionOrValue} -> do
-      -- TODO: The return type observed was (# State# RealWorld, Double #)
-      -- but the type _expected_ was simply, (# Double# #), so
-      -- document this assumption somewhere.
-      -- TODO: Use the functionOrValue.
+
+      -- TODO:  use the newly furnished ffiReturnType.
+
+      {- OLD commentary:
+
+          TODO: The return type observed was (# State# RealWorld, Double #)
+          but the type _expected_ was simply, (# Double# #), so
+          document this assumption somewhere.
+          TODO: Use the functionOrValue.
+
+      -}
+
       funPtr <- Posix.dlsym Posix.Default (S8.unpack byteString)
       CDouble ret <-
         mapM (evalFFIArg index globals locals) (init args) >>=
